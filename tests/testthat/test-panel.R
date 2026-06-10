@@ -1,0 +1,153 @@
+fix_panel <- function(n = 20, seed = 110) {
+  set.seed(seed)
+  panel_from_margins(
+    list(party = c(left = .5, right = .5),
+         age = c(young = .5, old = .5)),
+    n = n,
+    persona_template = "A {age} voter who leans {party}.")
+}
+
+fix_instr <- function(randomize = c("item_order", "option_order")) {
+  instrument(list(
+    item_likert("wk4", "A four-day work week would benefit society.",
+                scale = c("disagree", "neutral", "agree")),
+    item_choice("plan", "Which plan do you prefer?", c("Plan A", "Plan B")),
+    item_open("why", "Why, in one sentence?")
+  ), randomize = randomize)
+}
+
+fix_cfg <- function() LLMR::llm_config("groq", "fake-model")
+
+# Personas lean by party: right -> agree/Plan A; left -> disagree/Plan B.
+runner_by_party <- function(experiments, ...) {
+  experiments$response_text <- vapply(seq_len(nrow(experiments)), function(i) {
+    sys <- experiments$messages[[i]][["system"]]
+    usr <- experiments$messages[[i]][["user"]]
+    right <- grepl("leans right", sys)
+    if (grepl("work week", usr)) { if (right) "agree" else "disagree" }
+    else if (grepl("Which plan", usr)) { if (right) "Plan A" else "Plan B" }
+    else "Because it suits my life."
+  }, character(1))
+  experiments$success <- TRUE
+  experiments
+}
+
+# A respondent that always picks whatever option is listed first.
+runner_first_option <- function(experiments, ...) {
+  experiments$response_text <- vapply(seq_len(nrow(experiments)), function(i) {
+    usr <- experiments$messages[[i]][["user"]]
+    if (!grepl("Options:", usr)) return("free text")
+    opts <- strsplit(sub(".*Options: ", "", usr), " | ", fixed = TRUE)[[1]]
+    opts[1]
+  }, character(1))
+  experiments$success <- TRUE
+  experiments
+}
+
+test_that("panels draw from margins and render personas", {
+  p <- fix_panel(50)
+  expect_s3_class(p, "silicon_panel")
+  expect_equal(nrow(p), 50L)
+  expect_setequal(unique(p$party), c("left", "right"))
+  expect_match(p$persona[1], "voter who leans")
+  expect_output(print(p), "silicon_panel")
+  expect_error(panel_from_margins(list(c(a = .5, b = .5)), 5), "named list")
+  expect_error(panel_from_margins(list(party = c(.5, .5)), 5), "named")
+})
+
+test_that("instruments validate and stimulus designs have the right shape", {
+  expect_output(print(fix_instr()), "3 item")
+  expect_error(instrument(list("not an item")), "item_likert")
+  expect_error(instrument(list(item_open("a", "t"), item_open("a", "t"))),
+               "unique")
+  expect_error(instrument(list(item_open("a", "t")), randomize = "colors"),
+               "item_order")
+
+  v <- vignette_design("A {age} applicant with {exp} experience.",
+                       list(age = c("younger", "older"),
+                            exp = c("5 years", "20 years")))
+  expect_equal(nrow(v), 4L)
+  expect_match(v$text[1], "younger applicant with 5 years")
+
+  set.seed(110)
+  cj <- conjoint_design(list(price = c("low", "high"),
+                             origin = c("domestic", "imported")),
+                        n_tasks = 3, profiles_per_task = 2)
+  expect_equal(nrow(cj), 6L)
+  expect_setequal(unique(cj$profile), 1:2)
+})
+
+test_that("administer collects matched responses and Likert scores", {
+  set.seed(110)
+  r <- administer(fix_panel(10), fix_instr(), fix_cfg(),
+                  .runner = runner_by_party)
+  expect_s3_class(r, "panel_responses")
+  expect_equal(nrow(r), 30L)                      # 10 personas x 3 items
+  lik <- r[r$item_id == "wk4", ]
+  expect_setequal(unique(lik$response), c("agree", "disagree"))
+  expect_setequal(unique(lik$score), c(1, 3))     # positions on the scale
+  expect_true(all(is.na(r$score[r$item_id != "wk4"])))
+  expect_true(all(nzchar(r$response[r$item_id == "why"])))
+  # the order each respondent saw is recorded
+  expect_true(all(grepl("\\|", stats::na.omit(lik$option_order))))
+})
+
+test_that("the UNCALIBRATED banner shows until calibrate() runs", {
+  set.seed(110)
+  r <- administer(fix_panel(10), fix_instr(), fix_cfg(),
+                  .runner = runner_by_party)
+  expect_output(print(r), "UNCALIBRATED")
+
+  bench <- data.frame(
+    item_id = c("wk4", "wk4", "wk4", "plan", "plan"),
+    response = c("disagree", "neutral", "agree", "Plan A", "Plan B"),
+    share = c(.4, .2, .4, .5, .5))
+  rc <- calibrate(r, bench, benchmark_name = "toy human study")
+  expect_output(print(rc), "toy human study")
+  expect_false(any(grepl("UNCALIBRATED", utils::capture.output(print(rc)))))
+  cal <- attr(rc, "calibration")
+  expect_true(cal$mad >= 0 && cal$max_dev <= 1)
+  expect_true(all(c("share_silicon", "share_human", "deviation") %in%
+                    names(cal$table)))
+  expect_error(calibrate(r, data.frame(x = 1)), "item_id")
+})
+
+test_that("bias_audit detects option-order effects", {
+  set.seed(110)
+  r <- administer(fix_panel(40), fix_instr(), fix_cfg(),
+                  .runner = runner_first_option)
+  ba <- bias_audit(r)
+  p_choice <- ba$order_effect_p[ba$item_id == "plan"]
+  expect_lt(p_choice, 0.01)        # answers track the order shown
+  expect_true(is.na(ba$order_effect_p[ba$item_id == "why"]))
+
+  set.seed(110)
+  r2 <- administer(fix_panel(40), fix_instr(randomize = character(0)),
+                   fix_cfg(), .runner = runner_first_option)
+  ba2 <- bias_audit(r2)
+  expect_true(all(is.na(ba2$order_effect_p)))     # nothing randomized
+})
+
+test_that("the report leads with calibration status", {
+  set.seed(110)
+  r <- administer(fix_panel(10), fix_instr(), fix_cfg(),
+                  .runner = runner_by_party)
+  rep <- panel_report(r)
+  expect_match(rep[1], "^UNCALIBRATED")
+  expect_output(print(rep), "STANCE")
+
+  bench <- data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
+                      share = c(.5, .5))
+  rep2 <- panel_report(calibrate(r, bench, "toy"))
+  expect_match(rep2[1], "^CALIBRATION")
+})
+
+test_that("0.2 contracts validate inputs and say when they arrive", {
+  set.seed(110)
+  p <- fix_panel(4)
+  r <- administer(p, fix_instr(), fix_cfg(), .runner = runner_by_party)
+  expect_error(persona_paraphrase(p), "0\\.2")
+  expect_error(administer(p, fix_instr(), fix_cfg(), mode = "logprob"), "0\\.2")
+  expect_error(silicon_power(r, NULL), "0\\.2")
+  expect_error(amce(r), "0\\.2")
+})

@@ -1,0 +1,33 @@
+url: https://asanaei.github.io/LLMRpanel/
+
+template:
+  bootstrap: 5
+  bslib:
+    primary: "#2C3E50"
+
+reference:
+- title: Panels
+  contents:
+  - panel_from_margins
+- title: Instruments and stimuli
+  contents:
+  - panel_items
+  - instrument
+  - vignette_design
+  - conjoint_design
+- title: Administration
+  contents:
+  - administer
+- title: Calibration and audits
+  contents:
+  - calibrate
+  - bias_audit
+  - panel_report
+- title: Arriving in 0.2
+  contents:
+  - persona_paraphrase
+  - silicon_power
+  - amce
+- title: Package
+  contents:
+  - LLMRpanel-package

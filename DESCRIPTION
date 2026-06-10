@@ -1,0 +1,37 @@
+Type: Package
+Package: LLMRpanel
+Title: Calibrated Silicon Samples for Survey and Experiment Design
+Version: 0.1.0
+Authors@R:
+    person("Ali", "Sanaei", , "sanaei@uchicago.edu", role = c("aut", "cre"))
+Description: Quantitative silicon sampling with calibration as a mandatory
+  artifact, built on 'LLMR'. Persona panels are drawn from user-supplied
+  population margins; instruments (Likert batteries, forced choices, open
+  items, factorial vignettes, conjoint tasks) are administered with item-
+  and option-order randomization; every result object carries a calibration
+  slot and prints an UNCALIBRATED banner until benchmark comparison fills
+  it. The package's stance is printed into its objects: silicon panels are
+  design-stage instruments -- for pretesting, piloting, and power analysis --
+  and instruments for measuring model behavior; they do not estimate human
+  population quantities unless calibration earns that reading.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Depends:
+    R (>= 4.2)
+Imports:
+    LLMR (>= 0.8.3),
+    tibble,
+    rlang,
+    cli,
+    stats
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+Config/testthat/edition: 3
+VignetteBuilder: knitr
+URL: https://github.com/asanaei/LLMRpanel, https://asanaei.github.io/LLMRpanel/
+BugReports: https://github.com/asanaei/LLMRpanel/issues
+Remotes: asanaei/LLMR
