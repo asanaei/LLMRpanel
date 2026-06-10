@@ -7,7 +7,7 @@
 #'
 #' Samples `n` personas with attributes drawn independently from the
 #' supplied margins, and renders each persona's text from a template.
-#' Independent margins are a deliberate scaffold simplification --
+#' Independence across attributes is a deliberate 0.1 simplification --
 #' attributes are sampled marginally, not jointly; joint draws from
 #' microdata (and raking to known cross-tabs) arrive in 0.2. For instrument
 #' pretesting this rarely matters; for anything resembling estimation it
@@ -67,20 +67,3 @@ print.silicon_panel <- function(x, ...) {
   invisible(x)
 }
 
-#' Persona paraphrase arms (arrives in 0.2)
-#'
-#' Renders each persona in `k` phrasings (via a cheap model), so persona
-#' wording becomes a sensitivity arm rather than a hidden constant --
-#' silicon results that depend on whether the persona says "working-class"
-#' or "blue-collar" should be seen depending on it.
-#'
-#' @param panel A [panel_from_margins()] result.
-#' @param k Phrasings per persona.
-#' @param config Optional `LLMR::llm_config()` for the paraphraser.
-#' @return Will return the panel with `k` persona text variants each.
-#' @section Status: Design contract, arrives in 0.2.
-#' @export
-persona_paraphrase <- function(panel, k = 3L, config = NULL) {
-  stopifnot(inherits(panel, "silicon_panel"))
-  abort("persona_paraphrase() arrives in LLMRpanel 0.2; the signature is the contract.")
-}

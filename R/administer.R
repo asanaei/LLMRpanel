@@ -6,19 +6,20 @@
 
 #' Administer an instrument to a panel
 #'
-#' One call per persona x item (mode `"sample"`), through LLMR's parallel
-#' engine by default. The persona is the system message; the item and its
-#' (possibly reordered) options are the user message; replies are matched
-#' to the offered options, with failures kept as `NA` -- a refusal or an
-#' essay instead of an option is data about the instrument.
+#' One call per persona x item, through LLMR's parallel engine by default.
+#' The persona is the system message; the item and its (possibly reordered)
+#' options are the user message; replies are matched to the offered
+#' options, with failures kept as `NA` -- a refusal or an essay instead of
+#' an option is data about the instrument.
+#'
+#' @details A logprob mode -- reading the full response-option distribution
+#'   from one forward pass via `LLMR::llm_logprobs()`, replacing ~30
+#'   sampled replicates with one call -- is planned for 0.2 as an
+#'   additional administration path, not yet an argument.
 #'
 #' @param panel A [panel_from_margins()] result.
 #' @param instr An [instrument()].
 #' @param config An `LLMR::llm_config()` for a generative model.
-#' @param mode `"sample"` (one sampled reply per persona-item; default).
-#'   `"logprob"` -- reading the full response-option distribution from one
-#'   forward pass via `LLMR::llm_logprobs()`, replacing ~30 sampled
-#'   replicates with one call -- arrives in 0.2.
 #' @param .runner Internal seam for tests: `function(experiments, ...)`
 #'   returning the experiments with a `response_text` column. Default
 #'   `LLMR::call_llm_par()`.
@@ -30,27 +31,26 @@
 #'   instrument as attributes and an empty calibration slot: every print
 #'   shows the **UNCALIBRATED** banner until [calibrate()] fills it.
 #' @examples
-#' \dontrun{
+#' # offline: a simulated respondent through the .runner seam
 #' set.seed(110)
-#' panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 20)
+#' panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 6)
 #' instr <- instrument(item_likert("wk4",
 #'   "A four-day work week would benefit society."))
-#' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b", temperature = 0.8)
-#' resp <- administer(panel, instr, cfg)
-#' resp                       # UNCALIBRATED banner, by design
+#' fake <- function(experiments, ...) {
+#'   experiments$response_text <-
+#'     ifelse(grepl("right", vapply(experiments$messages, `[[`, "", "system")),
+#'            "agree", "disagree")
+#'   experiments
 #' }
+#' cfg <- LLMR::llm_config("groq", "any-model")
+#' resp <- administer(panel, instr, cfg, .runner = fake)
+#' resp                       # UNCALIBRATED banner, by design
 #' @export
-administer <- function(panel, instr, config, mode = c("sample", "logprob"),
-                       .runner = NULL, ...) {
-  mode <- match.arg(mode)
+administer <- function(panel, instr, config, .runner = NULL, ...) {
   stopifnot(inherits(panel, "silicon_panel"),
             inherits(instr, "panel_instrument"))
   if (!inherits(config, "llm_config")) {
     abort("`config` must be an LLMR::llm_config().")
-  }
-  if (identical(mode, "logprob")) {
-    abort(paste("mode = 'logprob' arrives in 0.2: full response-option",
-                "distributions from one forward pass via LLMR::llm_logprobs()."))
   }
   runner <- .runner %||% function(experiments, ...) {
     LLMR::call_llm_par(experiments, ...)
@@ -124,9 +124,16 @@ print.panel_responses <- function(x, ...) {
       "Read these as design-stage measurements of the model under these",
       "personas, not as estimates of any human population. See calibrate().")),
       "\n")
+  } else if (cal$items_covered < cal$items_total) {
+    cat(cli::format_inline(paste0(
+      "  {.strong PARTIALLY CALIBRATED} (", cal$items_covered, "/",
+      cal$items_total, " items, vs '", cal$benchmark_name,
+      "'): mean abs. deviation ", sprintf("%.3f", cal$mad),
+      " on covered items; the rest remain design-stage readings.")), "\n")
   } else {
-    cat(sprintf("  calibrated against '%s': mean abs. deviation %.3f (max %.3f)\n",
-                cal$benchmark_name, cal$mad, cal$max_dev))
+    cat(sprintf("  calibrated against '%s' (%d/%d items): mean abs. deviation %.3f (max %.3f)\n",
+                cal$benchmark_name, cal$items_covered, cal$items_total,
+                cal$mad, cal$max_dev))
   }
   invisible(x)
 }

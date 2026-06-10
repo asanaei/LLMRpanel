@@ -23,7 +23,7 @@ attribute, and \code{persona} (the rendered text).
 \description{
 Samples \code{n} personas with attributes drawn independently from the
 supplied margins, and renders each persona's text from a template.
-Independent margins are a deliberate scaffold simplification --
+Independence across attributes is a deliberate 0.1 simplification --
 attributes are sampled marginally, not jointly; joint draws from
 microdata (and raking to known cross-tabs) arrive in 0.2. For instrument
 pretesting this rarely matters; for anything resembling estimation it

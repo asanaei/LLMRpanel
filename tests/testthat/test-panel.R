@@ -75,6 +75,15 @@ test_that("instruments validate and stimulus designs have the right shape", {
                         n_tasks = 3, profiles_per_task = 2)
   expect_equal(nrow(cj), 6L)
   expect_setequal(unique(cj$profile), 1:2)
+  # profiles within a task are distinct: a choice between clones is no choice
+  for (tk in unique(cj$task)) {
+    prof <- cj[cj$task == tk, c("price", "origin")]
+    expect_false(any(duplicated(prof)))
+  }
+  # a one-combination attribute space cannot be distinct, and says so
+  expect_warning(
+    conjoint_design(list(a = "x", b = "y"), n_tasks = 1, profiles_per_task = 2),
+    "too small")
 })
 
 test_that("administer collects matched responses and Likert scores", {
@@ -92,24 +101,48 @@ test_that("administer collects matched responses and Likert scores", {
   expect_true(all(grepl("\\|", stats::na.omit(lik$option_order))))
 })
 
-test_that("the UNCALIBRATED banner shows until calibrate() runs", {
+test_that("the banner walks UNCALIBRATED -> PARTIAL -> calibrated", {
   set.seed(110)
   r <- administer(fix_panel(10), fix_instr(), fix_cfg(),
                   .runner = runner_by_party)
   expect_output(print(r), "UNCALIBRATED")
 
-  bench <- data.frame(
-    item_id = c("wk4", "wk4", "wk4", "plan", "plan"),
-    response = c("disagree", "neutral", "agree", "Plan A", "Plan B"),
-    share = c(.4, .2, .4, .5, .5))
-  rc <- calibrate(r, bench, benchmark_name = "toy human study")
+  # a benchmark covering one of two closed items is PARTIAL, not clean
+  bench_partial <- data.frame(item_id = "plan",
+                              response = c("Plan A", "Plan B"),
+                              share = c(.5, .5))
+  rp <- calibrate(r, bench_partial, benchmark_name = "narrow study")
+  expect_output(print(rp), "PARTIALLY CALIBRATED")
+  expect_output(print(rp), "1/2 items")
+  calp <- attr(rp, "calibration")
+  expect_equal(calp$items_covered, 1L)
+  expect_equal(calp$items_total, 2L)
+  # the MAD is computed over covered items only: no fake deviations from
+  # administered-but-unbenchmarked items
+  expect_true(all(calp$table$item_id == "plan"))
+  expect_true(all(c("item_id", "nonresponse_rate") %in% names(calp$nonresponse)))
+
+  # full coverage reads as calibrated
+  bench_full <- rbind(bench_partial,
+                      data.frame(item_id = "wk4",
+                                 response = c("disagree", "neutral", "agree"),
+                                 share = c(.4, .2, .4)))
+  rc <- calibrate(r, bench_full, benchmark_name = "toy human study")
   expect_output(print(rc), "toy human study")
-  expect_false(any(grepl("UNCALIBRATED", utils::capture.output(print(rc)))))
-  cal <- attr(rc, "calibration")
-  expect_true(cal$mad >= 0 && cal$max_dev <= 1)
-  expect_true(all(c("share_silicon", "share_human", "deviation") %in%
-                    names(cal$table)))
+  expect_output(print(rc), "2/2 items")
+  expect_false(any(grepl("UNCALIBRATED|PARTIALLY",
+                         utils::capture.output(print(rc)))))
+
+  # shares that do not sum to 1 draw a warning
+  expect_warning(
+    calibrate(r, data.frame(item_id = "plan",
+                            response = c("Plan A", "Plan B"),
+                            share = c(.7, .6))),
+    "sum to 1")
   expect_error(calibrate(r, data.frame(x = 1)), "item_id")
+  expect_error(calibrate(r, data.frame(item_id = "ghost", response = "z",
+                                       share = 1)),
+               "covers none")
 })
 
 test_that("bias_audit detects option-order effects", {
@@ -128,7 +161,7 @@ test_that("bias_audit detects option-order effects", {
   expect_true(all(is.na(ba2$order_effect_p)))     # nothing randomized
 })
 
-test_that("the report leads with calibration status", {
+test_that("the report leads with calibration status, coverage included", {
   set.seed(110)
   r <- administer(fix_panel(10), fix_instr(), fix_cfg(),
                   .runner = runner_by_party)
@@ -139,15 +172,19 @@ test_that("the report leads with calibration status", {
   bench <- data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
                       share = c(.5, .5))
   rep2 <- panel_report(calibrate(r, bench, "toy"))
-  expect_match(rep2[1], "^CALIBRATION")
+  expect_match(rep2[1], "^PARTIALLY CALIBRATED \\(1/2")
 })
 
 test_that("0.2 contracts validate inputs and say when they arrive", {
   set.seed(110)
   p <- fix_panel(4)
   r <- administer(p, fix_instr(), fix_cfg(), .runner = runner_by_party)
-  expect_error(persona_paraphrase(p), "0\\.2")
-  expect_error(administer(p, fix_instr(), fix_cfg(), mode = "logprob"), "0\\.2")
   expect_error(silicon_power(r, NULL), "0\\.2")
   expect_error(amce(r), "0\\.2")
+})
+
+test_that("the ecosystem hash convention is pinned (drift guard vs LLMR)", {
+  expect_identical(
+    LLMR::llm_hash(list(model = "gpt-oss-20b", temperature = 0)),
+    "7c5ffbb0b308f20bf188a3efd962a2895f45ad202307234ee1965d86abc0606c")
 })

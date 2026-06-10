@@ -25,7 +25,6 @@ reference:
   - panel_report
 - title: Arriving in 0.2
   contents:
-  - persona_paraphrase
   - silicon_power
   - amce
 - title: Package

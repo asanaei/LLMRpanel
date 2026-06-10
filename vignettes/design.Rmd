@@ -7,11 +7,8 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r}
-knitr::opts_chunk$set(
-  collapse = TRUE, comment = "#>",
-  eval = identical(tolower(Sys.getenv("LLMRPANEL_RUN_VIGNETTES", "false")), "true")
-)
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
 This vignette is the package's design document. The literature on silicon
@@ -22,7 +19,30 @@ phrasing. Both findings are real. The design conclusion is not "never
 simulate" but "never simulate *uncalibrated*" -- and the package encodes
 that conclusion in its objects rather than in its documentation: every
 result prints an **UNCALIBRATED** banner until a benchmark comparison
-fills the calibration slot.
+fills the calibration slot, and partial benchmarks earn only a
+**PARTIALLY CALIBRATED** one.
+
+Everything below **runs offline**: a simulated respondent (a deterministic
+function on the `.runner` seam) stands in for the model, which also makes
+the document a worked example of testing panel pipelines without spending
+a token. The final section swaps in a real open-weight model.
+
+```{r setup}
+library(LLMRpanel)
+set.seed(110)   # panels and order randomization draw locally
+
+simulated_respondent <- function(experiments, ...) {
+  experiments$response_text <- vapply(seq_len(nrow(experiments)), function(i) {
+    sys <- experiments$messages[[i]][["system"]]
+    usr <- experiments$messages[[i]][["user"]]
+    right <- grepl("leans right", sys)
+    if (grepl("work week", usr))   { if (right) "agree" else "disagree" }
+    else if (grepl("fund first", usr)) { if (right) "road repair" else "public transit" }
+    else "Because it fits how I live."
+  }, character(1))
+  experiments
+}
+```
 
 ## What silicon panels are for
 
@@ -43,14 +63,11 @@ by deviation.
 
 ## A walk through the machinery
 
-```{r setup}
-library(LLMRpanel)
-set.seed(110)   # panels and order randomization draw locally
-
+```{r panel}
 panel <- panel_from_margins(
   list(age   = c("18-34" = .30, "35-64" = .45, "65+" = .25),
        party = c(left = .45, right = .45, independent = .10)),
-  n = 60,
+  n = 40,
   persona_template = "A {age}-year-old voter who leans {party}."
 )
 panel
@@ -69,24 +86,45 @@ records what each one saw -- with LLMs, option order is a treatment:
 
 ```{r administer}
 cfg  <- LLMR::llm_config("groq", "openai/gpt-oss-20b", temperature = 0.8)
-resp <- administer(panel, instr, cfg)
+resp <- administer(panel, instr, cfg, .runner = simulated_respondent)
 resp          # prints the UNCALIBRATED banner, by design
 bias_audit(resp)
 ```
 
-Calibration is comparison, not adjustment -- deviations are reported,
-never massaged away:
+## Calibration is comparison, not adjustment
 
-```{r calibrate}
-bench <- data.frame(
-  item_id  = c("fund", "fund"),
+Deviations are reported, never massaged away; the comparison is
+restricted to items the benchmark actually covers; and coverage is part
+of the verdict. A benchmark touching one of two closed items earns
+**PARTIALLY CALIBRATED**, not a clean bill:
+
+```{r calibrate-partial}
+bench_fund <- data.frame(
+  item_id  = "fund",
   response = c("public transit", "road repair"),
   share    = c(0.41, 0.59)          # from your human benchmark source
 )
-resp <- calibrate(resp, bench, benchmark_name = "city survey 2025")
-resp          # banner replaced by the measured deviation
+resp <- calibrate(resp, bench_fund, benchmark_name = "city survey 2025")
+resp
+```
+
+Cover everything closed and the banner retires, the measured deviation
+standing in its place:
+
+```{r calibrate-full}
+bench_all <- rbind(bench_fund, data.frame(
+  item_id  = "wk4",
+  response = c("strongly disagree", "disagree", "neutral",
+               "agree", "strongly agree"),
+  share    = c(.05, .20, .25, .35, .15)))
+resp <- calibrate(resp, bench_all, benchmark_name = "city survey 2025")
+resp
 panel_report(resp)
 ```
+
+Nonresponse is recorded per item alongside
+(`attr(resp, "calibration")$nonresponse`): shares computed only over
+valid answers flatter an instrument the model often refuses.
 
 ## Factorial stimuli
 
@@ -103,28 +141,40 @@ conjoint_design(
 )
 ```
 
-Pair either with an `item_choice()` and administer; AMCE estimation
-(`amce()`, delegating to the established conjoint stack) arrives in 0.2.
+Profiles within a conjoint task are guaranteed distinct -- a forced choice
+between clones measures nothing -- with a warning when the attribute space
+is too small to allow it. Pair either design with an `item_choice()` and
+administer; AMCE estimation (`amce()`, delegating to the established
+conjoint stack) arrives in 0.2.
 
 ## Why open weights matter here specifically
 
 Panels are call-hungry: personas x items x orders x replicates. Three
 things change at open-weight prices. Volume stops being the constraint --
-a 2,000-persona pretest overnight costs electricity. `mode = "logprob"`
-(0.2) reads the full response-option distribution from one forward pass --
-reliably available only where logprobs are exposed, which in practice
-means open-weight backends. And a panel pinned to an open checkpoint is a
-*permanent instrument*: the same personas can answer the same items in
-ten years, which no deprecated API model can promise.
+a 2,000-persona pretest overnight costs electricity. A logprob
+administration path (0.2) will read the full response-option distribution
+from one forward pass -- reliably available only where logprobs are
+exposed, which in practice means open-weight backends. And a panel pinned
+to an open checkpoint is a *permanent instrument*: the same personas can
+answer the same items in ten years, which no deprecated API model can
+promise.
+
+## Live, when you are ready
+
+Drop `.runner` and the same administration runs on the model in `cfg`.
+With `GROQ_API_KEY` set and `LLMRPANEL_RUN_VIGNETTES=true`:
+
+```{r live, eval = identical(tolower(Sys.getenv("LLMRPANEL_RUN_VIGNETTES", "false")), "true")}
+administer(panel, instr, cfg)
+```
 
 ## Arriving in 0.2 (contracts already exported)
 
-- `administer(mode = "logprob")` -- option distributions without sampling.
-- `persona_paraphrase()` -- persona wording as a sensitivity arm.
 - `silicon_power()` -- power analysis for the *human* study, with
   silicon-informed priors; the clearest payoff per dollar.
 - `amce()` -- conjoint estimation via cregg/marginaleffects.
-- Joint persona draws from microdata, and raking to known cross-tabs.
+- A logprob administration path; persona-paraphrase sensitivity arms;
+  joint persona draws from microdata, and raking to known cross-tabs.
 
 ## Relations
 

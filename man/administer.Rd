@@ -4,14 +4,7 @@
 \alias{administer}
 \title{Administer an instrument to a panel}
 \usage{
-administer(
-  panel,
-  instr,
-  config,
-  mode = c("sample", "logprob"),
-  .runner = NULL,
-  ...
-)
+administer(panel, instr, config, .runner = NULL, ...)
 }
 \arguments{
 \item{panel}{A \code{\link[=panel_from_margins]{panel_from_margins()}} result.}
@@ -19,11 +12,6 @@ administer(
 \item{instr}{An \code{\link[=instrument]{instrument()}}.}
 
 \item{config}{An \code{LLMR::llm_config()} for a generative model.}
-
-\item{mode}{\code{"sample"} (one sampled reply per persona-item; default).
-\code{"logprob"} -- reading the full response-option distribution from one
-forward pass via \code{LLMR::llm_logprobs()}, replacing ~30 sampled
-replicates with one call -- arrives in 0.2.}
 
 \item{.runner}{Internal seam for tests: \verb{function(experiments, ...)}
 returning the experiments with a \code{response_text} column. Default
@@ -40,20 +28,31 @@ instrument as attributes and an empty calibration slot: every print
 shows the \strong{UNCALIBRATED} banner until \code{\link[=calibrate]{calibrate()}} fills it.
 }
 \description{
-One call per persona x item (mode \code{"sample"}), through LLMR's parallel
-engine by default. The persona is the system message; the item and its
-(possibly reordered) options are the user message; replies are matched
-to the offered options, with failures kept as \code{NA} -- a refusal or an
-essay instead of an option is data about the instrument.
+One call per persona x item, through LLMR's parallel engine by default.
+The persona is the system message; the item and its (possibly reordered)
+options are the user message; replies are matched to the offered
+options, with failures kept as \code{NA} -- a refusal or an essay instead of
+an option is data about the instrument.
+}
+\details{
+A logprob mode -- reading the full response-option distribution
+from one forward pass via \code{LLMR::llm_logprobs()}, replacing ~30
+sampled replicates with one call -- is planned for 0.2 as an
+additional administration path, not yet an argument.
 }
 \examples{
-\dontrun{
+# offline: a simulated respondent through the .runner seam
 set.seed(110)
-panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 20)
+panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 6)
 instr <- instrument(item_likert("wk4",
   "A four-day work week would benefit society."))
-cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b", temperature = 0.8)
-resp <- administer(panel, instr, cfg)
-resp                       # UNCALIBRATED banner, by design
+fake <- function(experiments, ...) {
+  experiments$response_text <-
+    ifelse(grepl("right", vapply(experiments$messages, `[[`, "", "system")),
+           "agree", "disagree")
+  experiments
 }
+cfg <- LLMR::llm_config("groq", "any-model")
+resp <- administer(panel, instr, cfg, .runner = fake)
+resp                       # UNCALIBRATED banner, by design
 }

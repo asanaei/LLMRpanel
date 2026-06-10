@@ -43,7 +43,7 @@ human-subjects budgets, and measuring model behavior under personas.
 Estimating human quantities is the reading that must be *earned*, item by
 item, in `calibrate()`.
 
-**Status: design scaffold (0.1).** Panels, instruments, vignette/conjoint
+**Status: early development (0.1).** Panels, instruments, vignette/conjoint
 designs, administration with order randomization, calibration, bias
 audits, and reports work today (offline-tested). Arriving in 0.2:
 `administer(mode = "logprob")` (full option distributions from one forward
@@ -54,7 +54,7 @@ Part of the LLMR ecosystem: [LLMR](https://github.com/asanaei/LLMR) ·
 [LLMRAgent](https://github.com/asanaei/LLMRAgent) ·
 [LLMRcoder](https://github.com/asanaei/LLMRcoder) ·
 [LLMRtrail](https://github.com/asanaei/LLMRtrail) ·
-[LLMRvalid](https://github.com/asanaei/LLMRvalid). FocusGroup (same
-author) is the qualitative sibling.
+[LLMRvalid](https://github.com/asanaei/LLMRvalid). For simulated group
+discussions, see FocusGroup (same author).
 
 MIT. Author: Ali Sanaei.

@@ -16,7 +16,11 @@ conjoint_design(attributes, n_tasks = 5L, profiles_per_task = 2L)
 \value{
 A tibble: \code{task}, \code{profile}, one column per attribute, ready for
 \code{\link[=administer]{administer()}} after pairing with an \code{\link[=item_choice]{item_choice()}} asking which
-profile the respondent prefers. Estimation (\code{amce()}) arrives in 0.2.
+profile the respondent prefers. Profiles within a task are guaranteed
+distinct (a forced choice between identical profiles measures
+nothing); when the attribute space is too small to allow distinct
+profiles, duplicates remain and a warning says so. Estimation
+(\code{amce()}) arrives in 0.2.
 }
 \description{
 Random profile pairs (or k-tuples) over the supplied attributes, the

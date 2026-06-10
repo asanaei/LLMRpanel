@@ -123,16 +123,41 @@ vignette_design <- function(template, factors) {
 #' @param profiles_per_task Profiles shown per task (default 2).
 #' @return A tibble: `task`, `profile`, one column per attribute, ready for
 #'   [administer()] after pairing with an [item_choice()] asking which
-#'   profile the respondent prefers. Estimation (`amce()`) arrives in 0.2.
+#'   profile the respondent prefers. Profiles within a task are guaranteed
+#'   distinct (a forced choice between identical profiles measures
+#'   nothing); when the attribute space is too small to allow distinct
+#'   profiles, duplicates remain and a warning says so. Estimation
+#'   (`amce()`) arrives in 0.2.
 #' @export
 conjoint_design <- function(attributes, n_tasks = 5L, profiles_per_task = 2L) {
   stopifnot(is.list(attributes), length(attributes) >= 2L)
   if (is.null(names(attributes)) || any(!nzchar(names(attributes)))) {
     abort("`attributes` must be a named list of level vectors.")
   }
-  rows <- expand.grid(task = seq_len(n_tasks),
-                      profile = seq_len(profiles_per_task))
-  cols <- lapply(attributes, function(lv) sample(lv, nrow(rows), replace = TRUE))
-  out <- tibble::as_tibble(c(as.list(rows), cols))
-  out[order(out$task, out$profile), ]
+  draw_profile <- function() {
+    vapply(attributes, function(lv) as.character(sample(lv, 1L)), character(1))
+  }
+  rows <- list()
+  cramped <- FALSE
+  for (tk in seq_len(n_tasks)) {
+    seen <- character(0)
+    for (pf in seq_len(profiles_per_task)) {
+      prof <- draw_profile()
+      tries <- 0L
+      while (paste(prof, collapse = "\r") %in% seen && tries < 25L) {
+        prof <- draw_profile()
+        tries <- tries + 1L
+      }
+      if (paste(prof, collapse = "\r") %in% seen) cramped <- TRUE
+      seen <- c(seen, paste(prof, collapse = "\r"))
+      rows[[length(rows) + 1L]] <- tibble::as_tibble(
+        c(list(task = tk, profile = pf), as.list(prof)))
+    }
+  }
+  if (cramped) {
+    cli::cli_warn(paste(
+      "The attribute space is too small for distinct profiles in every",
+      "task; some tasks contain duplicates."))
+  }
+  do.call(rbind, rows)
 }
