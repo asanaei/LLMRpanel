@@ -1,6 +1,6 @@
 # instrument.R --------------------------------------------------------------------
 # Instruments: items with response options, plus factorial stimulus builders.
-# Option order is data, not noise: administer() randomizes it per response
+# Option order is data, not noise: panel_administer() randomizes it per response
 # and records what each respondent saw.
 
 #' Survey items
@@ -59,7 +59,7 @@ item_open <- function(id, text) {
 #'   for none. What each respondent saw is recorded in the responses.
 #' @return An object of class `panel_instrument`.
 #' @export
-instrument <- function(items, randomize = c("item_order", "option_order")) {
+panel_instrument <- function(items, randomize = c("item_order", "option_order")) {
   if (inherits(items, "panel_item")) items <- list(items)
   stopifnot(is.list(items), length(items) >= 1L)
   for (it in items) {
@@ -89,7 +89,7 @@ print.panel_instrument <- function(x, ...) {
 #'
 #' Expands `factors` into the full factorial and renders the vignette text
 #' per cell with literal `{factor}` substitution. Each rendered vignette is
-#' typically paired with one or two items via [instrument()].
+#' typically paired with one or two items via [panel_instrument()].
 #'
 #' @param template Vignette text containing `{factor}` placeholders.
 #' @param factors Named list of level vectors.
@@ -121,13 +121,18 @@ vignette_design <- function(template, factors) {
 #' @param attributes Named list of level vectors.
 #' @param n_tasks Tasks per respondent.
 #' @param profiles_per_task Profiles shown per task (default 2).
-#' @return A tibble: `task`, `profile`, one column per attribute, ready for
-#'   [administer()] after pairing with an [item_choice()] asking which
-#'   profile the respondent prefers. Profiles within a task are guaranteed
+#' @return A tibble: `task`, `profile`, one column per attribute, carrying
+#'   the original attribute list in `attr(x, "attributes")`. Render it into
+#'   forced-choice items with [conjoint_instrument()] and estimate with
+#'   [amce()] after administration. Profiles within a task are guaranteed
 #'   distinct (a forced choice between identical profiles measures
 #'   nothing); when the attribute space is too small to allow distinct
-#'   profiles, duplicates remain and a warning says so. Estimation
-#'   (`amce()`) arrives in 0.2.
+#'   profiles, duplicates remain and a warning says so.
+#' @examples
+#' set.seed(110)
+#' conjoint_design(
+#'   list(price = c("$10", "$20"), speed = c("slow", "fast")),
+#'   n_tasks = 4)
 #' @export
 conjoint_design <- function(attributes, n_tasks = 5L, profiles_per_task = 2L) {
   stopifnot(is.list(attributes), length(attributes) >= 2L)
@@ -159,5 +164,70 @@ conjoint_design <- function(attributes, n_tasks = 5L, profiles_per_task = 2L) {
       "The attribute space is too small for distinct profiles in every",
       "task; some tasks contain duplicates."))
   }
-  do.call(rbind, rows)
+  out <- do.call(rbind, rows)
+  attr(out, "attributes") <- attributes
+  out
+}
+
+#' Build a conjoint instrument
+#'
+#' Converts a [conjoint_design()] into one forced-choice item per task:
+#' the profiles are rendered as labeled descriptions, and the respondent
+#' is asked to pick one by label.
+#'
+#' @param design A [conjoint_design()] tibble (columns `task`, `profile`,
+#'   one column per attribute, and the attribute list in
+#'   `attr(design, "attributes")`).
+#' @param question Question text shown above each task's profiles.
+#' @return A `panel_instrument` whose items are task-level choice items
+#'   (ids `task_1`, `task_2`, ...; options `"Profile 1"`, `"Profile 2"`,
+#'   ...) and whose `$conjoint` field carries the design for [amce()].
+#' @details Only option order is randomized; item order stays fixed so the
+#'   task ids remain interpretable. Attribute order inside each profile
+#'   description follows the design's column order.
+#' @examples
+#' set.seed(110)
+#' panel <- panel_from_margins(list(group = c(A = .5, B = .5)), n = 4)
+#' design <- conjoint_design(
+#'   list(economy = c("weak", "strong"), taxes = c("lower", "higher")),
+#'   n_tasks = 3)
+#' instr <- conjoint_instrument(design, "Which candidate do you prefer?")
+#' instr
+#' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
+#' \dontrun{
+#' panel_administer(panel, instr, cfg)
+#' }
+#' @export
+conjoint_instrument <- function(design,
+                                question = "Which profile do you prefer?") {
+  stopifnot(is.data.frame(design), is.character(question),
+            length(question) == 1L, nzchar(question))
+  if (!all(c("task", "profile") %in% names(design))) {
+    abort("`design` must have columns task and profile.")
+  }
+  attrs <- attr(design, "attributes")
+  if (is.null(attrs) || !is.list(attrs)) {
+    abort("`design` must carry attr(design, 'attributes'); rebuild it with conjoint_design().")
+  }
+  attr_cols <- setdiff(names(design), c("task", "profile"))
+  if (!length(attr_cols)) abort("`design` has no attribute columns.")
+
+  tasks <- sort(unique(design$task))
+  items <- lapply(tasks, function(k) {
+    dk <- design[design$task == k, , drop = FALSE]
+    dk <- dk[order(dk$profile), , drop = FALSE]
+    profiles <- dk$profile
+    lines <- vapply(seq_len(nrow(dk)), function(i) {
+      vals <- vapply(attr_cols, function(a) as.character(dk[[a]][i]),
+                     character(1))
+      sprintf("Profile %s: %s.", profiles[i],
+              paste(sprintf("%s: %s", attr_cols, vals), collapse = "; "))
+    }, character(1))
+    item_choice(paste0("task_", k),
+                paste0(question, "\n\n", paste(lines, collapse = "\n")),
+                paste("Profile", profiles))
+  })
+  out <- panel_instrument(items, randomize = "option_order")
+  out$conjoint <- design
+  out
 }

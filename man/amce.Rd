@@ -2,22 +2,48 @@
 % Please edit documentation in R/calibrate.R
 \name{amce}
 \alias{amce}
-\title{AMCEs from conjoint administrations (arrives in 0.2)}
+\title{AMCEs from a conjoint administration}
 \usage{
 amce(responses)
 }
 \arguments{
-\item{responses}{An \code{\link[=administer]{administer()}} result from a conjoint instrument.}
+\item{responses}{A \code{\link[=panel_administer]{panel_administer()}} result whose instrument came from
+\code{\link[=conjoint_instrument]{conjoint_instrument()}}.}
 }
 \value{
-Will return tidy AMCE estimates.
+A tibble: \code{attribute}, \code{level}, \code{estimate}, \code{std_error},
+\code{ci_lo}, \code{ci_hi}. Baseline levels (the first level present, in the
+design's order) appear with estimate 0 and \code{std_error = NA}, so the
+table feeds the familiar conjoint plot directly. Attributes
+\code{n_profiles}, \code{n_respondents}, and \code{n_dropped_na} record the profile
+rows used, the respondents administered, and missing task responses
+dropped.
 }
 \description{
-Average marginal component effects for \code{\link[=conjoint_design]{conjoint_design()}} runs,
-delegating estimation to the established conjoint stack
-(cregg/marginaleffects) rather than reimplementing it.
+Average marginal component effects from a \code{\link[=conjoint_instrument]{conjoint_instrument()}}
+administration: one OLS regression of profile choice on
+treatment-coded dummies for all attributes simultaneously, with CR1
+cluster-robust standard errors clustered by persona and 95\% intervals
+on the t distribution with G - 1 degrees of freedom (G personas).
+Under uniform, independent profile randomization this is the standard
+AMCE estimator.
 }
-\section{Status}{
- Design contract, arrives in 0.2.
+\examples{
+\dontrun{
+set.seed(110)
+panel <- panel_from_margins(list(group = c(A = .5, B = .5)), n = 6)
+design <- conjoint_design(
+  list(color = c("blue", "red"), cost = c("low", "high")),
+  n_tasks = 6)
+instr <- conjoint_instrument(design)
+cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
+r <- panel_administer(panel, instr, cfg)
+amce(r)
 }
-
+}
+\references{
+Hainmueller, Jens, Daniel J. Hopkins, and Teppei Yamamoto
+(2014). "Causal Inference in Conjoint Analysis: Understanding
+Multidimensional Choices via Stated Preference Experiments."
+\emph{Political Analysis} 22(1), 1-30.
+}

@@ -12,13 +12,8 @@
 #' options, with failures kept as `NA` -- a refusal or an essay instead of
 #' an option is data about the instrument.
 #'
-#' @details A logprob mode -- reading the full response-option distribution
-#'   from one forward pass via `LLMR::llm_logprobs()`, replacing ~30
-#'   sampled replicates with one call -- is planned for 0.2 as an
-#'   additional administration path, not yet an argument.
-#'
-#' @param panel A [panel_from_margins()] result.
-#' @param instr An [instrument()].
+#' @param panel A [panel_from_margins()] or [panel_from_data()] result.
+#' @param instr A [panel_instrument()].
 #' @param config An `LLMR::llm_config()` for a generative model.
 #' @param .runner Internal seam for tests: `function(experiments, ...)`
 #'   returning the experiments with a `response_text` column. Default
@@ -29,24 +24,28 @@
 #'   (matched option or `NA`; verbatim text for open items), `score`
 #'   (1-based scale position for Likert items). Carries the panel and
 #'   instrument as attributes and an empty calibration slot: every print
-#'   shows the **UNCALIBRATED** banner until [calibrate()] fills it.
+#'   shows the **UNCALIBRATED** banner until [panel_calibrate()] fills it.
 #' @examples
-#' # offline: a simulated respondent through the .runner seam
-#' set.seed(110)
+#' set.seed(110)   # the panel draw is local; the model call is not
 #' panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 6)
-#' instr <- instrument(item_likert("wk4",
-#'   "A four-day work week would benefit society."))
-#' fake <- function(experiments, ...) {
-#'   experiments$response_text <-
-#'     ifelse(grepl("right", vapply(experiments$messages, `[[`, "", "system")),
-#'            "agree", "disagree")
+#' instr <- panel_instrument(
+#'   item_likert("wk4", "A four-day work week would benefit society."),
+#'   randomize = character(0))
+#' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
+#' \dontrun{
+#' resp <- panel_administer(panel, instr, cfg)
+#' resp                       # UNCALIBRATED banner, by design
+#' }
+#'
+#' # The `.runner` seam answers without a provider, for tests or for a
+#' # deterministic or external respondent:
+#' deterministic <- function(experiments, ...) {
+#'   experiments$response_text <- "agree"
 #'   experiments
 #' }
-#' cfg <- LLMR::llm_config("groq", "any-model")
-#' resp <- administer(panel, instr, cfg, .runner = fake)
-#' resp                       # UNCALIBRATED banner, by design
+#' panel_administer(panel, instr, cfg, .runner = deterministic)
 #' @export
-administer <- function(panel, instr, config, .runner = NULL, ...) {
+panel_administer <- function(panel, instr, config, .runner = NULL, ...) {
   stopifnot(inherits(panel, "silicon_panel"),
             inherits(instr, "panel_instrument"))
   if (!inherits(config, "llm_config")) {
@@ -122,7 +121,7 @@ print.panel_responses <- function(x, ...) {
     cat(cli::format_inline(paste(
       "  {.strong UNCALIBRATED}: no benchmark comparison has been run.",
       "Read these as design-stage measurements of the model under these",
-      "personas, not as estimates of any human population. See calibrate().")),
+      "personas, not as estimates of any human population. See panel_calibrate().")),
       "\n")
   } else if (cal$items_covered < cal$items_total) {
     cat(cli::format_inline(paste0(
@@ -136,4 +135,13 @@ print.panel_responses <- function(x, ...) {
                 cal$mad, cal$max_dev))
   }
   invisible(x)
+}
+
+#' @exportS3Method tibble::as_tibble
+as_tibble.panel_responses <- function(x, ...) {
+  attr(x, "panel") <- NULL
+  attr(x, "instrument") <- NULL
+  attr(x, "calibration") <- NULL
+  class(x) <- setdiff(class(x), "panel_responses")
+  tibble::as_tibble(x, ...)
 }

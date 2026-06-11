@@ -8,14 +8,21 @@
 #' - [panel_from_margins()]: persona panels drawn from population margins
 #'   you supply (ACS/ANES-style), with the persona text rendered from a
 #'   template.
-#' - [instrument()] with [item_likert()], [item_choice()], [item_open()];
+#' - [panel_instrument()] with [item_likert()], [item_choice()], [item_open()];
 #'   [vignette_design()] and [conjoint_design()] for factorial stimuli.
-#' - [administer()]: every persona answers every item, with item- and
+#' - [panel_from_data()]: the joint-distribution counterpart, drawing
+#'   personas from microdata rows.
+#' - [panel_administer()]: every persona answers every item, with item- and
 #'   option-order randomization recorded per response.
-#' - [calibrate()]: compare silicon marginals to human benchmarks; until it
+#' - [panel_calibrate()]: compare silicon marginals to human benchmarks; until it
 #'   runs, every print method shows an **UNCALIBRATED** banner.
-#' - [bias_audit()]: option-order effects and refusal/parse rates -- the
+#' - [panel_bias_audit()]: option-order effects and refusal/parse rates -- the
 #'   response-style artifacts silicon respondents are known for.
+#' - [conjoint_instrument()] and [amce()]: forced-choice conjoint items and
+#'   their average marginal component effects, with respondent-clustered
+#'   standard errors.
+#' - [panel_power()]: analytic two-arm power for the planned human study,
+#'   priced from the silicon pilot.
 #' - [panel_report()]: the design-stage report, banner included.
 #'
 #' The stance, printed rather than preached: silicon panels are instruments
@@ -27,6 +34,16 @@
 #' @keywords internal
 #' @importFrom rlang %||% abort
 "_PACKAGE"
+
+#' Shared generic methods
+#'
+#' LLMRpanel registers methods for `LLMR::diagnostics()`, `LLMR::report()`,
+#' and `tibble::as_tibble()` on panel objects.
+#'
+#' @name panel_generics
+#' @aliases diagnostics.panel_responses report.panel_responses
+#'   as_tibble.silicon_panel as_tibble.panel_responses
+NULL
 
 utils::globalVariables(c("item_id", "response"))
 

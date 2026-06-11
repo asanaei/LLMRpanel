@@ -8,7 +8,7 @@ fix_panel <- function(n = 20, seed = 110) {
 }
 
 fix_instr <- function(randomize = c("item_order", "option_order")) {
-  instrument(list(
+  panel_instrument(list(
     item_likert("wk4", "A four-day work week would benefit society.",
                 scale = c("disagree", "neutral", "agree")),
     item_choice("plan", "Which plan do you prefer?", c("Plan A", "Plan B")),
@@ -18,7 +18,6 @@ fix_instr <- function(randomize = c("item_order", "option_order")) {
 
 fix_cfg <- function() LLMR::llm_config("groq", "fake-model")
 
-# Personas lean by party: right -> agree/Plan A; left -> disagree/Plan B.
 runner_by_party <- function(experiments, ...) {
   experiments$response_text <- vapply(seq_len(nrow(experiments)), function(i) {
     sys <- experiments$messages[[i]][["system"]]
@@ -32,7 +31,6 @@ runner_by_party <- function(experiments, ...) {
   experiments
 }
 
-# A respondent that always picks whatever option is listed first.
 runner_first_option <- function(experiments, ...) {
   experiments$response_text <- vapply(seq_len(nrow(experiments)), function(i) {
     usr <- experiments$messages[[i]][["user"]]
@@ -53,14 +51,19 @@ test_that("panels draw from margins and render personas", {
   expect_output(print(p), "silicon_panel")
   expect_error(panel_from_margins(list(c(a = .5, b = .5)), 5), "named list")
   expect_error(panel_from_margins(list(party = c(.5, .5)), 5), "named")
+
+  pt <- tibble::as_tibble(p)
+  expect_s3_class(pt, "tbl_df")
+  expect_false(inherits(pt, "silicon_panel"))
+  expect_null(attr(pt, "margins"))
 })
 
 test_that("instruments validate and stimulus designs have the right shape", {
   expect_output(print(fix_instr()), "3 item")
-  expect_error(instrument(list("not an item")), "item_likert")
-  expect_error(instrument(list(item_open("a", "t"), item_open("a", "t"))),
+  expect_error(panel_instrument(list("not an item")), "item_likert")
+  expect_error(panel_instrument(list(item_open("a", "t"), item_open("a", "t"))),
                "unique")
-  expect_error(instrument(list(item_open("a", "t")), randomize = "colors"),
+  expect_error(panel_instrument(list(item_open("a", "t")), randomize = "colors"),
                "item_order")
 
   v <- vignette_design("A {age} applicant with {exp} experience.",
@@ -75,12 +78,10 @@ test_that("instruments validate and stimulus designs have the right shape", {
                         n_tasks = 3, profiles_per_task = 2)
   expect_equal(nrow(cj), 6L)
   expect_setequal(unique(cj$profile), 1:2)
-  # profiles within a task are distinct: a choice between clones is no choice
   for (tk in unique(cj$task)) {
     prof <- cj[cj$task == tk, c("price", "origin")]
     expect_false(any(duplicated(prof)))
   }
-  # a one-combination attribute space cannot be distinct, and says so
   expect_warning(
     conjoint_design(list(a = "x", b = "y"), n_tasks = 1, profiles_per_task = 2),
     "too small")
@@ -88,99 +89,124 @@ test_that("instruments validate and stimulus designs have the right shape", {
 
 test_that("administer collects matched responses and Likert scores", {
   set.seed(110)
-  r <- administer(fix_panel(10), fix_instr(), fix_cfg(),
-                  .runner = runner_by_party)
+  r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(),
+                        .runner = runner_by_party)
   expect_s3_class(r, "panel_responses")
-  expect_equal(nrow(r), 30L)                      # 10 personas x 3 items
+  expect_equal(nrow(r), 30L)
   lik <- r[r$item_id == "wk4", ]
   expect_setequal(unique(lik$response), c("agree", "disagree"))
-  expect_setequal(unique(lik$score), c(1, 3))     # positions on the scale
+  expect_setequal(unique(lik$score), c(1, 3))
   expect_true(all(is.na(r$score[r$item_id != "wk4"])))
   expect_true(all(nzchar(r$response[r$item_id == "why"])))
-  # the order each respondent saw is recorded
   expect_true(all(grepl("\\|", stats::na.omit(lik$option_order))))
 })
 
 test_that("the banner walks UNCALIBRATED -> PARTIAL -> calibrated", {
   set.seed(110)
-  r <- administer(fix_panel(10), fix_instr(), fix_cfg(),
-                  .runner = runner_by_party)
+  r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(),
+                        .runner = runner_by_party)
   expect_output(print(r), "UNCALIBRATED")
 
-  # a benchmark covering one of two closed items is PARTIAL, not clean
   bench_partial <- data.frame(item_id = "plan",
                               response = c("Plan A", "Plan B"),
                               share = c(.5, .5))
-  rp <- calibrate(r, bench_partial, benchmark_name = "narrow study")
+  rp <- panel_calibrate(r, bench_partial, benchmark_name = "narrow study")
   expect_output(print(rp), "PARTIALLY CALIBRATED")
   expect_output(print(rp), "1/2 items")
   calp <- attr(rp, "calibration")
   expect_equal(calp$items_covered, 1L)
   expect_equal(calp$items_total, 2L)
-  # the MAD is computed over covered items only: no fake deviations from
-  # administered-but-unbenchmarked items
   expect_true(all(calp$table$item_id == "plan"))
   expect_true(all(c("item_id", "nonresponse_rate") %in% names(calp$nonresponse)))
 
-  # full coverage reads as calibrated
   bench_full <- rbind(bench_partial,
                       data.frame(item_id = "wk4",
                                  response = c("disagree", "neutral", "agree"),
                                  share = c(.4, .2, .4)))
-  rc <- calibrate(r, bench_full, benchmark_name = "toy human study")
+  rc <- panel_calibrate(r, bench_full, benchmark_name = "toy human study")
   expect_output(print(rc), "toy human study")
   expect_output(print(rc), "2/2 items")
   expect_false(any(grepl("UNCALIBRATED|PARTIALLY",
                          utils::capture.output(print(rc)))))
 
-  # shares that do not sum to 1 draw a warning
   expect_warning(
-    calibrate(r, data.frame(item_id = "plan",
-                            response = c("Plan A", "Plan B"),
-                            share = c(.7, .6))),
+    panel_calibrate(r, data.frame(item_id = "plan",
+                                  response = c("Plan A", "Plan B"),
+                                  share = c(.7, .6))),
     "sum to 1")
-  expect_error(calibrate(r, data.frame(x = 1)), "item_id")
-  expect_error(calibrate(r, data.frame(item_id = "ghost", response = "z",
-                                       share = 1)),
+  expect_error(panel_calibrate(r, data.frame(x = 1)), "item_id")
+  expect_error(panel_calibrate(r, data.frame(item_id = "ghost", response = "z",
+                                             share = 1)),
                "covers none")
 })
 
 test_that("bias_audit detects option-order effects", {
   set.seed(110)
-  r <- administer(fix_panel(40), fix_instr(), fix_cfg(),
-                  .runner = runner_first_option)
-  ba <- bias_audit(r)
+  r <- panel_administer(fix_panel(40), fix_instr(), fix_cfg(),
+                        .runner = runner_first_option)
+  ba <- panel_bias_audit(r)
   p_choice <- ba$order_effect_p[ba$item_id == "plan"]
-  expect_lt(p_choice, 0.01)        # answers track the order shown
+  expect_lt(p_choice, 0.01)
   expect_true(is.na(ba$order_effect_p[ba$item_id == "why"]))
 
   set.seed(110)
-  r2 <- administer(fix_panel(40), fix_instr(randomize = character(0)),
-                   fix_cfg(), .runner = runner_first_option)
-  ba2 <- bias_audit(r2)
-  expect_true(all(is.na(ba2$order_effect_p)))     # nothing randomized
+  r2 <- panel_administer(fix_panel(40), fix_instr(randomize = character(0)),
+                         fix_cfg(), .runner = runner_first_option)
+  ba2 <- panel_bias_audit(r2)
+  expect_true(all(is.na(ba2$order_effect_p)))
 })
 
 test_that("the report leads with calibration status, coverage included", {
   set.seed(110)
-  r <- administer(fix_panel(10), fix_instr(), fix_cfg(),
-                  .runner = runner_by_party)
+  r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(),
+                        .runner = runner_by_party)
   rep <- panel_report(r)
   expect_match(rep[1], "^UNCALIBRATED")
   expect_output(print(rep), "STANCE")
 
   bench <- data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
                       share = c(.5, .5))
-  rep2 <- panel_report(calibrate(r, bench, "toy"))
+  rep2 <- panel_report(panel_calibrate(r, bench, "toy"))
   expect_match(rep2[1], "^PARTIALLY CALIBRATED \\(1/2")
 })
 
-test_that("0.2 contracts validate inputs and say when they arrive", {
+test_that("shared generics dispatch for panel responses", {
   set.seed(110)
-  p <- fix_panel(4)
-  r <- administer(p, fix_instr(), fix_cfg(), .runner = runner_by_party)
-  expect_error(silicon_power(r, NULL), "0\\.2")
-  expect_error(amce(r), "0\\.2")
+  r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(),
+                        .runner = runner_by_party)
+
+  dg <- LLMR::diagnostics(r)
+  expect_s3_class(dg, "tbl_df")
+  expect_equal(names(dg),
+               c("item_id", "n", "parse_failures", "order_effect_p",
+                 "calibration_state", "items_covered", "items_total", "mad"))
+  expect_true(all(dg$calibration_state == "UNCALIBRATED"))
+  expect_equal(unique(dg$items_covered), 0L)
+  expect_equal(unique(dg$items_total), 2L)
+  expect_true(all(is.na(dg$mad)))
+
+  gen_rep <- LLMR::report(r)
+  expect_s3_class(gen_rep, "panel_report")
+  expect_match(gen_rep[1], "^UNCALIBRATED")
+
+  rt <- tibble::as_tibble(r)
+  expect_s3_class(rt, "tbl_df")
+  expect_false(inherits(rt, "panel_responses"))
+  expect_null(attr(rt, "panel"))
+  expect_null(attr(rt, "instrument"))
+  expect_null(attr(rt, "calibration"))
+
+  bench <- rbind(
+    data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
+               share = c(.5, .5)),
+    data.frame(item_id = "wk4", response = c("disagree", "neutral", "agree"),
+               share = c(.4, .2, .4)))
+  rc <- panel_calibrate(r, bench, "toy human study")
+  dgc <- LLMR::diagnostics(rc)
+  expect_true(all(dgc$calibration_state == "CALIBRATED"))
+  expect_equal(unique(dgc$items_covered), 2L)
+  expect_equal(unique(dgc$items_total), 2L)
+  expect_equal(unique(dgc$mad), attr(rc, "calibration")$mad)
 })
 
 test_that("the ecosystem hash convention is pinned (drift guard vs LLMR)", {

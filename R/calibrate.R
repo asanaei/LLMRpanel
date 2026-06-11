@@ -15,7 +15,7 @@
 #' refusals) is recorded per item alongside, since shares computed only
 #' over valid responses flatter an instrument the model often refuses.
 #'
-#' @param responses An [administer()] result.
+#' @param responses A [panel_administer()] result.
 #' @param benchmark A data frame with columns `item_id`, `response`, and
 #'   `share` (human marginal proportions). Shares within an item should sum
 #'   to 1; a deviation beyond rounding draws a warning.
@@ -26,23 +26,20 @@
 #'   `share_human`, `deviation`), `$nonresponse` (per item),
 #'   `$items_covered` / `$items_total`, `$mad`, `$max_dev`.
 #' @examples
+#' \dontrun{
 #' set.seed(110)
 #' panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 12)
-#' instr <- instrument(item_choice("plan", "Prefer?", c("A", "B")))
-#' fake <- function(experiments, ...) {
-#'   experiments$response_text <-
-#'     ifelse(grepl("right", vapply(experiments$messages, `[[`, "", "system")),
-#'            "A", "B")
-#'   experiments
-#' }
-#' cfg <- LLMR::llm_config("groq", "any-model")
-#' r <- administer(panel, instr, cfg, .runner = fake)
+#' instr <- panel_instrument(item_choice("plan", "Which plan do you prefer?",
+#'                                       c("A", "B")))
+#' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
+#' r <- panel_administer(panel, instr, cfg)
 #' r   # UNCALIBRATED banner
 #' bench <- data.frame(item_id = "plan", response = c("A", "B"),
 #'                     share = c(.5, .5))
-#' calibrate(r, bench, "toy human study")
+#' panel_calibrate(r, bench, "toy human study")
+#' }
 #' @export
-calibrate <- function(responses, benchmark, benchmark_name = "benchmark") {
+panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") {
   stopifnot(inherits(responses, "panel_responses"), is.data.frame(benchmark))
   need <- c("item_id", "response", "share")
   if (!all(need %in% names(benchmark))) {
@@ -109,14 +106,11 @@ calibrate <- function(responses, benchmark, benchmark_name = "benchmark") {
 #'   should not depend on it.
 #' - **Non-response**: parse failures and refusals per item.
 #'
-#' Acquiescence scoring (reverse-keyed item pairs) arrives in 0.2 alongside
-#' instrument metadata for keying.
-#'
-#' @param responses An [administer()] result.
+#' @param responses A [panel_administer()] result.
 #' @return A tibble: `item_id`, `n`, `parse_failures`, `order_effect_p`
 #'   (NA when order was not randomized or cells are too sparse).
 #' @export
-bias_audit <- function(responses) {
+panel_bias_audit <- function(responses) {
   stopifnot(inherits(responses, "panel_responses"))
   items <- split(responses, responses$item_id)
   out <- lapply(items, function(ri) {
@@ -139,38 +133,292 @@ bias_audit <- function(responses) {
     tibble::tibble(item_id = ri$item_id[1], n = nrow(ri),
                    parse_failures = pf, order_effect_p = p)
   })
-  do.call(rbind, out)
+  tibble::as_tibble(do.call(rbind, out))
 }
 
-#' Power analysis with silicon-informed priors (arrives in 0.2)
+#' @exportS3Method LLMR::diagnostics
+diagnostics.panel_responses <- function(x, ...) {
+  out <- panel_bias_audit(x)
+  cal <- attr(x, "calibration")
+  if (is.null(cal)) {
+    state <- "UNCALIBRATED"
+    items_covered <- 0L
+    items_total <- length(unique(x$item_id[x$type != "open"]))
+    mad <- NA_real_
+  } else {
+    state <- if (cal$items_covered < cal$items_total) "PARTIAL" else "CALIBRATED"
+    items_covered <- cal$items_covered
+    items_total <- cal$items_total
+    mad <- cal$mad %||% NA_real_
+  }
+  out$calibration_state <- state
+  out$items_covered <- items_covered
+  out$items_total <- items_total
+  out$mad <- mad
+  out
+}
+
+#' Two-arm power for the planned human study, priced from the silicon pilot
 #'
-#' Uses pilot silicon responses to put realistic priors on effect sizes and
-#' design effects, then simulates power for the *human* study being planned
-#' -- the use of silicon panels with the clearest payoff per dollar.
+#' Analytic two-arm sample sizes with dispersion priors taken from the
+#' silicon responses: Likert items use the pilot standard deviation of
+#' `score`; choice items use the pilot share of the modal option; open
+#' items are skipped. The priors inherit the panel's calibration status --
+#' an uncalibrated pilot prices the design stage, it does not certify
+#' effect sizes.
 #'
-#' @param responses An [administer()] result (the silicon pilot).
-#' @param effect The design and effect specification (under design).
-#' @return Will return simulated power curves.
-#' @section Status: Design contract, arrives in 0.2.
+#' @param responses A [panel_administer()] result (the silicon pilot).
+#' @param effect Raw minimum detectable difference between the two arms:
+#'   scale points for Likert items, a difference in proportions for choice
+#'   items. A scalar (recycled) or a named vector keyed by `item_id`.
+#' @param items Optional character vector restricting which items to price.
+#' @param alpha Two-sided test size.
+#' @param power Target power.
+#' @return A tibble: `item_id`, `type`, `dispersion` (sd for Likert, modal
+#'   share for choice), `effect`, `n_per_arm`.
+#' @examples
+#' \dontrun{
+#' set.seed(110)
+#' panel <- panel_from_margins(list(group = c(A = .5, B = .5)), n = 8)
+#' instr <- panel_instrument(list(
+#'   item_likert("lik", "Rate the proposal.", scale = c("low", "mid", "high")),
+#'   item_choice("pick", "Pick one.", c("A", "B"))),
+#'   randomize = character(0))
+#' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
+#' r <- panel_administer(panel, instr, cfg)
+#' panel_power(r, effect = c(lik = 0.5, pick = 0.2))
+#' }
 #' @export
-silicon_power <- function(responses, effect) {
+panel_power <- function(responses, effect, items = NULL,
+                        alpha = 0.05, power = 0.80) {
   stopifnot(inherits(responses, "panel_responses"))
-  abort("silicon_power() arrives in LLMRpanel 0.2; the signature is the contract.")
+  if (!is.numeric(effect) || !length(effect)) {
+    abort("`effect` must be a numeric scalar or named vector.")
+  }
+  if (!is.numeric(alpha) || length(alpha) != 1L || is.na(alpha) ||
+      alpha <= 0 || alpha >= 1) {
+    abort("`alpha` must be a number between 0 and 1.")
+  }
+  if (!is.numeric(power) || length(power) != 1L || is.na(power) ||
+      power <= 0 || power >= 1) {
+    abort("`power` must be a number between 0 and 1.")
+  }
+  all_items <- unique(responses$item_id)
+  if (is.null(items)) {
+    items <- all_items
+  } else {
+    stopifnot(is.character(items))
+    if (length(setdiff(items, all_items))) {
+      abort("`items` contains item_id(s) not found in `responses`.")
+    }
+  }
+  effect_for <- function(id) {
+    nms <- names(effect)
+    if (is.null(nms) || !any(nzchar(nms))) {
+      if (length(effect) != 1L) {
+        abort("`effect` must be scalar or a named vector by item_id.")
+      }
+      return(unname(effect[1]))
+    }
+    if (!(id %in% nms)) {
+      abort("A named `effect` must include every analyzed item_id.")
+    }
+    unname(effect[match(id, nms)])
+  }
+
+  z <- stats::qnorm(1 - alpha / 2) + stats::qnorm(power)
+  rows <- list()
+  for (id in items) {
+    ri <- responses[responses$item_id == id, , drop = FALSE]
+    type <- as.character(ri$type[1])
+    if (identical(type, "open")) next
+    eff <- effect_for(id)
+    if (!is.finite(eff) || eff <= 0) {
+      abort("`effect` must be positive for every analyzed item.")
+    }
+    if (identical(type, "likert")) {
+      sigma <- stats::sd(ri$score, na.rm = TRUE)
+      if (is.na(sigma) || sigma == 0) {
+        cli::cli_warn("Item {.val {id}} shows no variance in the pilot; n_per_arm is NA.")
+        n <- NA_integer_
+      } else {
+        n <- ceiling(2 * sigma^2 * z^2 / eff^2)
+      }
+      rows[[length(rows) + 1L]] <- tibble::tibble(
+        item_id = id, type = type, dispersion = sigma, effect = eff,
+        n_per_arm = n)
+    } else if (identical(type, "choice")) {
+      valid <- ri$response[!is.na(ri$response)]
+      if (!length(valid)) {
+        cli::cli_warn("Item {.val {id}} has no valid pilot responses; n_per_arm is NA.")
+        p <- NA_real_; n <- NA_integer_
+      } else {
+        tab <- table(valid)
+        p <- as.numeric(max(tab) / sum(tab))
+        if (p == 1) {
+          cli::cli_warn("Item {.val {id}} shows no variance in the pilot; n_per_arm is NA.")
+          n <- NA_integer_
+        } else {
+          p1 <- p - eff / 2; p2 <- p + eff / 2
+          p1c <- min(max(p1, 0.005), 0.995)
+          p2c <- min(max(p2, 0.005), 0.995)
+          if (p1 != p1c || p2 != p2c) {
+            cli::cli_warn("Arm proportions for item {.val {id}} were clamped to [0.005, 0.995].")
+          }
+          n <- ceiling(z^2 * (p1c * (1 - p1c) + p2c * (1 - p2c)) / eff^2)
+        }
+      }
+      rows[[length(rows) + 1L]] <- tibble::tibble(
+        item_id = id, type = type, dispersion = p, effect = eff,
+        n_per_arm = n)
+    }
+  }
+  if (!length(rows)) {
+    return(tibble::tibble(item_id = character(), type = character(),
+                          dispersion = numeric(), effect = numeric(),
+                          n_per_arm = integer()))
+  }
+  tibble::as_tibble(do.call(rbind, rows))
 }
 
-#' AMCEs from conjoint administrations (arrives in 0.2)
+#' AMCEs from a conjoint administration
 #'
-#' Average marginal component effects for [conjoint_design()] runs,
-#' delegating estimation to the established conjoint stack
-#' (cregg/marginaleffects) rather than reimplementing it.
+#' Average marginal component effects from a [conjoint_instrument()]
+#' administration: one OLS regression of profile choice on
+#' treatment-coded dummies for all attributes simultaneously, with CR1
+#' cluster-robust standard errors clustered by persona and 95% intervals
+#' on the t distribution with G - 1 degrees of freedom (G personas).
+#' Under uniform, independent profile randomization this is the standard
+#' AMCE estimator.
 #'
-#' @param responses An [administer()] result from a conjoint instrument.
-#' @return Will return tidy AMCE estimates.
-#' @section Status: Design contract, arrives in 0.2.
+#' @param responses A [panel_administer()] result whose instrument came from
+#'   [conjoint_instrument()].
+#' @return A tibble: `attribute`, `level`, `estimate`, `std_error`,
+#'   `ci_lo`, `ci_hi`. Baseline levels (the first level present, in the
+#'   design's order) appear with estimate 0 and `std_error = NA`, so the
+#'   table feeds the familiar conjoint plot directly. Attributes
+#'   `n_profiles`, `n_respondents`, and `n_dropped_na` record the profile
+#'   rows used, the respondents administered, and missing task responses
+#'   dropped.
+#' @examples
+#' \dontrun{
+#' set.seed(110)
+#' panel <- panel_from_margins(list(group = c(A = .5, B = .5)), n = 6)
+#' design <- conjoint_design(
+#'   list(color = c("blue", "red"), cost = c("low", "high")),
+#'   n_tasks = 6)
+#' instr <- conjoint_instrument(design)
+#' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
+#' r <- panel_administer(panel, instr, cfg)
+#' amce(r)
+#' }
+#' @references Hainmueller, Jens, Daniel J. Hopkins, and Teppei Yamamoto
+#'   (2014). "Causal Inference in Conjoint Analysis: Understanding
+#'   Multidimensional Choices via Stated Preference Experiments."
+#'   \emph{Political Analysis} 22(1), 1-30.
 #' @export
 amce <- function(responses) {
   stopifnot(inherits(responses, "panel_responses"))
-  abort("amce() arrives in LLMRpanel 0.2, delegating to cregg/marginaleffects.")
+  instr <- attr(responses, "instrument")
+  design <- instr$conjoint
+  if (is.null(design)) {
+    abort("amce() needs an administration of a conjoint_instrument().")
+  }
+  attrs <- attr(design, "attributes")
+  if (is.null(attrs) || !is.list(attrs) ||
+      is.null(names(attrs)) || any(!nzchar(names(attrs)))) {
+    abort("The conjoint design is missing its attribute metadata.")
+  }
+  attr_names <- names(attrs)[names(attrs) %in% names(design)]
+  if (!length(attr_names)) abort("The conjoint design has no attribute columns.")
+
+  tasks <- sort(unique(design$task))
+  task_ids <- paste0("task_", tasks)
+  task_map <- stats::setNames(tasks, task_ids)
+  r_all <- responses[responses$item_id %in% task_ids, , drop = FALSE]
+  n_dropped_na <- sum(is.na(r_all$response))
+  r <- r_all[!is.na(r_all$response), , drop = FALSE]
+  if (!nrow(r)) abort("No non-missing conjoint responses to estimate AMCEs.")
+
+  rows <- list()
+  for (i in seq_len(nrow(r))) {
+    tk <- unname(task_map[as.character(r$item_id[i])])
+    dk <- design[design$task == tk, c("task", "profile", attr_names),
+                 drop = FALSE]
+    dk$persona_id <- r$persona_id[i]
+    dk$chosen <- as.integer(as.character(r$response[i]) ==
+                              paste("Profile", dk$profile))
+    rows[[length(rows) + 1L]] <-
+      dk[, c("persona_id", "task", "profile", attr_names, "chosen"),
+         drop = FALSE]
+  }
+  long <- tibble::as_tibble(do.call(rbind, rows))
+
+  clusters <- unique(long$persona_id)
+  G <- length(clusters)
+  if (G < 2L) {
+    abort("amce() needs at least two personas for clustered standard errors.")
+  }
+
+  level_list <- stats::setNames(lapply(attr_names, function(a) {
+    lev <- as.character(attrs[[a]])
+    lev[lev %in% as.character(unique(long[[a]]))]
+  }), attr_names)
+
+  x_cols <- list("(Intercept)" = rep(1, nrow(long)))
+  term_index <- list()
+  for (a in attr_names) {
+    lev <- level_list[[a]]
+    if (length(lev) <= 1L) next
+    vals <- as.character(long[[a]])
+    for (lv in lev[-1]) {
+      x_cols[[paste(a, lv, sep = "=")]] <- as.numeric(vals == lv)
+      term_index[[paste(a, lv, sep = "\r")]] <- length(x_cols)
+    }
+  }
+  X <- do.call(cbind, x_cols)
+  storage.mode(X) <- "double"
+  y <- as.numeric(long$chosen)
+  n <- nrow(X); k <- ncol(X)
+  if (n <= k) abort("The AMCE design has no residual degrees of freedom.")
+  if (qr(X)$rank < k) {
+    abort("Singular AMCE design matrix; some levels are collinear in this design.")
+  }
+  bread <- solve(crossprod(X))
+  beta <- as.vector(bread %*% crossprod(X, y))
+  e <- y - as.vector(X %*% beta)
+
+  meat <- matrix(0, nrow = k, ncol = k)
+  for (g in clusters) {
+    idx <- long$persona_id == g
+    sc <- crossprod(X[idx, , drop = FALSE], e[idx])
+    meat <- meat + tcrossprod(sc)
+  }
+  V <- (G / (G - 1)) * ((n - 1) / (n - k)) * bread %*% meat %*% bread
+  se <- sqrt(pmax(diag(V), 0))
+  crit <- stats::qt(0.975, df = G - 1)
+
+  out_rows <- list()
+  for (a in attr_names) {
+    lev <- level_list[[a]]
+    if (!length(lev)) next
+    out_rows[[length(out_rows) + 1L]] <- tibble::tibble(
+      attribute = a, level = lev[1], estimate = 0,
+      std_error = NA_real_, ci_lo = NA_real_, ci_hi = NA_real_)
+    if (length(lev) <= 1L) next
+    for (lv in lev[-1]) {
+      col <- term_index[[paste(a, lv, sep = "\r")]]
+      est <- beta[col]; serr <- se[col]
+      out_rows[[length(out_rows) + 1L]] <- tibble::tibble(
+        attribute = a, level = lv, estimate = est, std_error = serr,
+        ci_lo = est - crit * serr, ci_hi = est + crit * serr)
+    }
+  }
+  out <- do.call(rbind, out_rows)
+  attr(out, "n_profiles") <- nrow(long)
+  attr(out, "n_respondents") <- length(unique(r_all$persona_id))
+  attr(out, "n_dropped_na") <- n_dropped_na
+  out
 }
 
 #' The design-stage report
@@ -178,14 +426,15 @@ amce <- function(responses) {
 #' Panel composition, response and parse rates, the bias audit, and --
 #' first, in capitals, when absent -- the calibration status.
 #'
-#' @param responses An [administer()] result.
+#' @param responses A [panel_administer()] result.
+#' @param ... Ignored; reserved for generic dispatch.
 #' @return Character lines of class `panel_report`, with a print method.
 #' @export
-panel_report <- function(responses) {
+panel_report <- function(responses, ...) {
   stopifnot(inherits(responses, "panel_responses"))
   panel <- attr(responses, "panel")
   cal <- attr(responses, "calibration")
-  ba <- bias_audit(responses)
+  ba <- panel_bias_audit(responses)
   lines <- c(
     if (is.null(cal))
       "UNCALIBRATED. No benchmark comparison was run; readings below describe the model under these personas, not any human population."
@@ -208,6 +457,11 @@ panel_report <- function(responses) {
     "STANCE. Silicon panels are design-stage instruments; estimation of human quantities requires calibration to carry that reading."
   )
   structure(lines, class = "panel_report")
+}
+
+#' @exportS3Method LLMR::report
+report.panel_responses <- function(x, ...) {
+  panel_report(x, ...)
 }
 
 #' @export

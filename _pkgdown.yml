@@ -9,24 +9,29 @@ reference:
 - title: Panels
   contents:
   - panel_from_margins
+  - panel_from_data
 - title: Instruments and stimuli
   contents:
   - panel_items
-  - instrument
+  - panel_instrument
   - vignette_design
   - conjoint_design
+  - conjoint_instrument
 - title: Administration
   contents:
-  - administer
+  - panel_administer
 - title: Calibration and audits
   contents:
-  - calibrate
-  - bias_audit
+  - panel_calibrate
+  - panel_bias_audit
   - panel_report
-- title: Arriving in 0.2
+- title: Design-stage estimation
   contents:
-  - silicon_power
   - amce
+  - panel_power
+- title: Generic surface
+  contents:
+  - panel_generics
 - title: Package
   contents:
   - LLMRpanel-package

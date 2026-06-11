@@ -17,7 +17,7 @@ A tibble: \code{vignette_id}, one column per factor, \code{text}.
 \description{
 Expands \code{factors} into the full factorial and renders the vignette text
 per cell with literal \code{{factor}} substitution. Each rendered vignette is
-typically paired with one or two items via \code{\link[=instrument]{instrument()}}.
+typically paired with one or two items via \code{\link[=panel_instrument]{panel_instrument()}}.
 }
 \examples{
 vignette_design(

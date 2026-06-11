@@ -23,11 +23,11 @@ attribute, and \code{persona} (the rendered text).
 \description{
 Samples \code{n} personas with attributes drawn independently from the
 supplied margins, and renders each persona's text from a template.
-Independence across attributes is a deliberate 0.1 simplification --
-attributes are sampled marginally, not jointly; joint draws from
-microdata (and raking to known cross-tabs) arrive in 0.2. For instrument
+Independence across attributes is a deliberate simplification: the
+attributes are sampled marginally, not jointly. For instrument
 pretesting this rarely matters; for anything resembling estimation it
-does, and \code{\link[=calibrate]{calibrate()}} will tell you.
+does, and \code{\link[=panel_calibrate]{panel_calibrate()}} will tell you. When you hold microdata and want
+the joint distribution preserved, use \code{\link[=panel_from_data]{panel_from_data()}}.
 }
 \details{
 For a reproducible panel, set a seed before calling (the function never
@@ -36,10 +36,10 @@ sets one itself).
 \examples{
 set.seed(110)
 panel <- panel_from_margins(
-  list(age   = c("18-34" = .3, "35-64" = .45, "65+" = .25),
-       party = c(left = .45, right = .45, independent = .10)),
+  list(cohort = c(young = .3, middle = .45, older = .25),
+       party  = c(left = .45, right = .45, independent = .10)),
   n = 50,
-  persona_template = "A {age}-year-old voter who leans {party}."
+  persona_template = "A {cohort} voter who leans {party}."
 )
 panel
 }

@@ -1,185 +1,256 @@
 ---
-title: "LLMRpanel by design: silicon samples that know their place"
+title: "LLMRpanel by design: calibrated silicon samples"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{LLMRpanel by design: silicon samples that know their place}
+  %\VignetteIndexEntry{LLMRpanel by design: calibrated silicon samples}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
 ```{r, include = FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+# Set RUN_LIVE <- TRUE once, with API keys available, to execute every chunk
+# against real models and confirm the vignette's outputs are honest. It is
+# committed as FALSE so routine package and site builds do not require keys
+# or spend; the prose describes what the live run shows.
+RUN_LIVE <- FALSE
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = RUN_LIVE)
 ```
 
-This vignette is the package's design document. The literature on silicon
-sampling is genuinely split: persona-conditioned models reproduce some
-human marginals strikingly well and fail others silently -- over-uniform
-variances, sanitized refusals, order effects, sensitivity to persona
-phrasing. Both findings are real. The design conclusion is not "never
-simulate" but "never simulate *uncalibrated*" -- and the package encodes
-that conclusion in its objects rather than in its documentation: every
-result prints an **UNCALIBRATED** banner until a benchmark comparison
-fills the calibration slot, and partial benchmarks earn only a
-**PARTIALLY CALIBRATED** one.
+This vignette is the package design document. The literature on silicon
+sampling is genuinely split. Persona conditioned models reproduce some
+human marginals strikingly well and fail others silently through over
+uniform variances, sanitized refusals, order effects, and sensitivity to
+persona phrasing. Both findings are real. The design conclusion is not
+"never simulate" but "never simulate uncalibrated", and the package encodes
+that conclusion in its objects rather than in a warning paragraph. Every
+result prints an **UNCALIBRATED** banner until a benchmark comparison fills
+the calibration slot, and partial benchmarks earn only a **PARTIALLY
+CALIBRATED** one.
 
-Everything below **runs offline**: a simulated respondent (a deterministic
-function on the `.runner` seam) stands in for the model, which also makes
-the document a worked example of testing panel pipelines without spending
-a token. The final section swaps in a real open-weight model.
-
-```{r setup}
-library(LLMRpanel)
-set.seed(110)   # panels and order randomization draw locally
-
-simulated_respondent <- function(experiments, ...) {
-  experiments$response_text <- vapply(seq_len(nrow(experiments)), function(i) {
-    sys <- experiments$messages[[i]][["system"]]
-    usr <- experiments$messages[[i]][["user"]]
-    right <- grepl("leans right", sys)
-    if (grepl("work week", usr))   { if (right) "agree" else "disagree" }
-    else if (grepl("fund first", usr)) { if (right) "road repair" else "public transit" }
-    else "Because it fits how I live."
-  }, character(1))
-  experiments
-}
-```
+The chunks below are live model calls when `RUN_LIVE` is set to `TRUE`.
+They use real `LLMR::llm_config()` objects on the LLMR provider layer and
+call execution functions without a runner argument. With the switch left
+as `FALSE`, the document builds without keys or model spend, while the
+prose explains what the live run is meant to show.
 
 ## What silicon panels are for
 
-The high-payoff uses do not require believing the model is a population:
+1. **Instrument pretesting.** Confusing items, broken branching, and
+attribute levels nobody distinguishes can be caught before any human
+respondent's time is spent.
 
-- **Instrument pretesting.** Confusing items, broken branching, attribute
-  levels nobody distinguishes -- caught overnight, for the price of
-  electricity, before a single human respondent's time is spent.
-- **Design piloting.** Run 40 variants of a conjoint or vignette design;
-  estimate design effects for the power analysis; file the silicon pilot
-  in the preregistration.
-- **Model measurement.** How a model answers attitude items under varied
-  personas is a finding *about the model* -- bias audits as research.
+2. **Design piloting.** A conjoint or vignette design can be exercised
+across many personas so the analyst can inspect response dispersion and
+price the later human study.
 
-Estimating human quantities is the use that requires earning, and
-`calibrate()` is where the earning is measured, item by item, deviation
+3. **Model measurement.** How a model answers attitude items under varied
+personas is a finding about the model. Bias audits are research objects,
+not merely quality checks.
+
+Estimating human quantities is the use that requires earning.
+`panel_calibrate()` is where the earning is measured, item by item and deviation
 by deviation.
 
 ## A walk through the machinery
 
+```{r setup}
+library(LLMRpanel)
+```
+
+`panel_from_margins()` draws a silicon panel from marginal targets. The
+seed is set here because the panel draw is local random generation that
+the vignette should reproduce.
+
 ```{r panel}
-panel <- panel_from_margins(
-  list(age   = c("18-34" = .30, "35-64" = .45, "65+" = .25),
-       party = c(left = .45, right = .45, independent = .10)),
-  n = 40,
-  persona_template = "A {age}-year-old voter who leans {party}."
+set.seed(110)
+panel = panel_from_margins(
+  list(
+    age = c("18 to 34" = .30, "35 to 64" = .45, "65 plus" = .25),
+    party = c(left = .45, right = .45, independent = .10)
+  ),
+  n = 12,
+  persona_template = "A {age} year old voter who leans {party}."
 )
 panel
 
-instr <- instrument(list(
-  item_likert("wk4", "A four-day work week would benefit society."),
-  item_choice("fund", "Which should the city fund first?",
-              c("public transit", "road repair")),
+instr = panel_instrument(list(
+  item_likert("wk4", "A four day work week would benefit society."),
+  item_choice(
+    "fund",
+    "Which should the city fund first?",
+    c("public transit", "road repair")
+  ),
   item_open("why", "In one sentence, why?")
 ))
 instr
 ```
 
-Administration randomizes item and option order per respondent and
-records what each one saw -- with LLMs, option order is a treatment:
+Margins are useful when targets are published as tables. When microdata is
+available, `panel_from_data()` is the joint distribution counterpart. It
+draws personas from observed rows and therefore preserves relationships
+among attributes rather than sampling each margin independently.
+
+Administration randomizes item and option order per respondent and records
+what each one saw. With language models, option order is a treatment. The
+first configuration is the main pilot model. The second family is useful
+when the question is whether a pattern is tied to one model family or is
+visible across families.
 
 ```{r administer}
-cfg  <- LLMR::llm_config("groq", "openai/gpt-oss-20b", temperature = 0.8)
-resp <- administer(panel, instr, cfg, .runner = simulated_respondent)
-resp          # prints the UNCALIBRATED banner, by design
-bias_audit(resp)
+cfg = LLMR::llm_config("groq", "openai/gpt-oss-20b", temperature = 0.8)
+cfg_qwen = LLMR::llm_config("groq", "qwen/qwen3-32b", temperature = 0.8)
+
+resp = panel_administer(panel, instr, cfg)
+resp
+panel_bias_audit(resp)
+LLMR::diagnostics(resp)
+
+resp_qwen = panel_administer(panel, instr, cfg_qwen)
+panel_bias_audit(resp_qwen)
 ```
+
+The first printed response object reports **UNCALIBRATED**. That is the
+intended default. The comparison model is not a human benchmark; it is a
+model measurement contrast.
 
 ## Calibration is comparison, not adjustment
 
-Deviations are reported, never massaged away; the comparison is
-restricted to items the benchmark actually covers; and coverage is part
-of the verdict. A benchmark touching one of two closed items earns
-**PARTIALLY CALIBRATED**, not a clean bill:
+Deviations are reported, not massaged away. The comparison is restricted
+to items the benchmark actually covers, and coverage is part of the
+verdict. The following toy benchmark is inline so the example is complete.
+It demonstrates the mechanics of calibration but is not evidence about a
+real population.
 
-```{r calibrate-partial}
-bench_fund <- data.frame(
-  item_id  = "fund",
+```{r calibrate_partial}
+bench_fund = data.frame(
+  item_id = rep("fund", 2),
   response = c("public transit", "road repair"),
-  share    = c(0.41, 0.59)          # from your human benchmark source
+  share = c(0.41, 0.59)
 )
-resp <- calibrate(resp, bench_fund, benchmark_name = "city survey 2025")
-resp
+
+resp_partial = panel_calibrate(
+  resp,
+  bench_fund,
+  benchmark_name = "toy city survey"
+)
+resp_partial
 ```
 
-Cover everything closed and the banner retires, the measured deviation
-standing in its place:
+Because this benchmark touches only one of the closed items, the object
+earns only **PARTIALLY CALIBRATED**. Covering every closed item lets the
+object report the measured deviation for this toy benchmark in place of
+the uncalibrated banner.
 
-```{r calibrate-full}
-bench_all <- rbind(bench_fund, data.frame(
-  item_id  = "wk4",
-  response = c("strongly disagree", "disagree", "neutral",
-               "agree", "strongly agree"),
-  share    = c(.05, .20, .25, .35, .15)))
-resp <- calibrate(resp, bench_all, benchmark_name = "city survey 2025")
+```{r calibrate_full}
+bench_all = rbind(
+  bench_fund,
+  data.frame(
+    item_id = rep("wk4", 5),
+    response = c(
+      "strongly disagree",
+      "disagree",
+      "neutral",
+      "agree",
+      "strongly agree"
+    ),
+    share = c(.05, .20, .25, .35, .15)
+  )
+)
+
+resp = panel_calibrate(
+  resp,
+  bench_all,
+  benchmark_name = "toy city survey"
+)
 resp
 panel_report(resp)
+LLMR::report(resp)
+attr(resp, "calibration")$nonresponse
 ```
 
-Nonresponse is recorded per item alongside
-(`attr(resp, "calibration")$nonresponse`): shares computed only over
-valid answers flatter an instrument the model often refuses.
+Nonresponse is recorded per item. Shares computed only over valid answers
+can flatter an instrument the model often refuses, so the calibration
+object keeps the missingness visible.
 
 ## Factorial stimuli
+
+Factorial designs are local design objects. A vignette design expands a
+template over attribute levels.
 
 ```{r designs}
 vignette_design(
   "A {age} applicant with {experience} of experience applies.",
-  list(age = c("younger", "older"),
-       experience = c("5 years", "20 years"))
-)
-
-conjoint_design(
-  list(price = c("low", "high"), origin = c("domestic", "imported")),
-  n_tasks = 3
+  list(
+    age = c("younger", "older"),
+    experience = c("5 years", "20 years")
+  )
 )
 ```
 
-Profiles within a conjoint task are guaranteed distinct -- a forced choice
-between clones measures nothing -- with a warning when the attribute space
-is too small to allow it. Pair either design with an `item_choice()` and
-administer; AMCE estimation (`amce()`, delegating to the established
-conjoint stack) arrives in 0.2.
+A conjoint design draws randomized tasks. The seed is set here because the
+design draw is local random generation.
+
+```{r conjoint_design}
+set.seed(110)
+design = conjoint_design(
+  list(
+    price = c("low", "high"),
+    origin = c("domestic", "imported")
+  ),
+  n_tasks = 4
+)
+design
+```
+
+Profiles within a conjoint task are guaranteed distinct, with a warning
+when the attribute space is too small to allow it. `conjoint_instrument()`
+renders the design into one forced choice item per task. After live
+administration, `amce()` estimates average marginal component effects with
+respondent clustered standard errors.
+
+```{r amce}
+cj_instr = conjoint_instrument(design, "Which product would you buy?")
+cj = panel_administer(panel, cj_instr, cfg)
+amce(cj)
+```
+
+The AMCE table is a diagnostic of how this configured model responded to
+the randomized profiles. A price effect appears only if the live choices
+express such a preference; an origin effect appears only if the model
+distinguishes that attribute.
+
+## Pricing the human study
+
+A silicon pilot prices the design before any human is recruited.
+`panel_power()` reads dispersion from the pilot, such as the standard
+deviation of a Likert score or the modal share of a choice, and returns
+the per arm sample size a human study would need to detect a specified
+effect. The number inherits the pilot's calibration status. With the toy
+benchmark above, it is a design calculation rather than external
+validation.
+
+```{r power}
+panel_power(resp, effect = c(wk4 = 0.4, fund = 0.15))
+```
 
 ## Why open weights matter here specifically
 
-Panels are call-hungry: personas x items x orders x replicates. Three
-things change at open-weight prices. Volume stops being the constraint --
-a 2,000-persona pretest overnight costs electricity. A logprob
-administration path (0.2) will read the full response-option distribution
-from one forward pass -- reliably available only where logprobs are
-exposed, which in practice means open-weight backends. And a panel pinned
-to an open checkpoint is a *permanent instrument*: the same personas can
-answer the same items in ten years, which no deprecated API model can
-promise.
-
-## Live, when you are ready
-
-Drop `.runner` and the same administration runs on the model in `cfg`.
-With `GROQ_API_KEY` set and `LLMRPANEL_RUN_VIGNETTES=true`:
-
-```{r live, eval = identical(tolower(Sys.getenv("LLMRPANEL_RUN_VIGNETTES", "false")), "true")}
-administer(panel, instr, cfg)
-```
-
-## Arriving in 0.2 (contracts already exported)
-
-- `silicon_power()` -- power analysis for the *human* study, with
-  silicon-informed priors; the clearest payoff per dollar.
-- `amce()` -- conjoint estimation via cregg/marginaleffects.
-- A logprob administration path; persona-paraphrase sensitivity arms;
-  joint persona draws from microdata, and raking to known cross-tabs.
+Panels are call hungry: personas by items by orders by replicates. Open
+weight prices change what can be piloted. Volume stops being the primary
+constraint, and a panel pinned to an open checkpoint becomes a durable
+instrument. The same personas can answer the same items later, which no
+deprecated API model can promise.
 
 ## Relations
 
-FocusGroup (same author) owns qualitative group simulation; LLMRpanel is
-strictly quantitative. Persona phrasing and option order are exactly the
-perturbations `LLMRvalid` audits; administrations land in the audit log
-and therefore in `LLMRtrail` archives; open-ended answers get coded with
-`LLMRcoder` -- under a codebook, against gold, like any other text.
+[LLMRpanel](https://asanaei.github.io/LLMRpanel/) is the quantitative
+member of the family. [LLMR](https://asanaei.github.io/LLMR/) supplies the
+provider abstraction used by the live calls above. Persona phrasing and
+option order are the same treatments
+[LLMRvalid](https://asanaei.github.io/LLMRvalid/) audits. Administrations
+can land in an [LLMRarchive](https://asanaei.github.io/LLMRarchive/) archive.
+Open answers can be coded in
+[LLMRcoder](https://asanaei.github.io/LLMRcoder/) under a codebook and
+against gold text. [LLMRAgent](https://asanaei.github.io/LLMRAgent/)
+addresses agent style experiments, while this package keeps attention on
+survey and experiment samples.

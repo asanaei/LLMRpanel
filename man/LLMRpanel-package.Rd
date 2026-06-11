@@ -14,14 +14,21 @@ the objects:
 \item \code{\link[=panel_from_margins]{panel_from_margins()}}: persona panels drawn from population margins
 you supply (ACS/ANES-style), with the persona text rendered from a
 template.
-\item \code{\link[=instrument]{instrument()}} with \code{\link[=item_likert]{item_likert()}}, \code{\link[=item_choice]{item_choice()}}, \code{\link[=item_open]{item_open()}};
+\item \code{\link[=panel_instrument]{panel_instrument()}} with \code{\link[=item_likert]{item_likert()}}, \code{\link[=item_choice]{item_choice()}}, \code{\link[=item_open]{item_open()}};
 \code{\link[=vignette_design]{vignette_design()}} and \code{\link[=conjoint_design]{conjoint_design()}} for factorial stimuli.
-\item \code{\link[=administer]{administer()}}: every persona answers every item, with item- and
+\item \code{\link[=panel_from_data]{panel_from_data()}}: the joint-distribution counterpart, drawing
+personas from microdata rows.
+\item \code{\link[=panel_administer]{panel_administer()}}: every persona answers every item, with item- and
 option-order randomization recorded per response.
-\item \code{\link[=calibrate]{calibrate()}}: compare silicon marginals to human benchmarks; until it
+\item \code{\link[=panel_calibrate]{panel_calibrate()}}: compare silicon marginals to human benchmarks; until it
 runs, every print method shows an \strong{UNCALIBRATED} banner.
-\item \code{\link[=bias_audit]{bias_audit()}}: option-order effects and refusal/parse rates -- the
+\item \code{\link[=panel_bias_audit]{panel_bias_audit()}}: option-order effects and refusal/parse rates -- the
 response-style artifacts silicon respondents are known for.
+\item \code{\link[=conjoint_instrument]{conjoint_instrument()}} and \code{\link[=amce]{amce()}}: forced-choice conjoint items and
+their average marginal component effects, with respondent-clustered
+standard errors.
+\item \code{\link[=panel_power]{panel_power()}}: analytic two-arm power for the planned human study,
+priced from the silicon pilot.
 \item \code{\link[=panel_report]{panel_report()}}: the design-stage report, banner included.
 }
 

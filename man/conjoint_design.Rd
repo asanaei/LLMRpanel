@@ -14,17 +14,23 @@ conjoint_design(attributes, n_tasks = 5L, profiles_per_task = 2L)
 \item{profiles_per_task}{Profiles shown per task (default 2).}
 }
 \value{
-A tibble: \code{task}, \code{profile}, one column per attribute, ready for
-\code{\link[=administer]{administer()}} after pairing with an \code{\link[=item_choice]{item_choice()}} asking which
-profile the respondent prefers. Profiles within a task are guaranteed
+A tibble: \code{task}, \code{profile}, one column per attribute, carrying
+the original attribute list in \code{attr(x, "attributes")}. Render it into
+forced-choice items with \code{\link[=conjoint_instrument]{conjoint_instrument()}} and estimate with
+\code{\link[=amce]{amce()}} after administration. Profiles within a task are guaranteed
 distinct (a forced choice between identical profiles measures
 nothing); when the attribute space is too small to allow distinct
-profiles, duplicates remain and a warning says so. Estimation
-(\code{amce()}) arrives in 0.2.
+profiles, duplicates remain and a warning says so.
 }
 \description{
 Random profile pairs (or k-tuples) over the supplied attributes, the
 design for a forced-choice conjoint. Profiles are sampled uniformly and
 independently per attribute; set a seed beforehand for a reproducible
 design (the function never sets one).
+}
+\examples{
+set.seed(110)
+conjoint_design(
+  list(price = c("$10", "$20"), speed = c("slow", "fast")),
+  n_tasks = 4)
 }

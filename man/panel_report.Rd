@@ -4,10 +4,12 @@
 \alias{panel_report}
 \title{The design-stage report}
 \usage{
-panel_report(responses)
+panel_report(responses, ...)
 }
 \arguments{
-\item{responses}{An \code{\link[=administer]{administer()}} result.}
+\item{responses}{A \code{\link[=panel_administer]{panel_administer()}} result.}
+
+\item{...}{Ignored; reserved for generic dispatch.}
 }
 \value{
 Character lines of class \code{panel_report}, with a print method.
