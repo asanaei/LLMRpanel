@@ -29,6 +29,9 @@ reference:
   contents:
   - amce
   - panel_power
+- title: Graphical interface
+  contents:
+  - run_panel_studio
 - title: Generic surface
   contents:
   - panel_generics
