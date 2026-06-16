@@ -47,9 +47,10 @@ price the later human study.
 personas is a finding about the model. Bias audits are research objects,
 not merely quality checks.
 
-Estimating human quantities is the use that requires earning.
-`panel_calibrate()` is where the earning is measured, item by item and deviation
-by deviation.
+Estimating human quantities requires calibration against a human benchmark
+before any human-population interpretation is warranted. `panel_calibrate()`
+performs that comparison item by item; the uncalibrated banner stays in place
+until the calibration is supplied.
 
 ## A walk through the machinery
 
@@ -235,22 +236,21 @@ panel_power(resp, effect = c(wk4 = 0.4, fund = 0.15))
 
 ## Why open weights matter here specifically
 
-Panels are call hungry: personas by items by orders by replicates. Open
-weight prices change what can be piloted. Volume stops being the primary
-constraint, and a panel pinned to an open checkpoint becomes a durable
-instrument. The same personas can answer the same items later, which no
-deprecated API model can promise.
+A panel study makes one model call per persona and item, so the number of
+calls scales with panel size and instrument length, multiplied again by any
+order randomization and replicates. Open weight prices change what can be
+piloted. Volume stops being the primary constraint, and a panel pinned to an
+open checkpoint becomes a durable instrument. The same personas can answer the
+same items later, which no deprecated API model can promise.
 
 ## Relations
 
 [LLMRpanel](https://asanaei.github.io/LLMRpanel/) is the quantitative
 member of the family. [LLMR](https://asanaei.github.io/LLMR/) supplies the
-provider abstraction used by the live calls above. Persona phrasing and
-option order are the same treatments
-[LLMRvalid](https://asanaei.github.io/LLMRvalid/) audits. Administrations
-can land in an [LLMRarchive](https://asanaei.github.io/LLMRarchive/) archive.
-Open answers can be coded in
-[LLMRcoder](https://asanaei.github.io/LLMRcoder/) under a codebook and
-against gold text. [LLMRAgent](https://asanaei.github.io/LLMRAgent/)
-addresses agent style experiments, while this package keeps attention on
-survey and experiment samples.
+provider abstraction used by the live calls above.
+[LLMRcontent](https://asanaei.github.io/LLMRcontent/) is the companion that
+audits persona phrasing and option order as treatments, codes open answers
+under a codebook and against gold text, and archives administrations.
+[LLMRAgent](https://asanaei.github.io/LLMRAgent/) addresses agent style
+experiments, while this package keeps attention on survey and experiment
+samples.

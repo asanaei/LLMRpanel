@@ -4,7 +4,14 @@
 \alias{panel_power}
 \title{Two-arm power for the planned human study, priced from the silicon pilot}
 \usage{
-panel_power(responses, effect, items = NULL, alpha = 0.05, power = 0.8)
+panel_power(
+  responses,
+  effect,
+  items = NULL,
+  focal = NULL,
+  alpha = 0.05,
+  power = 0.8
+)
 }
 \arguments{
 \item{responses}{A \code{\link[=panel_administer]{panel_administer()}} result (the silicon pilot).}
@@ -15,13 +22,21 @@ items. A scalar (recycled) or a named vector keyed by \code{item_id}.}
 
 \item{items}{Optional character vector restricting which items to price.}
 
+\item{focal}{Optional named character vector keyed by \code{item_id}, giving the
+focal response level whose proportion the power calculation should target.
+For a binary choice item the modal option is a well-defined estimand and
+\code{focal} is optional; for a choice item with three or more options the
+"modal share" is not a meaningful single proportion, so name the focal
+response here. Without a \code{focal} for a 3+-option item, the modal share is
+used and a warning is issued.}
+
 \item{alpha}{Two-sided test size.}
 
 \item{power}{Target power.}
 }
 \value{
-A tibble: \code{item_id}, \code{type}, \code{dispersion} (sd for Likert, modal
-share for choice), \code{effect}, \code{n_per_arm}.
+A tibble: \code{item_id}, \code{type}, \code{dispersion} (sd for Likert, the focal
+or modal share for choice), \code{effect}, \code{n_per_arm}.
 }
 \description{
 Analytic two-arm sample sizes with dispersion priors taken from the

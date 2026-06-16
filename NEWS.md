@@ -1,3 +1,13 @@
+# LLMRpanel 0.4.0
+
+* Added an optional Shiny GUI, launched with `run_panel_studio()`: build a
+  persona panel from margins, administer a choice item, calibrate against a
+  benchmark, and read the report with its calibration banner. The GUI's
+  dependencies (`shiny`, `bslib`, `DT`, and the shared `LLMR.shiny` substrate)
+  are Suggests; non-GUI users install none of them, and the launcher guards on
+  all four. Keys are read from environment variables only; a demo mode runs
+  offline.
+
 # LLMRpanel 0.3.0
 
 API harmonization (pre-CRAN, no deprecation shims). Generic verbs now carry

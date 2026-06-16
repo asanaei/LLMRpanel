@@ -3,7 +3,7 @@ name: llmrpanel
 description: Calibrated silicon samples for survey and experiment design in R - persona panels from population margins, Likert/choice/vignette/conjoint instruments with recorded order randomization, coverage-aware calibration against human benchmarks, bias audits.
 ---
 
-# LLMRpanel — usage capsule for AI assistants
+# LLMRpanel -- usage capsule for AI assistants
 
 This file is the compact manual: enough to use the package correctly
 without reading every help page. `vignette("design", package =
@@ -17,8 +17,8 @@ remotes::install_github("asanaei/LLMRpanel")   # depends on LLMR (>= 0.8.4)
 
 ## The stance (encoded in the objects, not just prose)
 
-Silicon panels are design-stage instruments — pretesting, piloting, power
-planning — and instruments for measuring model behavior. Results print an
+Silicon panels are design-stage instruments -- pretesting, piloting, power
+planning -- and instruments for measuring model behavior. Results print an
 **UNCALIBRATED** banner until `panel_calibrate()` compares them to a human
 benchmark; partial benchmarks earn only **PARTIALLY CALIBRATED (k/m)**.
 Do not present uncalibrated silicon marginals as population estimates.
@@ -42,7 +42,7 @@ panel_administer(panel, instr, config, .runner = NULL, ...)
 panel_calibrate(responses, benchmark, benchmark_name = "benchmark")
 panel_bias_audit(responses)
 amce(responses)                              # AMCEs, persona-clustered SEs
-panel_power(responses, effect, items = NULL, alpha = 0.05, power = 0.80)
+panel_power(responses, effect, items = NULL, focal = NULL, alpha = 0.05, power = 0.80)
 panel_report(responses)
 
 LLMR::diagnostics(responses)
@@ -89,10 +89,13 @@ amce(cj)
 panel_power(resp, effect = c(fund = 0.15))
 ```
 
-## Offline seam
+## Offline runner
 
-`.runner` as elsewhere in the ecosystem; the persona is in
-`messages[["system"]]`, the item and options in `messages[["user"]]`.
+`panel_administer()` takes a `.runner` argument: a `function(experiments, ...)`
+that returns the experiments with a `response_text` column. Pass one to run
+offline or deterministically in tests; the default is a live `LLMR::call_llm_par()`
+call. In the experiments frame the persona is in `messages[["system"]]` and the
+item and options in `messages[["user"]]`.
 
 ## Rules
 
@@ -121,10 +124,10 @@ panel_power(resp, effect = c(fund = 0.15))
 
 ## Error meanings
 
-- "covers none of the administered items" → benchmark `item_id`s do not
+- "covers none of the administered items" -> benchmark `item_id`s do not
   match the instrument's ids.
-- "too small for distinct profiles" (warning) → enlarge conjoint attribute
+- "too small for distinct profiles" (warning) -> enlarge conjoint attribute
   levels or accept duplicate profiles knowingly.
-- "must be a *named* probability vector" → name every margin level.
-- "needs an administration of a conjoint_instrument()" → `amce()` was given
+- "must be a *named* probability vector" -> name every margin level.
+- "needs an administration of a conjoint_instrument()" -> `amce()` was given
   a plain instrument; build it with `conjoint_instrument(design)`.

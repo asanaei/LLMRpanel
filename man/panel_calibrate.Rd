@@ -25,13 +25,14 @@ to 1; a deviation beyond rounding draws a warning.}
 \description{
 Compares the panel's response marginals, item by item, to human
 benchmark marginals you supply (from ANES, GSS, Pew, your own fielded
-study). Calibration here means \emph{measured against}, never \emph{adjusted until
-pretty}: deviations are reported as found, the comparison is restricted
-to items the benchmark actually covers, and the print banner reflects
-coverage -- a benchmark touching one of five items yields \strong{PARTIALLY
-CALIBRATED (1/5)}, not a clean bill. Nonresponse (parse failures,
-refusals) is recorded per item alongside, since shares computed only
-over valid responses flatter an instrument the model often refuses.
+study). Calibration here reports deviation from the benchmark without
+adjusting the underlying estimates: deviations are reported as found, and
+the comparison is restricted to items the benchmark actually covers.
+Coverage is partial when only some items have a benchmark, and the print
+banner reflects it -- a benchmark touching one of five items yields
+\strong{PARTIALLY CALIBRATED (1/5)}. Nonresponse (parse failures, refusals) is
+recorded per item alongside, since shares computed only over valid
+responses flatter an instrument the model often refuses.
 }
 \examples{
 \dontrun{

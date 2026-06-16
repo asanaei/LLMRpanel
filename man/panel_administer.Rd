@@ -13,8 +13,9 @@ panel_administer(panel, instr, config, .runner = NULL, ...)
 
 \item{config}{An \code{LLMR::llm_config()} for a generative model.}
 
-\item{.runner}{Internal seam for tests: \verb{function(experiments, ...)}
-returning the experiments with a \code{response_text} column. Default
+\item{.runner}{Optional runner for offline or deterministic testing: a
+\verb{function(experiments, ...)} that returns the experiments with a
+\code{response_text} column. Defaults to a live LLM call via
 \code{LLMR::call_llm_par()}.}
 
 \item{...}{Passed to the runner (e.g. \code{tries}, \code{progress}).}

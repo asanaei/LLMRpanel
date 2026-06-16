@@ -7,13 +7,14 @@
 #'
 #' Compares the panel's response marginals, item by item, to human
 #' benchmark marginals you supply (from ANES, GSS, Pew, your own fielded
-#' study). Calibration here means *measured against*, never *adjusted until
-#' pretty*: deviations are reported as found, the comparison is restricted
-#' to items the benchmark actually covers, and the print banner reflects
-#' coverage -- a benchmark touching one of five items yields **PARTIALLY
-#' CALIBRATED (1/5)**, not a clean bill. Nonresponse (parse failures,
-#' refusals) is recorded per item alongside, since shares computed only
-#' over valid responses flatter an instrument the model often refuses.
+#' study). Calibration here reports deviation from the benchmark without
+#' adjusting the underlying estimates: deviations are reported as found, and
+#' the comparison is restricted to items the benchmark actually covers.
+#' Coverage is partial when only some items have a benchmark, and the print
+#' banner reflects it -- a benchmark touching one of five items yields
+#' **PARTIALLY CALIBRATED (1/5)**. Nonresponse (parse failures, refusals) is
+#' recorded per item alongside, since shares computed only over valid
+#' responses flatter an instrument the model often refuses.
 #'
 #' @param responses A [panel_administer()] result.
 #' @param benchmark A data frame with columns `item_id`, `response`, and
@@ -65,13 +66,23 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
 
   closed <- closed_all[!is.na(closed_all$response) &
                          closed_all$item_id %in% items_covered, ]
-  sil <- stats::aggregate(persona_id ~ item_id + response, data = closed,
-                          FUN = length)
-  names(sil)[names(sil) == "persona_id"] <- "n"
-  totals <- stats::aggregate(n ~ item_id, data = sil, FUN = sum)
-  names(totals)[names(totals) == "n"] <- "n_total"
-  sil <- merge(sil, totals, by = "item_id")
-  sil$share_silicon <- sil$n / sil$n_total
+  if (nrow(closed)) {
+    sil <- stats::aggregate(persona_id ~ item_id + response, data = closed,
+                            FUN = length)
+    names(sil)[names(sil) == "persona_id"] <- "n"
+    totals <- stats::aggregate(n ~ item_id, data = sil, FUN = sum)
+    names(totals)[names(totals) == "n"] <- "n_total"
+    sil <- merge(sil, totals, by = "item_id")
+    sil$share_silicon <- sil$n / sil$n_total
+  } else {
+    # Every covered closed item was all parse failures: there are no valid
+    # silicon responses to tabulate. Keep the calibration artifact rather than
+    # erroring -- the benchmark merge below fills share_silicon = 0 and the
+    # nonresponse table records the full nonresponse.
+    sil <- data.frame(item_id = character(0), response = character(0),
+                      n = integer(0), n_total = integer(0),
+                      share_silicon = numeric(0), stringsAsFactors = FALSE)
+  }
 
   bench_cov <- benchmark[benchmark$item_id %in% items_covered, need]
   cmp <- merge(sil[, c("item_id", "response", "share_silicon")],
@@ -102,7 +113,7 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
 #' - **Option-order effects**: for items administered with randomized
 #'   option order, a chi-squared test of response against the order seen.
 #'   With LLMs this is routinely significant; a result that survives
-#'   [LLMRvalid](https://github.com/asanaei/LLMRvalid)-style scrutiny
+#'   [LLMRcontent](https://github.com/asanaei/LLMRcontent)-style scrutiny
 #'   should not depend on it.
 #' - **Non-response**: parse failures and refusals per item.
 #'
@@ -172,10 +183,17 @@ diagnostics.panel_responses <- function(x, ...) {
 #'   scale points for Likert items, a difference in proportions for choice
 #'   items. A scalar (recycled) or a named vector keyed by `item_id`.
 #' @param items Optional character vector restricting which items to price.
+#' @param focal Optional named character vector keyed by `item_id`, giving the
+#'   focal response level whose proportion the power calculation should target.
+#'   For a binary choice item the modal option is a well-defined estimand and
+#'   `focal` is optional; for a choice item with three or more options the
+#'   "modal share" is not a meaningful single proportion, so name the focal
+#'   response here. Without a `focal` for a 3+-option item, the modal share is
+#'   used and a warning is issued.
 #' @param alpha Two-sided test size.
 #' @param power Target power.
-#' @return A tibble: `item_id`, `type`, `dispersion` (sd for Likert, modal
-#'   share for choice), `effect`, `n_per_arm`.
+#' @return A tibble: `item_id`, `type`, `dispersion` (sd for Likert, the focal
+#'   or modal share for choice), `effect`, `n_per_arm`.
 #' @examples
 #' \dontrun{
 #' set.seed(110)
@@ -189,7 +207,7 @@ diagnostics.panel_responses <- function(x, ...) {
 #' panel_power(r, effect = c(lik = 0.5, pick = 0.2))
 #' }
 #' @export
-panel_power <- function(responses, effect, items = NULL,
+panel_power <- function(responses, effect, items = NULL, focal = NULL,
                         alpha = 0.05, power = 0.80) {
   stopifnot(inherits(responses, "panel_responses"))
   if (!is.numeric(effect) || !length(effect)) {
@@ -226,6 +244,18 @@ panel_power <- function(responses, effect, items = NULL,
     unname(effect[match(id, nms)])
   }
 
+  # The number of offered options decides whether "modal share" is a
+  # well-defined estimand. Read it from the instrument when present (a pilot may
+  # not exercise every option, so the observed table can undercount); fall back
+  # to the observed options only when no instrument is attached.
+  instr <- attr(responses, "instrument")
+  offered_n_opts <- function(id) {
+    if (is.null(instr) || is.null(instr$items)) return(NA_integer_)
+    it <- Find(function(x) identical(x$id, id), instr$items)
+    if (is.null(it) || is.null(it$options)) return(NA_integer_)
+    length(it$options)
+  }
+
   z <- stats::qnorm(1 - alpha / 2) + stats::qnorm(power)
   rows <- list()
   for (id in items) {
@@ -254,7 +284,26 @@ panel_power <- function(responses, effect, items = NULL,
         p <- NA_real_; n <- NA_integer_
       } else {
         tab <- table(valid)
-        p <- as.numeric(max(tab) / sum(tab))
+        # Prefer the instrument's offered-option count; the observed table can
+        # undercount when a pilot never elicits some option.
+        n_opts_offered <- offered_n_opts(id)
+        n_opts <- if (!is.na(n_opts_offered)) n_opts_offered else length(tab)
+        focal_id <- if (!is.null(focal) && id %in% names(focal)) focal[[id]] else NULL
+        if (!is.null(focal_id)) {
+          if (!focal_id %in% names(tab)) {
+            abort(sprintf("`focal` for item '%s' ('%s') is not an observed response.",
+                          id, focal_id))
+          }
+          p <- as.numeric(tab[[focal_id]] / sum(tab))
+        } else {
+          if (n_opts > 2L) {
+            cli::cli_warn(paste(
+              "Item {.val {id}} has {n_opts} options; the modal share is not a",
+              "well-defined estimand. Name a `focal` response for a meaningful",
+              "power calculation. Using the modal share for now."))
+          }
+          p <- as.numeric(max(tab) / sum(tab))
+        }
         if (p == 1) {
           cli::cli_warn("Item {.val {id}} shows no variance in the pilot; n_per_arm is NA.")
           n <- NA_integer_

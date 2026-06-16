@@ -15,8 +15,9 @@
 #' @param panel A [panel_from_margins()] or [panel_from_data()] result.
 #' @param instr A [panel_instrument()].
 #' @param config An `LLMR::llm_config()` for a generative model.
-#' @param .runner Internal seam for tests: `function(experiments, ...)`
-#'   returning the experiments with a `response_text` column. Default
+#' @param .runner Optional runner for offline or deterministic testing: a
+#'   `function(experiments, ...)` that returns the experiments with a
+#'   `response_text` column. Defaults to a live LLM call via
 #'   `LLMR::call_llm_par()`.
 #' @param ... Passed to the runner (e.g. `tries`, `progress`).
 #' @return A `panel_responses` tibble: `persona_id`, `item_id`, `type`,

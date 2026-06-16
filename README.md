@@ -38,14 +38,13 @@ calibration status first. The shared generic surface supports
 
 | Package | Use it when | Not for |
 |---|---|---|
-| [LLMRcoder](https://asanaei.github.io/LLMRcoder/) | Validated text measurement for quantitative inference | Accessible qualitative coding or text segmentation |
-| [LLMRvalid](https://asanaei.github.io/LLMRvalid/) | Robustness of a downstream estimand across measurement choices | Construct validity or pass/fail validation |
-| [LLMRarchive](https://asanaei.github.io/LLMRarchive/) | Reviewer-runnable replication archives from LLM audit logs | Measurement or estimation |
+| [LLMRcontent](https://asanaei.github.io/LLMRcontent/) | Validated text measurement: codebook coding with sealed gold-set validation, robustness audits, and replication archives | Accessible qualitative coding or text segmentation |
 | [LLMRpanel](https://asanaei.github.io/LLMRpanel/) | Calibrated silicon survey samples for design-stage work | Human-population estimates without calibration to a human benchmark |
 
-All four packages follow the same workflow contract: construct a first
-object, build or extend it, run it with a `.runner` seam, read
-`diagnostics()`, draft `report()`, and optionally archive with LLMRarchive.
+Both packages share one workflow: you build a first object, extend it, run it
+(supplying your own runner for offline tests), then read `diagnostics()` and
+draft `report()`. LLMRcontent can also seal the whole run into a replication
+archive.
 
 
 ```r
@@ -85,13 +84,11 @@ panel_power(resp, effect = 0.3)
 
 LLMRpanel is one of several packages for LLM-assisted research built on
 [LLMR](https://asanaei.github.io/LLMR/), the provider layer on CRAN. The
-family also includes [LLMRcoder](https://asanaei.github.io/LLMRcoder/),
-which organizes annotation around codebooks and sealed gold-set validation
-and is the natural coder for open-ended answers;
-[LLMRvalid](https://asanaei.github.io/LLMRvalid/), which audits the
-robustness of estimates computed from model labels;
-[LLMRarchive](https://asanaei.github.io/LLMRarchive/), which turns audit logs
-into verifiable replication archives; and
+family also includes [LLMRcontent](https://asanaei.github.io/LLMRcontent/),
+which organizes annotation around codebooks and sealed gold-set validation,
+audits the robustness of estimates computed from model labels, and turns audit
+logs into verifiable replication archives; [FocusGroup](https://asanaei.github.io/FocusGroup/),
+which simulates moderated group discussion; and
 [LLMRAgent](https://asanaei.github.io/LLMRAgent/), which provides agents
 and multi-agent designs. An overview of the family lives at the
 [ecosystem page](https://asanaei.github.io/LLMR-ecosystem/).

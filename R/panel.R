@@ -128,7 +128,18 @@ panel_from_data <- function(data, n, persona_template = NULL,
       .fill(persona_template, vals)
     }
   }, character(1))
-  margins <- lapply(data[columns], function(col) prop.table(table(col)))
+  # The cited margins are the source distribution the panel was drawn from.
+  # With sampling weights, that distribution is the WEIGHTED one; an unweighted
+  # prop.table(table(col)) would misreport the population the panel represents.
+  margins <- lapply(data[columns], function(col) {
+    if (is.null(prob)) {
+      prop.table(table(col))
+    } else {
+      w <- tapply(prob, col, sum)
+      w[is.na(w)] <- 0
+      prop.table(w)
+    }
+  })
   structure(out, class = c("silicon_panel", class(out)), margins = margins)
 }
 

@@ -214,3 +214,97 @@ test_that("the ecosystem hash convention is pinned (drift guard vs LLMR)", {
     LLMR::llm_hash(list(model = "gpt-oss-20b", temperature = 0)),
     "7c5ffbb0b308f20bf188a3efd962a2895f45ad202307234ee1965d86abc0606c")
 })
+
+test_that("calibration of an all-parse-failure item does not crash", {
+  # a runner whose choice answers never match the options -> all NA responses
+  unparseable <- function(experiments, ...) {
+    experiments$response_text <- "this is not one of the options"
+    experiments$success <- TRUE
+    experiments
+  }
+  r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(), .runner = unparseable)
+  bench <- data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
+                      share = c(.5, .5))
+  expect_no_error(rc <- panel_calibrate(r, bench, "all-NA study"))
+  cal <- attr(rc, "calibration")
+  # the calibration artifact still exists; the covered item is full nonresponse
+  expect_true(!is.null(cal))
+  nr <- cal$nonresponse
+  expect_equal(nr$nonresponse_rate[nr$item_id == "plan"], 1)
+  # the benchmark responses survive with silicon share 0
+  plan_rows <- cal$table[cal$table$item_id == "plan", ]
+  expect_true(all(plan_rows$share_silicon == 0))
+})
+
+test_that("panel_power requires a focal response for 3+ option choice items", {
+  # Build a panel_responses with a 3-option choice item answered unparseably-free
+  # so we control the response distribution directly.
+  multi_runner <- function(experiments, ...) {
+    # cycle answers across the three options so the modal share is ambiguous
+    opts <- c("red", "green", "blue")
+    experiments$response_text <- rep(opts, length.out = nrow(experiments))
+    experiments$success <- TRUE
+    experiments
+  }
+  instr3 <- panel_instrument(
+    item_choice("color", "Pick a color.", c("red", "green", "blue")),
+    randomize = character(0))
+  r <- panel_administer(fix_panel(12), instr3, fix_cfg(), .runner = multi_runner)
+
+  # without focal -> warns about the ambiguous modal estimand
+  expect_warning(panel_power(r, effect = 0.2), "well-defined estimand")
+  # with a valid focal -> no such warning, and prices on the focal share
+  expect_no_warning(out <- panel_power(r, effect = 0.2, focal = c(color = "red")))
+  expect_true(out$dispersion[out$item_id == "color"] > 0)
+  # an unobserved focal errors
+  expect_error(panel_power(r, effect = 0.2, focal = c(color = "purple")),
+               "not an observed response")
+})
+
+test_that("panel_power counts offered options, not just observed ones", {
+  # A 3-option item where the pilot only ever elicits two options. The observed
+  # table has length 2, but the instrument offers 3, so the modal share is still
+  # ill-defined and panel_power must warn (not take the silent binary path).
+  two_of_three <- function(experiments, ...) {
+    experiments$response_text <- rep(c("red", "green"), length.out = nrow(experiments))
+    experiments$success <- TRUE
+    experiments
+  }
+  instr3 <- panel_instrument(
+    item_choice("color", "Pick a color.", c("red", "green", "blue")),
+    randomize = character(0))
+  r <- panel_administer(fix_panel(12), instr3, fix_cfg(), .runner = two_of_three)
+  expect_warning(panel_power(r, effect = 0.2), "well-defined estimand")
+  # stripping the instrument removes the offered-count signal: it then falls
+  # back to the observed two options and prices them without the warning.
+  r2 <- r; attr(r2, "instrument") <- NULL
+  expect_no_warning(panel_power(r2, effect = 0.2))
+})
+
+test_that("panel_power still prices a binary choice without focal", {
+  bin_runner <- function(experiments, ...) {
+    experiments$response_text <- rep(c("A", "B"), length.out = nrow(experiments))
+    experiments$success <- TRUE
+    experiments
+  }
+  instr2 <- panel_instrument(
+    item_choice("ab", "A or B?", c("A", "B")), randomize = character(0))
+  r <- panel_administer(fix_panel(12), instr2, fix_cfg(), .runner = bin_runner)
+  expect_no_warning(out <- panel_power(r, effect = 0.2))
+  expect_true(is.finite(out$n_per_arm[out$item_id == "ab"]))
+})
+
+test_that("a weighted panel cites weighted source margins", {
+  set.seed(110)
+  # education is 2:1 college vs none by raw count, but weights flip it to 1:2
+  src <- data.frame(
+    education = c("college", "college", "none"),
+    weight = c(1, 1, 4),
+    stringsAsFactors = FALSE)
+  p <- panel_from_data(src, n = 50, columns = "education", weights = "weight",
+                       persona_template = "A {education} respondent.")
+  m <- attr(p, "margins")$education
+  # weighted: college = 2/6, none = 4/6 (NOT the unweighted 2/3 vs 1/3)
+  expect_equal(unname(m["college"]), 2 / 6, tolerance = 1e-9)
+  expect_equal(unname(m["none"]), 4 / 6, tolerance = 1e-9)
+})

@@ -1,7 +1,7 @@
 Type: Package
 Package: LLMRpanel
 Title: Calibrated Silicon Samples for Survey and Experiment Design
-Version: 0.3.0
+Version: 0.4.0
 Authors@R:
     person("Ali", "Sanaei", , "sanaei@uchicago.edu", role = c("aut", "cre"))
 Description: Quantitative silicon sampling with calibration as a mandatory
@@ -29,9 +29,12 @@ Imports:
 Suggests:
     testthat (>= 3.0.0),
     knitr,
-    rmarkdown
+    rmarkdown,
+    shiny,
+    bslib,
+    DT,
+    LLMR.shiny
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 URL: https://github.com/asanaei/LLMRpanel, https://asanaei.github.io/LLMRpanel/
 BugReports: https://github.com/asanaei/LLMRpanel/issues
-Remotes: asanaei/LLMR

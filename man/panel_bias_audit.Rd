@@ -22,7 +22,7 @@ responses themselves:
 \item \strong{Option-order effects}: for items administered with randomized
 option order, a chi-squared test of response against the order seen.
 With LLMs this is routinely significant; a result that survives
-\href{https://github.com/asanaei/LLMRvalid}{LLMRvalid}-style scrutiny
+\href{https://github.com/asanaei/LLMRcontent}{LLMRcontent}-style scrutiny
 should not depend on it.
 \item \strong{Non-response}: parse failures and refusals per item.
 }
