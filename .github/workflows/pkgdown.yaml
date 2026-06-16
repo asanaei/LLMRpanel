@@ -1,5 +1,4 @@
 # Workflow derived from https://github.com/r-lib/actions/tree/v2/examples
-# Need help debugging build failures? Start at https://github.com/r-lib/actions#where-to-find-help
 on:
   push:
     branches: [main, master]
@@ -47,9 +46,10 @@ jobs:
 
       - name: Add AI usage capsule
         run: |
-          mkdir -p docs/ai
-          cp inst/ai/*.md docs/ai/
-          printf '\n## AI usage\n\n- [Usage capsule for AI assistants](ai/LLMRpanel.md)\n' >> docs/llms.txt
+          if ls inst/ai/*.md >/dev/null 2>&1; then
+            mkdir -p docs/ai
+            cp inst/ai/*.md docs/ai/
+          fi
 
       - name: Configure GitHub Pages
         if: github.event_name != 'pull_request'
