@@ -1,4 +1,4 @@
-# LLMRpanel
+# LLMRpanel <img src="man/figures/logo.png" align="right" width="120" alt="LLMRpanel icon" />
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/asanaei/LLMRpanel/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/asanaei/LLMRpanel/actions/workflows/R-CMD-check.yaml)
