@@ -19,6 +19,14 @@
 #'   `function(experiments, ...)` that returns the experiments with a
 #'   `response_text` column. Defaults to a live LLM call via
 #'   `LLMR::call_llm_par()`.
+#' @param max_calls Integer. If the run would make more than this many calls
+#'   (personas times items), it stops unless `confirm = TRUE`, so a large panel
+#'   cannot fire thousands of calls by accident. Default 5000.
+#' @param confirm Logical. Set `TRUE` to proceed past `max_calls`.
+#' @param price_table,tokens_per_call Optional. When both are supplied, the
+#'   preflight reports a cost figure from your own `price_table` (the
+#'   [LLMR::llm_usage()] format) and `tokens_per_call` assumption; the package
+#'   itself ships no prices and estimates no token counts.
 #' @param ... Passed to the runner (e.g. `tries`, `progress`).
 #' @return A `panel_responses` tibble: `persona_id`, `item_id`, `type`,
 #'   `option_order` (what this respondent saw, `|`-separated), `response`
@@ -50,7 +58,9 @@
 #' }
 #' panel_administer(panel, instr, cfg, .runner = deterministic)
 #' @export
-panel_administer <- function(panel, instr, config, .runner = NULL, ...) {
+panel_administer <- function(panel, instr, config, .runner = NULL,
+                             max_calls = 5000L, confirm = FALSE,
+                             price_table = NULL, tokens_per_call = NULL, ...) {
   stopifnot(inherits(panel, "silicon_panel"),
             inherits(instr, "panel_instrument"))
   if (!inherits(config, "llm_config")) {
@@ -60,6 +70,21 @@ panel_administer <- function(panel, instr, config, .runner = NULL, ...) {
     LLMR::call_llm_par(experiments, ...)
   }
 
+  exps <- .panel_build_grid(panel, instr, config)
+  .panel_preflight(nrow(exps), max_calls, confirm, price_table, tokens_per_call)
+
+  res <- runner(exps, ...)
+  stopifnot(is.data.frame(res), "response_text" %in% names(res))
+  # The parallel runner returns the input columns alongside response_text, so the
+  # grid metadata is already aligned by row; parse directly.
+  .panel_parse_responses(res, instr, panel)
+}
+
+# --- internal: grid build, response parse, and preflight (shared) ----------
+# Build the persona x item experiment grid. Each row carries the metadata needed
+# to parse a response back (persona_id, item_id, type, option_order) plus a stable
+# `request_id` used to realign asynchronous (batch) results by id, never by order.
+.panel_build_grid <- function(panel, instr, config) {
   rows <- list()
   for (p in seq_len(nrow(panel))) {
     items <- instr$items
@@ -89,9 +114,16 @@ panel_administer <- function(panel, instr, config, .runner = NULL, ...) {
     }
   }
   exps <- do.call(rbind, rows)
-  res <- runner(exps, ...)
-  stopifnot(is.data.frame(res), "response_text" %in% names(res))
+  exps$request_id <- sprintf("llmr-%06d", seq_len(nrow(exps)))
+  exps
+}
 
+# Parse a results frame (`res`, carrying the grid metadata columns + a
+# `response_text` column) into a `panel_responses`. Shared by the parallel and
+# batch paths so they produce byte-identical output. Token/diagnostic columns
+# present on `res` are retained as a usage attribute.
+.panel_parse_responses <- function(res, instr, panel) {
+  stopifnot(is.data.frame(res), "response_text" %in% names(res))
   item_index <- stats::setNames(instr$items,
                                 vapply(instr$items, `[[`, "", "id"))
   res$response <- vapply(seq_len(nrow(res)), function(i) {
@@ -109,11 +141,48 @@ panel_administer <- function(panel, instr, config, .runner = NULL, ...) {
   out <- res[, c("persona_id", "item_id", "type", "option_order",
                  "response", "score")]
   out <- tibble::as_tibble(out)
+
+  # Keep the token/diagnostic columns (if the runner returned them) as a usage
+  # attribute keyed by persona/item, so they survive without widening the result.
+  token_cols <- intersect(
+    c("sent_tokens", "rec_tokens", "total_tokens", "reasoning_tokens",
+      "cached_tokens"), names(res))
+  if (length(token_cols)) {
+    keep <- intersect(
+      c("persona_id", "item_id", "response_text", "success", "finish_reason",
+        token_cols), names(res))
+    u <- res[, keep, drop = FALSE]
+    # LLMR::llm_usage() recognizes a results frame by `success` + `finish_reason`;
+    # supply them (NA) if the runner omitted them so panel_usage() always works.
+    if (!"success" %in% names(u)) u$success <- NA
+    if (!"finish_reason" %in% names(u)) u$finish_reason <- NA_character_
+    attr(out, "usage") <- tibble::as_tibble(u)
+  }
+
   attr(out, "panel") <- panel
   attr(out, "instrument") <- instr
   attr(out, "calibration") <- NULL
   class(out) <- c("panel_responses", class(out))
   out
+}
+
+# Report the call count and, optionally, gate a large run. Returns invisibly.
+.panel_preflight <- function(n_calls, max_calls, confirm, price_table = NULL,
+                             tokens_per_call = NULL) {
+  msg <- sprintf("%d call(s)", n_calls)
+  if (!is.null(price_table) && !is.null(tokens_per_call)) {
+    # caller-supplied arithmetic only; the package invents no prices.
+    msg <- paste0(msg, sprintf(" (~%s tokens/call, cost from your price_table)",
+                               format(tokens_per_call)))
+  }
+  # Only announce for non-trivial runs; small pilots stay quiet.
+  if (n_calls >= 100L) cli::cli_inform("Administering: {msg}.")
+  if (n_calls > max_calls && !isTRUE(confirm)) {
+    abort(sprintf(paste0(
+      "This run would make %d calls, above max_calls = %d. ",
+      "Pass confirm = TRUE to proceed, or raise max_calls."), n_calls, max_calls))
+  }
+  invisible(n_calls)
 }
 
 #' @export
@@ -149,4 +218,26 @@ as_tibble.panel_responses <- function(x, ...) {
   attr(x, "calibration") <- NULL
   class(x) <- setdiff(class(x), "panel_responses")
   tibble::as_tibble(x, ...)
+}
+
+#' Token usage for an administered panel
+#'
+#' Returns the token and outcome diagnostics recorded during
+#' [panel_administer()] (or [panel_administer_fetch()]). The figures are attached
+#' to a `panel_responses` object as a `usage` attribute, which a thin wrapper over
+#' [LLMR::llm_usage()] summarizes here so they survive being read off without
+#' digging into attributes. With a `price_table` (the [LLMR::llm_usage()] format),
+#' a cost column is added; the package itself ships no prices.
+#'
+#' @param responses A [panel_administer()] result.
+#' @param price_table Optional price table passed to [LLMR::llm_usage()].
+#' @return A one-row usage tibble, or `NULL` when no diagnostics were retained
+#'   (for example an offline `.runner` that returned no token columns).
+#' @seealso [panel_administer()], [LLMR::llm_usage()].
+#' @export
+panel_usage <- function(responses, price_table = NULL) {
+  stopifnot(inherits(responses, "panel_responses"))
+  u <- attr(responses, "usage")
+  if (is.null(u) || !nrow(u)) return(NULL)
+  LLMR::llm_usage(u, price_table = price_table)
 }

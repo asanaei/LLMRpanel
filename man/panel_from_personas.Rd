@@ -4,7 +4,7 @@
 \alias{panel_from_personas}
 \title{Draw a panel from a persona data frame}
 \usage{
-panel_from_personas(data = NULL, rows = NULL, n = NULL)
+panel_from_personas(data = NULL, rows = NULL, n = NULL, weights = NULL)
 }
 \arguments{
 \item{data}{A persona data frame. Defaults to \code{LLMR::anes_2024_personas}.}
@@ -15,6 +15,10 @@ panel_from_personas(data = NULL, rows = NULL, n = NULL)
 \item{n}{Optional panel size. With \code{NULL}, every selected row is used; with a
 number, rows are sampled (without replacement when \code{n} does not exceed the
 pool, otherwise with replacement).}
+
+\item{weights}{Optional survey weights for the draw: a column name in \code{data},
+or a numeric vector aligned to the selected rows. Used only when \code{n} is
+given. \code{NULL} (default) draws uniformly.}
 }
 \value{
 A \code{silicon_panel}: a tibble with \code{persona_id}, the demographic columns,

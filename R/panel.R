@@ -3,6 +3,44 @@
 # data and no "default Americans": you supply the margins (from ACS, ANES,
 # CES, a census table), and what you supplied is what the report cites.
 
+# Render one row of a persona frame to survey-answering text via the shared LLMR
+# persona contract: demographics as background, the rest as stated answers keyed
+# by question wording (NA fields dropped). The framing is panel-specific (a
+# respondent who answers in character), distinct from a focus-group discussant.
+.render_persona_text <- function(frame, row_i) {
+  if (requireNamespace("LLMR", quietly = TRUE)) {
+    parts <- LLMR::llm_persona_split(frame, row_i)
+    demo <- parts$demographics; ans <- parts$responses
+  } else {
+    dcols <- intersect(c("age", "sex", "gender", "education", "race", "income"),
+                       names(frame))
+    demo <- stats::setNames(
+      vapply(dcols, function(c) as.character(frame[[c]][row_i]), ""), dcols)
+    ans <- character(0)
+  }
+  bits <- c(
+    if (length(demo))
+      sprintf("You are this person: %s.",
+              paste(sprintf("%s %s", names(demo), demo), collapse = "; ")),
+    if (length(ans))
+      sprintf("On a questionnaire you gave these answers: %s.",
+              paste(sprintf("%s -- %s", names(ans), ans), collapse = "; ")))
+  paste(bits, collapse = " ")
+}
+
+# Restrict a persona_frame to a subset of columns, preserving the contract
+# attributes (dictionary / demographic_fields) for the kept columns.
+.restrict_persona_frame <- function(frame, columns) {
+  keep <- intersect(columns, names(frame))
+  out <- frame[, keep, drop = FALSE]
+  dict <- attr(frame, "dictionary")
+  if (!is.null(dict)) attr(out, "dictionary") <- dict[dict$handle %in% keep, , drop = FALSE]
+  df <- attr(frame, "demographic_fields")
+  if (!is.null(df)) attr(out, "demographic_fields") <- intersect(df, keep)
+  class(out) <- unique(c("persona_frame", setdiff(class(frame), "persona_frame")))
+  out
+}
+
 #' Draw a persona panel from population margins
 #'
 #' Samples `n` personas with attributes drawn independently from the
@@ -116,18 +154,33 @@ panel_from_data <- function(data, n, persona_template = NULL,
   if (!length(columns)) abort("`columns` must select at least one attribute column.")
 
   idx <- sample(seq_len(nrow(data)), n, replace = TRUE, prob = prob)
-  attrs <- data[idx, columns, drop = FALSE]
+  attrs <- as.data.frame(data)[idx, columns, drop = FALSE]
   out <- tibble::as_tibble(attrs)
   out <- tibble::add_column(out, persona_id = seq_len(n), .before = 1)
-  out$persona <- vapply(seq_len(n), function(i) {
-    vals <- as.list(attrs[i, , drop = FALSE])
-    if (is.null(persona_template)) {
-      paste(sprintf("%s: %s", names(vals), vapply(vals, as.character, character(1))),
-            collapse = "; ")
-    } else {
-      .fill(persona_template, vals)
-    }
-  }, character(1))
+
+  # Rich rendering (question wording + demographics/answers split) is opt-in: it
+  # fires only for a `persona_frame` with no explicit template, so a plain
+  # data.frame renders exactly as before and no analysis column leaks into the
+  # prompt. The persona text is drawn from the source row (which carries the
+  # contract), restricted to the selected `columns`.
+  use_rich <- is.null(persona_template) && inherits(data, "persona_frame") &&
+    requireNamespace("LLMR", quietly = TRUE)
+  out$persona <- if (use_rich) {
+    # restrict the contract frame to the selected columns, then render each
+    # sampled source row to survey-answering text via the shared renderer.
+    src <- .restrict_persona_frame(data, columns)
+    vapply(idx, function(r) .render_persona_text(src, r), character(1))
+  } else {
+    vapply(seq_len(n), function(i) {
+      vals <- as.list(attrs[i, , drop = FALSE])
+      if (is.null(persona_template)) {
+        paste(sprintf("%s: %s", names(vals), vapply(vals, as.character, character(1))),
+              collapse = "; ")
+      } else {
+        .fill(persona_template, vals)
+      }
+    }, character(1))
+  }
   # The cited margins are the source distribution the panel was drawn from.
   # With sampling weights, that distribution is the WEIGHTED one; an unweighted
   # prop.table(table(col)) would misreport the population the panel represents.
@@ -167,6 +220,9 @@ panel_from_data <- function(data, n, persona_template = NULL,
 #' @param n Optional panel size. With `NULL`, every selected row is used; with a
 #'   number, rows are sampled (without replacement when `n` does not exceed the
 #'   pool, otherwise with replacement).
+#' @param weights Optional survey weights for the draw: a column name in `data`,
+#'   or a numeric vector aligned to the selected rows. Used only when `n` is
+#'   given. `NULL` (default) draws uniformly.
 #' @return A `silicon_panel`: a tibble with `persona_id`, the demographic columns,
 #'   and `persona`.
 #' @seealso [LLMR::anes_2024_personas], [panel_administer()].
@@ -178,7 +234,8 @@ panel_from_data <- function(data, n, persona_template = NULL,
 #' }
 #' }
 #' @export
-panel_from_personas <- function(data = NULL, rows = NULL, n = NULL) {
+panel_from_personas <- function(data = NULL, rows = NULL, n = NULL,
+                                weights = NULL) {
   if (is.null(data)) {
     if (!requireNamespace("LLMR", quietly = TRUE))
       abort("Install LLMR (for anes_2024_personas) or pass `data`.")
@@ -196,9 +253,31 @@ panel_from_personas <- function(data = NULL, rows = NULL, n = NULL) {
     idx <- idx[idx >= 1L & idx <= N]
     if (!length(idx)) abort("`rows` selected no respondents.")
   }
+
+  # resolve weights to a probability vector over the SELECTED rows.
+  prob <- NULL
+  if (!is.null(weights)) {
+    w <- if (is.character(weights) && length(weights) == 1L) {
+      if (!(weights %in% names(data))) abort("`weights` must name a column in `data`.")
+      as.numeric(data[[weights]])[idx]
+    } else as.numeric(weights)
+    if (length(w) != length(idx)) abort("`weights` length must match the selected rows.")
+    w[is.na(w) | w < 0] <- 0
+    if (sum(w) <= 0) abort("`weights` must have positive total weight.")
+    prob <- w / sum(w)
+  }
+
   if (!is.null(n)) {
     stopifnot(n >= 1L)
-    idx <- sample(idx, n, replace = n > length(idx))
+    pool <- length(idx)
+    if (n > pool) {
+      warning(sprintf(paste0(
+        "Drawing %d personas from %d distinct respondent(s) (~%.0f-fold ",
+        "duplication). Diversity is capped by the source; supply a larger frame ",
+        "or use panel_from_margins() for more distinct respondents."),
+        n, pool, n / pool), call. = FALSE)
+    }
+    idx <- sample(idx, n, replace = n > pool, prob = prob)
   }
 
   demo_cols <- if (requireNamespace("LLMR", quietly = TRUE))
@@ -206,31 +285,11 @@ panel_from_personas <- function(data = NULL, rows = NULL, n = NULL) {
     intersect(c("age", "sex", "gender", "education", "race", "income"), names(data))
   demo_cols <- intersect(demo_cols, names(data))
 
-  # Render each chosen row as a person who will answer in character. The shared
-  # split keys answers by question wording and drops missing/score fields; the
-  # framing here is panel-specific (a respondent, not a discussant).
-  render_one <- function(row_i) {
-    if (requireNamespace("LLMR", quietly = TRUE)) {
-      parts <- LLMR::llm_persona_split(data, row_i)
-      demo <- parts$demographics; ans <- parts$responses
-    } else {
-      demo <- vapply(demo_cols, function(c) as.character(data[[c]][row_i]), "")
-      ans <- character(0)
-    }
-    bits <- c(
-      if (length(demo))
-        sprintf("You are this person: %s.",
-                paste(sprintf("%s %s", names(demo), demo), collapse = "; ")),
-      if (length(ans))
-        sprintf("On a questionnaire you gave these answers: %s.",
-                paste(sprintf("%s -- %s", names(ans), ans), collapse = "; ")))
-    paste(bits, collapse = " ")
-  }
-
   chosen <- data[idx, , drop = FALSE]
   attrs <- tibble::as_tibble(lapply(chosen[, demo_cols, drop = FALSE], as.character))
   out <- tibble::add_column(attrs, persona_id = seq_along(idx), .before = 1)
-  out$persona <- vapply(idx, render_one, character(1))
+  # Render each chosen source row via the shared persona-answering renderer.
+  out$persona <- vapply(idx, function(r) .render_persona_text(data, r), character(1))
 
   margins <- lapply(chosen[, demo_cols, drop = FALSE],
                     function(col) prop.table(table(col[!is.na(col)])))

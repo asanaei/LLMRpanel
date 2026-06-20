@@ -34,6 +34,18 @@ pilot's dispersion. `panel_report()` assembles the design-stage report,
 calibration status first. The shared generic surface supports
 `LLMR::diagnostics()`, `LLMR::report()`, and `tibble::as_tibble()`.
 
+A silicon panel pilots the instrument and design, not the population: it probes
+question wording, response options, ordering, and statistical power. When used to
+study the model itself, a larger panel mainly reduces Monte-Carlo noise in
+estimating patterns such as order effects, rather than making the synthetic
+respondents representative of people.
+
+For a large panel, hand `panel_from_data()` a frame wrapped with
+`as_persona_frame()` (it then renders each row by its question wording, not a flat
+template), and administer it through the provider's discounted asynchronous batch
+API with `panel_administer_batch()` and `panel_administer_fetch()`.
+`panel_administer()` reports the call count before a run and stops above
+`max_calls` unless you pass `confirm = TRUE`.
 
 ## Which package?
 

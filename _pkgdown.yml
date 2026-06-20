@@ -11,6 +11,7 @@ reference:
   - panel_from_margins
   - panel_from_data
   - panel_from_personas
+  - as_persona_frame
 - title: Instruments and stimuli
   contents:
   - panel_items
@@ -21,6 +22,10 @@ reference:
 - title: Administration
   contents:
   - panel_administer
+  - panel_administer_batch
+  - panel_administer_fetch
+  - panel_batch_status
+  - panel_usage
 - title: Calibration and audits
   contents:
   - panel_calibrate

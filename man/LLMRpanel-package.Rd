@@ -21,8 +21,13 @@ personas from microdata rows.
 \item \code{\link[=panel_from_personas]{panel_from_personas()}}: a panel from a ready-made persona data frame
 (such as \code{LLMR::anes_2024_personas}), each respondent answering in
 character with their own bundle of attitudes.
+\item \code{\link[=as_persona_frame]{as_persona_frame()}}: mark a decoded data frame as a persona source so each
+row renders from its demographics and answers, keyed by question wording.
 \item \code{\link[=panel_administer]{panel_administer()}}: every persona answers every item, with item- and
-option-order randomization recorded per response.
+option-order randomization recorded per response. For a large panel,
+\code{\link[=panel_administer_batch]{panel_administer_batch()}} / \code{\link[=panel_administer_fetch]{panel_administer_fetch()}} run it through the
+provider's discounted asynchronous batch API; \code{\link[=panel_usage]{panel_usage()}} reports the
+token cost.
 \item \code{\link[=panel_calibrate]{panel_calibrate()}}: compare silicon marginals to human benchmarks; until it
 runs, every print method shows an \strong{UNCALIBRATED} banner.
 \item \code{\link[=panel_bias_audit]{panel_bias_audit()}}: option-order effects and refusal/parse rates -- the
@@ -40,6 +45,12 @@ for the design stage -- pretesting questionnaires, piloting vignette and
 conjoint designs, stress-testing instruments -- and for measuring model
 behavior. They estimate human population quantities only to the extent
 that calibration against human data earns that reading, case by case.
+
+A silicon panel pilots the instrument and design, not the population: it
+probes question wording, response options, ordering, and statistical power.
+When used to study the model itself, a larger panel mainly reduces Monte Carlo
+noise in estimating patterns such as order effects, rather than making the
+synthetic respondents representative of people.
 }
 \seealso{
 Useful links:

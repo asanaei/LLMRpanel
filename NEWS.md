@@ -1,3 +1,25 @@
+# LLMRpanel 0.6.0
+
+Scaling to larger panels.
+
+* `as_persona_frame()`: mark a decoded data frame as a persona source. Supply a
+  column-to-question mapping and `panel_from_data()` renders each row by its
+  question wording, with demographics and answers separated, instead of a flat
+  template. Rich rendering is opt-in by construction: a plain data frame still
+  renders exactly as before, so no analysis column leaks into the prompt.
+* `panel_administer_batch()` / `panel_administer_fetch()` / `panel_batch_status()`:
+  administer a panel through the provider's asynchronous batch API (about half the
+  synchronous price, no rate-limit pressure, resumable across sessions). Responses
+  are joined back to the grid by request id, so the order the provider returns them
+  in does not matter.
+* `panel_administer()` reports the call count before a run and stops above
+  `max_calls` (default 5000) unless `confirm = TRUE`, so a large panel cannot fire
+  thousands of calls by accident. It also retains the token diagnostics, surfaced
+  by the new `panel_usage()`.
+* `panel_from_personas()` gains a `weights` argument for a weighted draw, and warns
+  when a panel is much larger than the distinct source pool (diversity is capped by
+  the source; supply a larger frame or use `panel_from_margins()`).
+
 # LLMRpanel 0.5.0
 
 * `panel_from_personas()`: build a `silicon_panel` from a ready-made persona data

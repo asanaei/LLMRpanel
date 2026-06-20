@@ -4,7 +4,17 @@
 \alias{panel_administer}
 \title{Administer an instrument to a panel}
 \usage{
-panel_administer(panel, instr, config, .runner = NULL, ...)
+panel_administer(
+  panel,
+  instr,
+  config,
+  .runner = NULL,
+  max_calls = 5000L,
+  confirm = FALSE,
+  price_table = NULL,
+  tokens_per_call = NULL,
+  ...
+)
 }
 \arguments{
 \item{panel}{A \code{\link[=panel_from_margins]{panel_from_margins()}} or \code{\link[=panel_from_data]{panel_from_data()}} result.}
@@ -17,6 +27,17 @@ panel_administer(panel, instr, config, .runner = NULL, ...)
 \verb{function(experiments, ...)} that returns the experiments with a
 \code{response_text} column. Defaults to a live LLM call via
 \code{LLMR::call_llm_par()}.}
+
+\item{max_calls}{Integer. If the run would make more than this many calls
+(personas times items), it stops unless \code{confirm = TRUE}, so a large panel
+cannot fire thousands of calls by accident. Default 5000.}
+
+\item{confirm}{Logical. Set \code{TRUE} to proceed past \code{max_calls}.}
+
+\item{price_table, tokens_per_call}{Optional. When both are supplied, the
+preflight reports a cost figure from your own \code{price_table} (the
+\code{\link[LLMR:llm_usage]{LLMR::llm_usage()}} format) and \code{tokens_per_call} assumption; the package
+itself ships no prices and estimates no token counts.}
 
 \item{...}{Passed to the runner (e.g. \code{tries}, \code{progress}).}
 }
