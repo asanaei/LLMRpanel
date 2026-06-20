@@ -10,6 +10,7 @@ reference:
   contents:
   - panel_from_margins
   - panel_from_data
+  - panel_from_personas
 - title: Instruments and stimuli
   contents:
   - panel_items
