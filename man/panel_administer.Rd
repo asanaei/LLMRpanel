@@ -24,9 +24,13 @@ panel_administer(panel, instr, config, .runner = NULL, ...)
 A \code{panel_responses} tibble: \code{persona_id}, \code{item_id}, \code{type},
 \code{option_order} (what this respondent saw, \code{|}-separated), \code{response}
 (matched option or \code{NA}; verbatim text for open items), \code{score}
-(1-based scale position for Likert items). Carries the panel and
-instrument as attributes and an empty calibration slot: every print
-shows the \strong{UNCALIBRATED} banner until \code{\link[=panel_calibrate]{panel_calibrate()}} fills it.
+(1-based scale position for Likert items). \code{score} is the position of the
+chosen response in the item's canonical scale, the order in which the levels
+were defined, not the position in the shuffled order this respondent saw
+(\code{option_order}); randomizing the display therefore does not change the
+score. Carries the panel and instrument as attributes and an empty
+calibration slot: every print shows the \strong{UNCALIBRATED} banner until
+\code{\link[=panel_calibrate]{panel_calibrate()}} fills it.
 }
 \description{
 One call per persona x item, through LLMR's parallel engine by default.

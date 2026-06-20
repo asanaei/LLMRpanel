@@ -94,14 +94,25 @@ run_panel_studio <- function(...) {
         bslib::card_header("Silicon survey panel"),
         bslib::card_body(
           shiny::uiOutput(ns("run_error")),
-          shiny::tags$strong("1. Population margins"),
-          shiny::tags$p(class = "text-muted",
-            "One attribute per line as 'name: level=prob, level=prob'. You supply the margins; the report cites what you supply."),
-          shiny::textAreaInput(ns("margins"), NULL, rows = 4,
-            value = paste("cohort: young=0.3, middle=0.45, older=0.25",
-                          "party: left=0.45, right=0.45, independent=0.10", sep = "\n")),
-          shiny::textInput(ns("persona_tmpl"), "Persona template",
-                           value = "A {cohort} voter who leans {party}."),
+          shiny::tags$strong("1. Where the personas come from"),
+          shiny::radioButtons(ns("source"), NULL,
+            choices = c("Population margins" = "margins",
+                        "ANES 2024 personas" = "anes"),
+            selected = "margins", inline = TRUE),
+          shiny::conditionalPanel(
+            condition = sprintf("input['%s'] == 'margins'", ns("source")),
+            shiny::tags$p(class = "text-muted",
+              "One attribute per line as 'name: level=prob, level=prob'. You supply the margins; the report cites what you supply."),
+            shiny::textAreaInput(ns("margins"), NULL, rows = 4,
+              value = paste("cohort: young=0.3, middle=0.45, older=0.25",
+                            "party: left=0.45, right=0.45, independent=0.10", sep = "\n")),
+            shiny::textInput(ns("persona_tmpl"), "Persona template",
+                             value = "A {cohort} voter who leans {party}.")),
+          shiny::conditionalPanel(
+            condition = sprintf("input['%s'] == 'anes'", ns("source")),
+            shiny::tags$p(class = "text-muted",
+              "Pick respondents (the list runs from most liberal at the top to most conservative at the bottom). Select none to draw a sample of the panel size."),
+            LLMR.shiny::persona_selector_ui(ns("personas"))),
           shiny::numericInput(ns("n"), "Panel size", value = 30, min = 2, max = 500, step = 1),
           shiny::actionButton(ns("build_panel"), "Build panel", class = "btn-primary"),
           shiny::uiOutput(ns("panel_status")),
@@ -154,15 +165,29 @@ run_panel_studio <- function(...) {
     }
     warn_card <- function(msg) bslib::card(class = "border-warning", bslib::card_body(msg))
 
+    # The ANES persona picker (shared module); returns the chosen row indices.
+    persona_rows <- LLMR.shiny::persona_selector_server("personas",
+      if (requireNamespace("LLMR", quietly = TRUE)) LLMR::anes_2024_personas else NULL)
+
     shiny::observeEvent(input$build_panel, {
       run_error(NULL)
-      margins <- parse_margins(input$margins)
-      if (!length(margins)) { run_error(warn_card("Could not parse any margins.")); return() }
-      res <- LLMR.shiny::safe_llmr_call({
-        set.seed(110)
-        panel_from_margins(margins, n = as.integer(input$n %||% 30),
-                           persona_template = input$persona_tmpl)
-      }, shared$provider())
+      res <- if (identical(input$source %||% "margins", "anes")) {
+        LLMR.shiny::safe_llmr_call({
+          set.seed(110)
+          rows <- persona_rows()
+          panel_from_personas(LLMR::anes_2024_personas,
+                              rows = if (length(rows)) rows else NULL,
+                              n = if (length(rows)) NULL else as.integer(input$n %||% 30))
+        }, shared$provider())
+      } else {
+        margins <- parse_margins(input$margins)
+        if (!length(margins)) { run_error(warn_card("Could not parse any margins.")); return() }
+        LLMR.shiny::safe_llmr_call({
+          set.seed(110)
+          panel_from_margins(margins, n = as.integer(input$n %||% 30),
+                             persona_template = input$persona_tmpl)
+        }, shared$provider())
+      }
       if (!res$ok) { run_error(res$ui); return() }
       panel(res$value); responses(NULL); calibration(NULL)
     })

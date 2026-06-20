@@ -11,7 +11,8 @@ panel_bias_audit(responses)
 }
 \value{
 A tibble: \code{item_id}, \code{n}, \code{parse_failures}, \code{order_effect_p}
-(NA when order was not randomized or cells are too sparse).
+(the first-option chi-squared p-value; NA when order was not randomized or
+cells are too sparse).
 }
 \description{
 The artifacts silicon respondents are known for, measured from the
@@ -19,11 +20,14 @@ responses themselves:
 }
 \details{
 \itemize{
-\item \strong{Option-order effects}: for items administered with randomized
-option order, a chi-squared test of response against the order seen.
-With LLMs this is routinely significant; a result that survives
-\href{https://github.com/asanaei/LLMRcontent}{LLMRcontent}-style scrutiny
-should not depend on it.
+\item \strong{First-option sensitivity}: for items administered with randomized
+option order, a chi-squared test of the chosen response against which
+option was listed first. This is a narrow slice of the broader question of
+option-order effects: it asks whether the answer depends on what appeared in
+position one, not on the full permutation of positions. With LLMs even this
+reduced signal is routinely significant; a result that survives
+\href{https://github.com/asanaei/LLMRcontent}{LLMRcontent}-style scrutiny should
+not depend on it.
 \item \strong{Non-response}: parse failures and refusals per item.
 }
 }

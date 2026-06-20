@@ -18,6 +18,9 @@ template.
 \code{\link[=vignette_design]{vignette_design()}} and \code{\link[=conjoint_design]{conjoint_design()}} for factorial stimuli.
 \item \code{\link[=panel_from_data]{panel_from_data()}}: the joint-distribution counterpart, drawing
 personas from microdata rows.
+\item \code{\link[=panel_from_personas]{panel_from_personas()}}: a panel from a ready-made persona data frame
+(such as \code{LLMR::anes_2024_personas}), each respondent answering in
+character with their own bundle of attitudes.
 \item \code{\link[=panel_administer]{panel_administer()}}: every persona answers every item, with item- and
 option-order randomization recorded per response.
 \item \code{\link[=panel_calibrate]{panel_calibrate()}}: compare silicon marginals to human benchmarks; until it

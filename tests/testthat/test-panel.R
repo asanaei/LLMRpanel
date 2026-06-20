@@ -256,9 +256,9 @@ test_that("panel_power requires a focal response for 3+ option choice items", {
   # with a valid focal -> no such warning, and prices on the focal share
   expect_no_warning(out <- panel_power(r, effect = 0.2, focal = c(color = "red")))
   expect_true(out$dispersion[out$item_id == "color"] > 0)
-  # an unobserved focal errors
+  # a focal that is not even an option of the item is a usage error
   expect_error(panel_power(r, effect = 0.2, focal = c(color = "purple")),
-               "not an observed response")
+               "not one of the item's options")
 })
 
 test_that("panel_power counts offered options, not just observed ones", {
@@ -279,6 +279,18 @@ test_that("panel_power counts offered options, not just observed ones", {
   # back to the observed two options and prices them without the warning.
   r2 <- r; attr(r2, "instrument") <- NULL
   expect_no_warning(panel_power(r2, effect = 0.2))
+
+  # "blue" is a real option the pilot never elicited. Naming it as the focal is
+  # informative for planning a rare response: warn and price at an observed rate
+  # of 0 rather than aborting. (The 0 rate also trips the incidental arm-clamp
+  # warning, which we muffle so only the focal warning is asserted.)
+  muffle_clamp <- function(expr) withCallingHandlers(expr, warning = function(w) {
+    if (grepl("clamped", conditionMessage(w))) invokeRestart("muffleWarning")
+  })
+  expect_warning(out <- muffle_clamp(panel_power(r, effect = 0.2,
+                                                 focal = c(color = "blue"))),
+                 "did not appear in the pilot")
+  expect_true(is.finite(out$n_per_arm[out$item_id == "color"]))
 })
 
 test_that("panel_power still prices a binary choice without focal", {
@@ -307,4 +319,37 @@ test_that("a weighted panel cites weighted source margins", {
   # weighted: college = 2/6, none = 4/6 (NOT the unweighted 2/3 vs 1/3)
   expect_equal(unname(m["college"]), 2 / 6, tolerance = 1e-9)
   expect_equal(unname(m["none"]), 4 / 6, tolerance = 1e-9)
+})
+
+test_that("panel_from_personas builds a silicon_panel that administers", {
+  skip_if_not_installed("LLMR")
+  set.seed(110)
+  p <- panel_from_personas(LLMR::anes_2024_personas, n = 6)
+  expect_s3_class(p, "silicon_panel")
+  expect_true(all(c("persona_id", "persona") %in% names(p)))
+  expect_equal(nrow(p), 6L)
+  expect_false(is.null(attr(p, "margins")))
+  # the persona text is the survey-answering frame, carrying the row's answers
+  expect_true(grepl("You are this person", p$persona[1]))
+  expect_true(grepl("questionnaire", p$persona[1]))
+
+  # it administers offline like any silicon_panel: the persona is the system msg
+  runner_echo <- function(experiments, ...) {
+    experiments$response_text <- vapply(seq_len(nrow(experiments)), function(i) {
+      sys <- experiments$messages[[i]][["system"]]
+      if (grepl("Strong Democrat|Not very strong Democrat", sys)) "agree" else "disagree"
+    }, character(1))
+    experiments$success <- TRUE
+    experiments
+  }
+  r <- panel_administer(p, fix_instr(), fix_cfg(), .runner = runner_echo)
+  expect_s3_class(r, "panel_responses")
+  expect_equal(length(unique(r$persona_id)), 6L)
+})
+
+test_that("panel_from_personas respects a rows predicate", {
+  skip_if_not_installed("LLMR")
+  p <- panel_from_personas(LLMR::anes_2024_personas,
+                           rows = function(d) d$ideology_score > 0.5, n = 4)
+  expect_equal(nrow(p), 4L)
 })

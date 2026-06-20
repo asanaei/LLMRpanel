@@ -251,6 +251,6 @@ provider abstraction used by the live calls above.
 [LLMRcontent](https://asanaei.github.io/LLMRcontent/) is the companion that
 audits persona phrasing and option order as treatments, codes open answers
 under a codebook and against gold text, and archives administrations.
-[LLMRAgent](https://asanaei.github.io/LLMRAgent/) addresses agent style
+[LLMRagent](https://asanaei.github.io/LLMRagent/) addresses agent style
 experiments, while this package keeps attention on survey and experiment
 samples.

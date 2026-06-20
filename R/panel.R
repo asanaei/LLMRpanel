@@ -143,6 +143,100 @@ panel_from_data <- function(data, n, persona_template = NULL,
   structure(out, class = c("silicon_panel", class(out)), margins = margins)
 }
 
+#' Draw a panel from a persona data frame
+#'
+#' Turns rows of a persona data frame (one respondent per row, demographics plus
+#' survey or attitude answers) into a `silicon_panel` whose personas can be
+#' administered survey items. It is built for frames following the LLMR persona
+#' contract, such as `LLMR::anes_2024_personas`: the demographics and the answers
+#' are read with [LLMR::llm_persona_split()] (so answers are keyed by their
+#' question wording when the frame carries a dictionary), and each persona is
+#' rendered as a person to answer in character.
+#'
+#' Unlike [panel_from_margins()] and [panel_from_data()], the answers travel with
+#' each respondent (they are not resampled across people), so a persona's stated
+#' views stay internally consistent. The cited `margins` are the demographic
+#' distribution of the chosen rows.
+#'
+#' For a reproducible draw, set a seed before calling (the function never sets
+#' one itself).
+#'
+#' @param data A persona data frame. Defaults to `LLMR::anes_2024_personas`.
+#' @param rows Optional row selector: an integer or logical vector, or a predicate
+#'   `function(df)` returning a logical vector. Applied before sampling.
+#' @param n Optional panel size. With `NULL`, every selected row is used; with a
+#'   number, rows are sampled (without replacement when `n` does not exceed the
+#'   pool, otherwise with replacement).
+#' @return A `silicon_panel`: a tibble with `persona_id`, the demographic columns,
+#'   and `persona`.
+#' @seealso [LLMR::anes_2024_personas], [panel_administer()].
+#' @examples
+#' \donttest{
+#' if (requireNamespace("LLMR", quietly = TRUE)) {
+#'   set.seed(110)
+#'   panel <- panel_from_personas(LLMR::anes_2024_personas, n = 8)
+#' }
+#' }
+#' @export
+panel_from_personas <- function(data = NULL, rows = NULL, n = NULL) {
+  if (is.null(data)) {
+    if (!requireNamespace("LLMR", quietly = TRUE))
+      abort("Install LLMR (for anes_2024_personas) or pass `data`.")
+    data <- LLMR::anes_2024_personas
+  }
+  stopifnot(is.data.frame(data))
+  if (!nrow(data)) abort("`data` must contain at least one row.")
+
+  N <- nrow(data)
+  idx <- seq_len(N)
+  if (!is.null(rows)) {
+    idx <- if (is.function(rows)) which(rows(data))
+           else if (is.logical(rows)) which(rows)
+           else as.integer(rows)
+    idx <- idx[idx >= 1L & idx <= N]
+    if (!length(idx)) abort("`rows` selected no respondents.")
+  }
+  if (!is.null(n)) {
+    stopifnot(n >= 1L)
+    idx <- sample(idx, n, replace = n > length(idx))
+  }
+
+  demo_cols <- if (requireNamespace("LLMR", quietly = TRUE))
+    LLMR::llm_persona_demographic_fields(data) else
+    intersect(c("age", "sex", "gender", "education", "race", "income"), names(data))
+  demo_cols <- intersect(demo_cols, names(data))
+
+  # Render each chosen row as a person who will answer in character. The shared
+  # split keys answers by question wording and drops missing/score fields; the
+  # framing here is panel-specific (a respondent, not a discussant).
+  render_one <- function(row_i) {
+    if (requireNamespace("LLMR", quietly = TRUE)) {
+      parts <- LLMR::llm_persona_split(data, row_i)
+      demo <- parts$demographics; ans <- parts$responses
+    } else {
+      demo <- vapply(demo_cols, function(c) as.character(data[[c]][row_i]), "")
+      ans <- character(0)
+    }
+    bits <- c(
+      if (length(demo))
+        sprintf("You are this person: %s.",
+                paste(sprintf("%s %s", names(demo), demo), collapse = "; ")),
+      if (length(ans))
+        sprintf("On a questionnaire you gave these answers: %s.",
+                paste(sprintf("%s -- %s", names(ans), ans), collapse = "; ")))
+    paste(bits, collapse = " ")
+  }
+
+  chosen <- data[idx, , drop = FALSE]
+  attrs <- tibble::as_tibble(lapply(chosen[, demo_cols, drop = FALSE], as.character))
+  out <- tibble::add_column(attrs, persona_id = seq_along(idx), .before = 1)
+  out$persona <- vapply(idx, render_one, character(1))
+
+  margins <- lapply(chosen[, demo_cols, drop = FALSE],
+                    function(col) prop.table(table(col[!is.na(col)])))
+  structure(out, class = c("silicon_panel", class(out)), margins = margins)
+}
+
 #' @export
 print.silicon_panel <- function(x, ...) {
   cat(sprintf("<silicon_panel | %d persona(s) | attributes: %s>\n",

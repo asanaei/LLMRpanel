@@ -1,4 +1,24 @@
+# LLMRpanel 0.5.0
+
+* `panel_from_personas()`: build a `silicon_panel` from a ready-made persona data
+  frame (such as `LLMR::anes_2024_personas`). Each respondent answers in character
+  with their own bundle of attitudes kept intact, rather than attributes resampled
+  across people. The resulting panel administers like any other.
+* The Silicon panel GUI can draw the panel from ANES 2024 personas: a source
+  selector and the shared `LLMR.shiny` persona table sit alongside the margins
+  builder.
+
 # LLMRpanel 0.4.0
+
+* `panel_power()` no longer aborts when a named `focal` response was never
+  elicited in the pilot. As long as the focal is one of the item's options, it
+  is powered at an observed rate of 0 with a warning; only a focal that is not an
+  offered option of the item is rejected.
+* Documentation precision: `panel_bias_audit()`'s order check is described as
+  first-option sensitivity (whether the answer depends on which option was listed
+  first), which is what it computes, rather than a general option-order audit;
+  and `score` is documented as the position in the item's canonical scale,
+  invariant to display randomization.
 
 * Added an optional Shiny GUI, launched with `run_panel_studio()`: build a
   persona panel from margins, administer a choice item, calibrate against a

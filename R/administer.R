@@ -23,9 +23,13 @@
 #' @return A `panel_responses` tibble: `persona_id`, `item_id`, `type`,
 #'   `option_order` (what this respondent saw, `|`-separated), `response`
 #'   (matched option or `NA`; verbatim text for open items), `score`
-#'   (1-based scale position for Likert items). Carries the panel and
-#'   instrument as attributes and an empty calibration slot: every print
-#'   shows the **UNCALIBRATED** banner until [panel_calibrate()] fills it.
+#'   (1-based scale position for Likert items). `score` is the position of the
+#'   chosen response in the item's canonical scale, the order in which the levels
+#'   were defined, not the position in the shuffled order this respondent saw
+#'   (`option_order`); randomizing the display therefore does not change the
+#'   score. Carries the panel and instrument as attributes and an empty
+#'   calibration slot: every print shows the **UNCALIBRATED** banner until
+#'   [panel_calibrate()] fills it.
 #' @examples
 #' set.seed(110)   # the panel draw is local; the model call is not
 #' panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 6)

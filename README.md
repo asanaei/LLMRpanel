@@ -23,8 +23,9 @@ The methodological stance is carried by the objects rather than the
 documentation. Every result prints an UNCALIBRATED banner until
 `panel_calibrate()` compares the panel's marginals to a human benchmark, item by
 item; partial benchmarks earn only a partial banner, and deviations are
-reported as found. `panel_bias_audit()` measures option-order effects and
-nonresponse from the responses themselves. For design work,
+reported as found. `panel_bias_audit()` reads two artifacts off the responses
+themselves: nonresponse, and first-option sensitivity, whether the answer
+depends on which option was listed first. For design work,
 `conjoint_instrument()` renders a conjoint design into forced-choice
 items, `amce()` estimates average marginal component effects with
 respondent-clustered standard errors, and `panel_power()` computes
@@ -39,7 +40,7 @@ calibration status first. The shared generic surface supports
 | Package | Use it when | Not for |
 |---|---|---|
 | [LLMRcontent](https://asanaei.github.io/LLMRcontent/) | Validated text measurement: codebook coding with sealed gold-set validation, robustness audits, and replication archives | Accessible qualitative coding or text segmentation |
-| [LLMRpanel](https://asanaei.github.io/LLMRpanel/) | Calibrated silicon survey samples for design-stage work | Human-population estimates without calibration to a human benchmark |
+| [LLMRpanel](https://asanaei.github.io/LLMRpanel/) | Synthetic survey panels for design-stage work, calibrated against a human benchmark when one is supplied | Human-population estimates without calibration to a human benchmark |
 
 Both packages share one workflow: you build a first object, extend it, run it
 (supplying your own runner for offline tests), then read `diagnostics()` and
@@ -89,6 +90,6 @@ which organizes annotation around codebooks and sealed gold-set validation,
 audits the robustness of estimates computed from model labels, and turns audit
 logs into verifiable replication archives; [FocusGroup](https://asanaei.github.io/FocusGroup/),
 which simulates moderated group discussion; and
-[LLMRAgent](https://asanaei.github.io/LLMRAgent/), which provides agents
+[LLMRagent](https://asanaei.github.io/LLMRagent/), which provides agents
 and multi-agent designs. An overview of the family lives at the
 [ecosystem page](https://asanaei.github.io/LLMR-ecosystem/).

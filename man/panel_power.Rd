@@ -28,7 +28,10 @@ For a binary choice item the modal option is a well-defined estimand and
 \code{focal} is optional; for a choice item with three or more options the
 "modal share" is not a meaningful single proportion, so name the focal
 response here. Without a \code{focal} for a 3+-option item, the modal share is
-used and a warning is issued.}
+used and a warning is issued. A named focal that the pilot never elicited is
+still powered: as long as it is one of the item's options, the observed rate
+is taken as 0 (with a warning) rather than an error; only a focal that is not
+an offered option of the item is rejected.}
 
 \item{alpha}{Two-sided test size.}
 

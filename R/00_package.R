@@ -12,6 +12,9 @@
 #'   [vignette_design()] and [conjoint_design()] for factorial stimuli.
 #' - [panel_from_data()]: the joint-distribution counterpart, drawing
 #'   personas from microdata rows.
+#' - [panel_from_personas()]: a panel from a ready-made persona data frame
+#'   (such as `LLMR::anes_2024_personas`), each respondent answering in
+#'   character with their own bundle of attitudes.
 #' - [panel_administer()]: every persona answers every item, with item- and
 #'   option-order randomization recorded per response.
 #' - [panel_calibrate()]: compare silicon marginals to human benchmarks; until it

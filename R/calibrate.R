@@ -110,16 +110,20 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
 #' The artifacts silicon respondents are known for, measured from the
 #' responses themselves:
 #'
-#' - **Option-order effects**: for items administered with randomized
-#'   option order, a chi-squared test of response against the order seen.
-#'   With LLMs this is routinely significant; a result that survives
-#'   [LLMRcontent](https://github.com/asanaei/LLMRcontent)-style scrutiny
-#'   should not depend on it.
+#' - **First-option sensitivity**: for items administered with randomized
+#'   option order, a chi-squared test of the chosen response against which
+#'   option was listed first. This is a narrow slice of the broader question of
+#'   option-order effects: it asks whether the answer depends on what appeared in
+#'   position one, not on the full permutation of positions. With LLMs even this
+#'   reduced signal is routinely significant; a result that survives
+#'   [LLMRcontent](https://github.com/asanaei/LLMRcontent)-style scrutiny should
+#'   not depend on it.
 #' - **Non-response**: parse failures and refusals per item.
 #'
 #' @param responses A [panel_administer()] result.
 #' @return A tibble: `item_id`, `n`, `parse_failures`, `order_effect_p`
-#'   (NA when order was not randomized or cells are too sparse).
+#'   (the first-option chi-squared p-value; NA when order was not randomized or
+#'   cells are too sparse).
 #' @export
 panel_bias_audit <- function(responses) {
   stopifnot(inherits(responses, "panel_responses"))
@@ -189,7 +193,10 @@ diagnostics.panel_responses <- function(x, ...) {
 #'   `focal` is optional; for a choice item with three or more options the
 #'   "modal share" is not a meaningful single proportion, so name the focal
 #'   response here. Without a `focal` for a 3+-option item, the modal share is
-#'   used and a warning is issued.
+#'   used and a warning is issued. A named focal that the pilot never elicited is
+#'   still powered: as long as it is one of the item's options, the observed rate
+#'   is taken as 0 (with a warning) rather than an error; only a focal that is not
+#'   an offered option of the item is rejected.
 #' @param alpha Two-sided test size.
 #' @param power Target power.
 #' @return A tibble: `item_id`, `type`, `dispersion` (sd for Likert, the focal
@@ -249,11 +256,16 @@ panel_power <- function(responses, effect, items = NULL, focal = NULL,
   # not exercise every option, so the observed table can undercount); fall back
   # to the observed options only when no instrument is attached.
   instr <- attr(responses, "instrument")
-  offered_n_opts <- function(id) {
-    if (is.null(instr) || is.null(instr$items)) return(NA_integer_)
+  offered_opts <- function(id) {
+    if (is.null(instr) || is.null(instr$items)) return(NULL)
     it <- Find(function(x) identical(x$id, id), instr$items)
-    if (is.null(it) || is.null(it$options)) return(NA_integer_)
-    length(it$options)
+    if (is.null(it)) return(NULL)
+    it$options
+  }
+  offered_n_opts <- function(id) {
+    opts <- offered_opts(id)
+    if (is.null(opts)) return(NA_integer_)
+    length(opts)
   }
 
   z <- stats::qnorm(1 - alpha / 2) + stats::qnorm(power)
@@ -291,10 +303,25 @@ panel_power <- function(responses, effect, items = NULL, focal = NULL,
         focal_id <- if (!is.null(focal) && id %in% names(focal)) focal[[id]] else NULL
         if (!is.null(focal_id)) {
           if (!focal_id %in% names(tab)) {
-            abort(sprintf("`focal` for item '%s' ('%s') is not an observed response.",
-                          id, focal_id))
+            # A focal the pilot never elicited is informative for planning (a rare
+            # response still needs powering), as long as it is a real option for
+            # the item. Use a near-zero observed rate and let the arm-proportion
+            # clamp below keep the sample-size finite. Only a focal that is not an
+            # offered response at all is a usage error.
+            opts <- offered_opts(id)
+            if (!is.null(opts) && !(focal_id %in% opts)) {
+              abort(sprintf(
+                "`focal` for item '%s' ('%s') is not one of the item's options.",
+                id, focal_id))
+            }
+            cli::cli_warn(paste(
+              "Focal response {.val {focal_id}} for item {.val {id}} did not appear",
+              "in the pilot; using an observed rate of 0. Interpret the power",
+              "estimate cautiously."))
+            p <- 0
+          } else {
+            p <- as.numeric(tab[[focal_id]] / sum(tab))
           }
-          p <- as.numeric(tab[[focal_id]] / sum(tab))
         } else {
           if (n_opts > 2L) {
             cli::cli_warn(paste(
@@ -498,7 +525,7 @@ panel_report <- function(responses, ...) {
             nrow(panel), paste(names(attr(panel, "margins")), collapse = ", ")),
     sprintf("RESPONSES. %d total; %d parse failure(s).",
             nrow(responses), sum(ba$parse_failures)),
-    "ORDER EFFECTS (chi-squared p by item; small p = the order shown moved the answers):",
+    "FIRST-OPTION SENSITIVITY (chi-squared p by item; small p = which option was listed first moved the answers):",
     sprintf("  %-12s n = %3d  parse failures = %2d  order p = %s",
             ba$item_id, ba$n, ba$parse_failures,
             ifelse(is.na(ba$order_effect_p), "n/a",
