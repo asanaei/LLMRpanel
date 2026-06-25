@@ -23,8 +23,8 @@ The methodological stance is carried by the objects rather than the
 documentation. Every result prints an UNCALIBRATED banner until
 `panel_calibrate()` compares the panel's marginals to a human benchmark, item by
 item; partial benchmarks earn only a partial banner, and deviations are
-reported as found. `panel_bias_audit()` reads two artifacts off the responses
-themselves: nonresponse, and first-option sensitivity, whether the answer
+reported as found. `panel_bias_audit()` reports two properties of the responses
+themselves: nonresponse, and first-option sensitivity, meaning whether the answer
 depends on which option was listed first. For design work,
 `conjoint_instrument()` renders a conjoint design into forced-choice
 items, `amce()` estimates average marginal component effects with

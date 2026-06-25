@@ -18,9 +18,10 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = RUN_LIVE)
 
 This vignette is the package design document. The literature on silicon
 sampling is genuinely split. Persona conditioned models reproduce some
-human marginals strikingly well and fail others silently through over
+human marginals closely and miss others through over
 uniform variances, sanitized refusals, order effects, and sensitivity to
-persona phrasing. Both findings are real. The design conclusion is not
+persona phrasing. The package treats both results as methodological
+constraints. The design conclusion is not
 "never simulate" but "never simulate uncalibrated", and the package encodes
 that conclusion in its objects rather than in a warning paragraph. Every
 result prints an **UNCALIBRATED** banner until a benchmark comparison fills
@@ -238,10 +239,11 @@ panel_power(resp, effect = c(wk4 = 0.4, fund = 0.15))
 
 A panel study makes one model call per persona and item, so the number of
 calls scales with panel size and instrument length, multiplied again by any
-order randomization and replicates. Open weight prices change what can be
-piloted. Volume stops being the primary constraint, and a panel pinned to an
-open checkpoint becomes a durable instrument. The same personas can answer the
-same items later, which no deprecated API model can promise.
+order randomization and replicates. Lower per-call prices for open-weight models can make larger pilots feasible,
+though cost still depends on provider, model, and instrument length. A panel
+pinned to an open checkpoint is a more durable instrument: the same personas can
+answer the same items later, which is harder to guarantee with a hosted model
+that may be retired or changed.
 
 ## Relations
 
