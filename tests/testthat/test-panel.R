@@ -101,6 +101,89 @@ test_that("administer collects matched responses and Likert scores", {
   expect_true(all(grepl("\\|", stats::na.omit(lik$option_order))))
 })
 
+test_that("item presentation order is recorded per respondent", {
+  set.seed(110)
+  r <- panel_administer(fix_panel(20), fix_instr(), fix_cfg(),
+                        .runner = runner_by_party)
+  expect_true("item_position" %in% names(r))
+  # each persona saw every item exactly once, at positions 1..3
+  for (pid in unique(r$persona_id)) {
+    expect_setequal(r$item_position[r$persona_id == pid], 1:3)
+  }
+  # with item_order randomized, an item's position varies across personas
+  expect_gt(length(unique(r$item_position[r$item_id == "wk4"])), 1L)
+
+  # with randomization off, positions follow the instrument's canonical order
+  set.seed(110)
+  r2 <- panel_administer(fix_panel(5), fix_instr(randomize = character(0)),
+                         fix_cfg(), .runner = runner_by_party)
+  expect_equal(unique(r2$item_id[r2$item_position == 1]), "wk4")
+  expect_equal(unique(r2$item_id[r2$item_position == 2]), "plan")
+  expect_equal(unique(r2$item_id[r2$item_position == 3]), "why")
+})
+
+test_that("reserved column names abort early in all three constructors", {
+  expect_error(panel_from_margins(list(persona = c(a = .5, b = .5)), n = 2),
+               "reserved")
+  expect_error(panel_from_margins(list(persona_id = c(a = .5, b = .5)), n = 2),
+               "reserved")
+
+  src <- data.frame(persona = c("x", "y"), g = c("a", "b"),
+                    stringsAsFactors = FALSE)
+  expect_error(panel_from_data(src, n = 2), "reserved")
+  # deselecting the offending column is enough
+  expect_no_error(panel_from_data(src, n = 2, columns = "g"))
+
+  skip_if_not_installed("LLMR")
+  df <- data.frame(persona = c("p1", "p2"), age = c("30", "40"),
+                   stringsAsFactors = FALSE)
+  pf <- as_persona_frame(df, demographics = c("persona", "age"))
+  expect_error(panel_from_personas(pf, n = 2), "reserved")
+})
+
+test_that("conjoint_design keeps a single numeric level literal", {
+  set.seed(110)
+  d <- conjoint_design(list(price = c(10, 20), rooms = 3), n_tasks = 4)
+  expect_true(all(d$rooms == "3"))
+  expect_setequal(unique(d$price), c("10", "20"))
+})
+
+test_that(".match_option strips quotes and trailing punctuation on a second pass", {
+  opts <- c("disagree", "agree")
+  expect_equal(LLMRpanel:::.match_option("Agree.", opts), "agree")
+  expect_equal(LLMRpanel:::.match_option("\"agree\"", opts), "agree")
+  expect_equal(LLMRpanel:::.match_option("'Agree!'", opts), "agree")
+  expect_true(is.na(LLMRpanel:::.match_option("agreeable.", opts)))
+  # the exact first pass stays primary: options with their own punctuation
+  opts2 <- c("Yes.", "No.")
+  expect_equal(LLMRpanel:::.match_option("yes.", opts2), "Yes.")
+
+  # and the second pass reaches the administer path
+  dotted <- function(experiments, ...) {
+    experiments$response_text <- "Agree."
+    experiments
+  }
+  instr <- panel_instrument(
+    item_likert("q", "S.", scale = c("disagree", "neutral", "agree")),
+    randomize = character(0))
+  r <- panel_administer(fix_panel(4), instr, fix_cfg(), .runner = dotted)
+  expect_true(all(r$response == "agree"))
+  expect_true(all(r$score == 3))
+})
+
+test_that("panel_calibrate warns when benchmark levels mismatch the offered options", {
+  set.seed(110)
+  r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(),
+                        .runner = runner_by_party)
+  bench_typo <- data.frame(item_id = "plan", response = c("plan a", "Plan B"),
+                           share = c(.5, .5))
+  expect_warning(panel_calibrate(r, bench_typo, "typo bench"),
+                 "not among its offered options")
+  bench_ok <- data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
+                         share = c(.5, .5))
+  expect_no_warning(panel_calibrate(r, bench_ok, "clean bench"))
+})
+
 test_that("the banner walks UNCALIBRATED -> PARTIAL -> calibrated", {
   set.seed(110)
   r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(),

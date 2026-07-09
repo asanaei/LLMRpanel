@@ -12,7 +12,7 @@ without reading every help page. `vignette("design", package =
 ## Install
 
 ```r
-remotes::install_github("asanaei/LLMRpanel")   # depends on LLMR (>= 0.8.4)
+remotes::install_github("asanaei/LLMRpanel")   # depends on LLMR (>= 0.8.9)
 ```
 
 ## The stance (encoded in the objects, not just prose)
@@ -38,7 +38,8 @@ vignette_design(template, factors)
 conjoint_design(attributes, n_tasks = 5L, profiles_per_task = 2L)
 conjoint_instrument(design, question = "Which profile do you prefer?")
 
-panel_administer(panel, instr, config, .runner = NULL, ...)
+panel_administer(panel, instr, config, .runner = NULL, max_calls = 5000L,
+                 confirm = FALSE, price_table = NULL, tokens_per_call = NULL, ...)
 panel_calibrate(responses, benchmark, benchmark_name = "benchmark")
 panel_bias_audit(responses)
 amce(responses)                              # AMCEs, persona-clustered SEs

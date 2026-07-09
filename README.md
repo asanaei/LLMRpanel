@@ -10,9 +10,11 @@ LLMRpanel administers survey instruments to panels of language-model
 personas, for the design stage of human studies and for the study of model
 behavior itself. It is built on
 [LLMR](https://asanaei.github.io/LLMR/). Panels come from population
-margins the researcher supplies (`panel_from_margins()`) or from rows of
+margins the researcher supplies (`panel_from_margins()`), from rows of
 microdata (`panel_from_data()`, which preserves the joint distribution of
-attributes); the package ships no demographic data of its own. Instruments
+attributes), or from a ready-made persona frame such as
+`LLMR::anes_2024_personas` (`panel_from_personas()`, with each respondent's
+answers kept intact); the package ships no demographic data of its own. Instruments
 combine Likert, forced-choice, and open items, and factorial stimuli come
 from `vignette_design()` and `conjoint_design()`. `panel_administer()` has every
 persona answer every item, randomizes item and option order per respondent,

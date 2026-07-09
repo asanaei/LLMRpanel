@@ -60,6 +60,27 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
     abort("The benchmark covers none of the administered items.")
   }
 
+  # Benchmark response labels that are not among an item's offered options can
+  # never match a silicon response (matching is by exact string), so their
+  # silicon share is 0 by construction. That is a labeling problem, not a
+  # finding; say so instead of letting a case difference or a typo masquerade
+  # as total divergence.
+  instr <- attr(responses, "instrument")
+  if (!is.null(instr) && is.list(instr$items)) {
+    for (id in items_covered) {
+      it <- Find(function(x) identical(x$id, id), instr$items)
+      if (is.null(it) || is.null(it$options)) next
+      lev <- unique(as.character(benchmark$response[benchmark$item_id == id]))
+      bad <- setdiff(lev, it$options)
+      if (length(bad)) {
+        cli::cli_warn(paste(
+          "Benchmark response(s) {.val {bad}} for item {.val {id}} are not",
+          "among its offered options ({.val {it$options}}); their silicon",
+          "share is 0 by construction. Check case and spelling."))
+      }
+    }
+  }
+
   nonresp <- do.call(rbind, lapply(split(closed_all, closed_all$item_id),
     function(ri) tibble::tibble(item_id = ri$item_id[1],
                                 nonresponse_rate = mean(is.na(ri$response)))))

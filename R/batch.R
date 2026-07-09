@@ -63,7 +63,8 @@ panel_administer_batch <- function(panel, instr, config, state_path = NULL) {
 
   # Grid metadata for the id-keyed join at fetch time. The request_id matches the
   # LLMR custom_id ('llmr-%06d' in submit order); we never rely on row order.
-  meta <- exps[, c("request_id", "persona_id", "item_id", "type", "option_order")]
+  meta <- exps[, c("request_id", "persona_id", "item_id", "type",
+                   "item_position", "option_order")]
   job <- .panel_batch_job(llmr_job, meta, panel, instr)
   if (!is.null(state_path)) saveRDS(job, state_path)
   job
@@ -104,6 +105,9 @@ panel_administer_fetch <- function(job) {
   meta <- job$meta
   res <- merge(meta, fetched, by.x = "request_id", by.y = "custom_id",
                all.x = TRUE, sort = FALSE)
+  # merge() makes no row-order promise: restore the grid (submission) order so
+  # the batch result is row-identical to a synchronous run of the same grid.
+  res <- res[match(meta$request_id, res$request_id), , drop = FALSE]
   if (!("response_text" %in% names(res))) res$response_text <- NA_character_
   .panel_parse_responses(res, job$instrument, job$panel)
 }

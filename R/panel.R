@@ -9,6 +9,15 @@
 # respondent who answers in character), distinct from a focus-group discussant.
 .render_persona_text <- function(frame, row_i) {
   if (requireNamespace("LLMR", quietly = TRUE)) {
+    # Honor the frame's `answer_fields` restriction (set by as_persona_frame()):
+    # LLMR::llm_persona_split() treats every non-demographic column as a stated
+    # answer, so the frame is first cut down to the demographic fields plus the
+    # permitted answer columns. Analysis-only columns never reach the prompt.
+    af <- attr(frame, "answer_fields")
+    if (!is.null(af)) {
+      demo_f <- LLMR::llm_persona_demographic_fields(frame)
+      frame <- .restrict_persona_frame(frame, union(demo_f, af))
+    }
     parts <- LLMR::llm_persona_split(frame, row_i)
     demo <- parts$demographics; ans <- parts$responses
   } else {
@@ -29,7 +38,8 @@
 }
 
 # Restrict a persona_frame to a subset of columns, preserving the contract
-# attributes (dictionary / demographic_fields) for the kept columns.
+# attributes (dictionary / demographic_fields / answer_fields) for the kept
+# columns.
 .restrict_persona_frame <- function(frame, columns) {
   keep <- intersect(columns, names(frame))
   out <- frame[, keep, drop = FALSE]
@@ -37,8 +47,22 @@
   if (!is.null(dict)) attr(out, "dictionary") <- dict[dict$handle %in% keep, , drop = FALSE]
   df <- attr(frame, "demographic_fields")
   if (!is.null(df)) attr(out, "demographic_fields") <- intersect(df, keep)
+  af <- attr(frame, "answer_fields")
+  if (!is.null(af)) attr(out, "answer_fields") <- intersect(af, keep)
   class(out) <- unique(c("persona_frame", setdiff(class(frame), "persona_frame")))
   out
+}
+
+# The panel constructors create `persona_id` and `persona`; an input column of
+# either name would be silently overwritten downstream. Abort early instead.
+.check_reserved_names <- function(nms, what) {
+  bad <- intersect(c("persona_id", "persona"), nms)
+  if (length(bad)) {
+    abort(sprintf(
+      "%s must not use the reserved name(s) %s; the panel creates its own `persona_id` and `persona` columns. Rename the input.",
+      what, paste(sprintf("'%s'", bad), collapse = ", ")))
+  }
+  invisible(nms)
 }
 
 #' Draw a persona panel from population margins
@@ -77,6 +101,7 @@ panel_from_margins <- function(margins, n, persona_template = NULL) {
   if (is.null(names(margins)) || any(!nzchar(names(margins)))) {
     abort("`margins` must be a named list of named probability vectors.")
   }
+  .check_reserved_names(names(margins), "`margins`")
   cols <- lapply(margins, function(m) {
     if (is.null(names(m)) || any(!nzchar(names(m)))) {
       abort("Every margin must be a *named* probability vector.")
@@ -152,6 +177,7 @@ panel_from_data <- function(data, n, persona_template = NULL,
     }
   }
   if (!length(columns)) abort("`columns` must select at least one attribute column.")
+  .check_reserved_names(columns, "`columns`")
 
   idx <- sample(seq_len(nrow(data)), n, replace = TRUE, prob = prob)
   attrs <- as.data.frame(data)[idx, columns, drop = FALSE]
@@ -284,9 +310,16 @@ panel_from_personas <- function(data = NULL, rows = NULL, n = NULL,
     LLMR::llm_persona_demographic_fields(data) else
     intersect(c("age", "sex", "gender", "education", "race", "income"), names(data))
   demo_cols <- intersect(demo_cols, names(data))
+  .check_reserved_names(demo_cols, "The demographic columns of `data`")
+  if (!length(demo_cols)) {
+    cli::cli_inform(paste(
+      "No demographic columns were recognized in `data`; personas render from",
+      "their stated answers alone, and the panel cites no demographic margins."))
+  }
 
   chosen <- data[idx, , drop = FALSE]
-  attrs <- tibble::as_tibble(lapply(chosen[, demo_cols, drop = FALSE], as.character))
+  attrs <- tibble::as_tibble(lapply(chosen[, demo_cols, drop = FALSE], as.character),
+                             .rows = length(idx))
   out <- tibble::add_column(attrs, persona_id = seq_along(idx), .before = 1)
   # Render each chosen source row via the shared persona-answering renderer.
   out$persona <- vapply(idx, function(r) .render_persona_text(data, r), character(1))

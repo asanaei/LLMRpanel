@@ -41,6 +41,52 @@ test_that("as_persona_frame keeps id and weight columns out of the persona text"
   expect_false("wt" %in% af)
   expect_false("respondent_id" %in% af)
   expect_true("pid" %in% af)
+  # the exclusion holds at render time too, not only in the attribute
+  set.seed(110)
+  p <- panel_from_data(pf, n = 4)
+  expect_false(any(grepl("R1|R2|respondent_id|\\bwt\\b", p$persona)))
+})
+
+test_that("compound id/weight spellings are excluded; look-alike words are kept", {
+  df <- data.frame(caseid = "1", respid = "2", userid = "3", caseweight = "4",
+                   identity = "artist", weightlifting = "yes", pid = "D",
+                   stringsAsFactors = FALSE)
+  pf <- as_persona_frame(df, demographics = character(0))
+  af <- attr(pf, "answer_fields")
+  expect_false(any(c("caseid", "respid", "userid", "caseweight") %in% af))
+  expect_true(all(c("identity", "weightlifting", "pid") %in% af))
+})
+
+test_that("an `answers` restriction keeps excluded columns out of the persona text", {
+  df <- data.frame(age = c("30", "40"),
+                   pid = c("Democrat", "Republican"),
+                   propensity_bin = c("EXCLUDEME-LOW", "EXCLUDEME-HIGH"),
+                   stringsAsFactors = FALSE)
+  pf <- as_persona_frame(df, questions = c(pid = "Party identification"),
+                         demographics = "age", answers = "pid")
+  set.seed(110)
+  p <- panel_from_data(pf, n = 4)
+  expect_true(all(grepl("Party identification", p$persona)))
+  expect_false(any(grepl("EXCLUDEME", p$persona)))
+  # the analysis-only column still travels as panel data; it just stays silent
+  expect_true("propensity_bin" %in% names(p))
+
+  # the same restriction holds on the panel_from_personas path
+  p2 <- panel_from_personas(pf, n = 2)
+  expect_false(any(grepl("EXCLUDEME", p2$persona)))
+})
+
+test_that("panel_from_personas handles a frame with no recognized demographics", {
+  pf <- as_persona_frame(
+    data.frame(pid = c("Democrat", "Republican"), stringsAsFactors = FALSE),
+    demographics = character(0))
+  expect_message(p <- panel_from_personas(pf, n = 2),
+                 "No demographic columns")
+  expect_s3_class(p, "silicon_panel")
+  expect_equal(nrow(p), 2L)
+  expect_named(p, c("persona_id", "persona"))
+  expect_true(all(grepl("questionnaire", p$persona)))
+  expect_output(print(p), "silicon_panel")
 })
 
 # --- A3: weights + large-n warning -------------------------------------------
@@ -71,6 +117,35 @@ test_that("panel_administer gates a run above max_calls", {
   expect_s3_class(
     panel_administer(panel, instr, cfg, .runner = det, max_calls = 3, confirm = TRUE),
     "panel_responses")
+})
+
+test_that("the preflight computes a cost figure from caller-supplied numbers", {
+  panel <- panel_from_margins(list(g = c(a = .5, b = .5)), n = 5)
+  instr <- panel_instrument(item_likert("q", "S.", scale = c("No", "Yes")),
+                            randomize = character(0))
+  cfg <- LLMR::llm_config("groq", "fake-model")
+  det <- function(experiments, ...) { experiments$response_text <- "Yes"; experiments }
+  pt <- data.frame(model = "fake-model", input = 1, output = 2)
+
+  # a single total-token figure prices as a range (all-input to all-output):
+  # 5 calls x 1000 tokens = 0.005 mtok -> 0.005 to 0.01 in price_table units
+  expect_message(
+    panel_administer(panel, instr, cfg, .runner = det,
+                     price_table = pt, tokens_per_call = 1000),
+    "est. cost 0.005-0.01", fixed = TRUE)
+
+  # c(input, output) prices exactly: 5 x (600*1 + 400*2) / 1e6 = 0.007
+  expect_message(
+    panel_administer(panel, instr, cfg, .runner = det,
+                     price_table = pt, tokens_per_call = c(600, 400)),
+    "est. cost 0.007", fixed = TRUE)
+
+  # a model with no row in a multi-row table warns instead of fabricating
+  pt2 <- data.frame(model = c("m1", "m2"), input = c(1, 2), output = c(2, 4))
+  expect_warning(
+    panel_administer(panel, instr, cfg, .runner = det,
+                     price_table = pt2, tokens_per_call = 1000),
+    "no row in")
 })
 
 # --- B2: async batch path with an id-keyed join that survives shuffling ------
@@ -117,6 +192,12 @@ test_that("the batch path joins responses by id even when rows are shuffled", {
       ord <- order(resp$persona_id, resp$item_id)
       grid_ord <- order(grid$persona_id, grid$item_id)
       expect_equal(resp$response[ord], expected[grid_ord])
+      # and the fetched rows come back re-sorted to grid (submission) order,
+      # so the batch result is row-identical to a synchronous run of the grid
+      expect_equal(resp$persona_id, grid$persona_id)
+      expect_equal(resp$item_id, grid$item_id)
+      expect_equal(resp$item_position, grid$item_position)
+      expect_equal(resp$response, expected)
     })
 })
 

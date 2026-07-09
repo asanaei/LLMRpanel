@@ -71,11 +71,23 @@ utils::globalVariables(c("item_id", "response"))
   out
 }
 
-# Internal: normalize a reply to one of the offered options.
+# Internal: normalize a reply to one of the offered options. The first pass
+# matches the trimmed reply exactly, then case-insensitively. A second pass
+# strips surrounding quotation marks and trailing sentence punctuation
+# ("Agree.", '"agree"') and retries; it never runs when the first pass
+# succeeds, so options that themselves carry punctuation still match verbatim.
 .match_option <- function(x, options) {
   x <- trimws(as.character(x))
   if (x %in% options) return(x)
   hit <- match(tolower(x), tolower(options))
   if (!is.na(hit)) return(options[hit])
+  quo <- "[\"'`\u2018\u2019\u201c\u201d]+"
+  y <- gsub(paste0("^", quo, "|", quo, "$"), "", x)
+  y <- trimws(sub("[.!,]+$", "", y))
+  if (nzchar(y) && !identical(y, x)) {
+    if (y %in% options) return(y)
+    hit <- match(tolower(y), tolower(options))
+    if (!is.na(hit)) return(options[hit])
+  }
   NA_character_
 }

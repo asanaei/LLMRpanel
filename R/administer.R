@@ -24,12 +24,16 @@
 #'   cannot fire thousands of calls by accident. Default 5000.
 #' @param confirm Logical. Set `TRUE` to proceed past `max_calls`.
 #' @param price_table,tokens_per_call Optional. When both are supplied, the
-#'   preflight reports a cost figure from your own `price_table` (the
-#'   [LLMR::llm_usage()] format) and `tokens_per_call` assumption; the package
-#'   itself ships no prices and estimates no token counts.
+#'   preflight reports a cost figure computed from your own `price_table` (the
+#'   [LLMR::llm_usage()] format: columns `model`, `input`, `output`, prices per
+#'   million tokens) and your `tokens_per_call` assumption -- either one number
+#'   (total tokens per call, priced as a range from all-input to all-output) or
+#'   two, `c(input, output)` (priced exactly). The package itself ships no
+#'   prices and estimates no token counts.
 #' @param ... Passed to the runner (e.g. `tries`, `progress`).
 #' @return A `panel_responses` tibble: `persona_id`, `item_id`, `type`,
-#'   `option_order` (what this respondent saw, `|`-separated), `response`
+#'   `item_position` (the 1-based position at which this respondent saw the
+#'   item), `option_order` (what this respondent saw, `|`-separated), `response`
 #'   (matched option or `NA`; verbatim text for open items), `score`
 #'   (1-based scale position for Likert items). `score` is the position of the
 #'   chosen response in the item's canonical scale, the order in which the levels
@@ -71,7 +75,8 @@ panel_administer <- function(panel, instr, config, .runner = NULL,
   }
 
   exps <- .panel_build_grid(panel, instr, config)
-  .panel_preflight(nrow(exps), max_calls, confirm, price_table, tokens_per_call)
+  .panel_preflight(nrow(exps), max_calls, confirm, price_table, tokens_per_call,
+                   model = config$model)
 
   res <- runner(exps, ...)
   stopifnot(is.data.frame(res), "response_text" %in% names(res))
@@ -89,7 +94,8 @@ panel_administer <- function(panel, instr, config, .runner = NULL,
   for (p in seq_len(nrow(panel))) {
     items <- instr$items
     if ("item_order" %in% instr$randomize) items <- sample(items)
-    for (it in items) {
+    for (j in seq_along(items)) {
+      it <- items[[j]]
       opts <- it$options
       if (!is.null(opts) && "option_order" %in% instr$randomize) {
         opts <- sample(opts)
@@ -107,6 +113,7 @@ panel_administer <- function(panel, instr, config, .runner = NULL,
       rows[[length(rows) + 1L]] <- tibble::tibble(
         persona_id = panel$persona_id[p],
         item_id = it$id, type = it$type,
+        item_position = j,
         option_order = if (is.null(opts)) NA_character_
                        else paste(opts, collapse = "|"),
         config = list(config),
@@ -138,8 +145,8 @@ panel_administer <- function(panel, instr, config, .runner = NULL,
     as.numeric(match(res$response[i], it$options))
   }, numeric(1))
 
-  out <- res[, c("persona_id", "item_id", "type", "option_order",
-                 "response", "score")]
+  out <- res[, c("persona_id", "item_id", "type", "item_position",
+                 "option_order", "response", "score")]
   out <- tibble::as_tibble(out)
 
   # Keep the token/diagnostic columns (if the runner returned them) as a usage
@@ -168,21 +175,69 @@ panel_administer <- function(panel, instr, config, .runner = NULL,
 
 # Report the call count and, optionally, gate a large run. Returns invisibly.
 .panel_preflight <- function(n_calls, max_calls, confirm, price_table = NULL,
-                             tokens_per_call = NULL) {
+                             tokens_per_call = NULL, model = NULL) {
   msg <- sprintf("%d call(s)", n_calls)
-  if (!is.null(price_table) && !is.null(tokens_per_call)) {
+  priced <- !is.null(price_table) && !is.null(tokens_per_call)
+  if (priced) {
     # caller-supplied arithmetic only; the package invents no prices.
-    msg <- paste0(msg, sprintf(" (~%s tokens/call, cost from your price_table)",
-                               format(tokens_per_call)))
+    msg <- paste0(msg,
+                  .panel_cost_estimate(n_calls, price_table, tokens_per_call,
+                                       model))
   }
-  # Only announce for non-trivial runs; small pilots stay quiet.
-  if (n_calls >= 100L) cli::cli_inform("Administering: {msg}.")
+  # Announce non-trivial runs, and any run whose caller asked for the cost.
+  if (n_calls >= 100L || priced) cli::cli_inform("Administering: {msg}.")
   if (n_calls > max_calls && !isTRUE(confirm)) {
     abort(sprintf(paste0(
       "This run would make %d calls, above max_calls = %d. ",
       "Pass confirm = TRUE to proceed, or raise max_calls."), n_calls, max_calls))
   }
   invisible(n_calls)
+}
+
+# Cost arithmetic for the preflight, entirely from caller-supplied numbers.
+# `price_table` follows the LLMR::llm_usage() format (columns model, input,
+# output; prices per million tokens); `tokens_per_call` is either one number
+# (total tokens per call, priced as a range from all-input to all-output) or two
+# numbers c(input, output) per call (priced exactly). Returns a string to append
+# to the preflight message, or "" when the model has no row in the table.
+.panel_cost_estimate <- function(n_calls, price_table, tokens_per_call, model) {
+  if (!is.data.frame(price_table) ||
+      !all(c("model", "input", "output") %in% names(price_table))) {
+    abort(paste("`price_table` must be a data frame with columns model, input,",
+                "output (prices per million tokens), the LLMR::llm_usage() format."))
+  }
+  if (!is.numeric(tokens_per_call) || anyNA(tokens_per_call) ||
+      any(tokens_per_call < 0) || !(length(tokens_per_call) %in% 1:2)) {
+    abort(paste("`tokens_per_call` must be one nonnegative number (total tokens",
+                "per call) or two, c(input, output)."))
+  }
+  idx <- if (!is.null(model)) match(model, price_table$model) else NA_integer_
+  if (is.na(idx) && nrow(price_table) == 1L) idx <- 1L
+  if (is.na(idx)) {
+    cli::cli_warn(paste(
+      "Model {.val {model}} has no row in `price_table`;",
+      "no cost figure is reported."))
+    return("")
+  }
+  p_in <- as.numeric(price_table$input[idx])
+  p_out <- as.numeric(price_table$output[idx])
+  if (length(tokens_per_call) == 2L) {
+    tk <- tokens_per_call
+    if (!is.null(names(tk)) && all(c("input", "output") %in% names(tk))) {
+      tk <- tk[c("input", "output")]
+    }
+    cost <- n_calls * (tk[[1]] * p_in + tk[[2]] * p_out) / 1e6
+    sprintf(" (~%s tokens/call; est. cost %.4g by your price_table)",
+            format(sum(tk)), cost)
+  } else {
+    # one total-token figure: the input/output split is unknown, so report the
+    # range from all-input to all-output pricing.
+    total <- n_calls * tokens_per_call / 1e6
+    lo <- total * min(p_in, p_out)
+    hi <- total * max(p_in, p_out)
+    sprintf(" (~%s tokens/call; est. cost %.4g-%.4g by your price_table)",
+            format(tokens_per_call), lo, hi)
+  }
 }
 
 #' @export

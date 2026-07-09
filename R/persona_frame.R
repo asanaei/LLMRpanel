@@ -66,9 +66,16 @@ as_persona_frame <- function(data, questions = NULL, demographics = NULL,
 
   # answers: explicit, else every non-demographic column that is not obviously an
   # id or a weight (so analysis-only columns stay out of the persona text).
+  # Three spellings are caught: separated (case_id, sampling.weight), compound id
+  # suffixes on the usual survey stems (caseid, respid, userid), and compound
+  # weight suffixes (caseweight, pweights). Words that merely contain the
+  # letters, such as "identity" or "weightlifting", are kept.
   if (is.null(answers)) {
-    drop <- grepl("(^|[._ ])(id|ids|weight|weights|wt)([._ ]|$)", nms,
-                  ignore.case = TRUE)
+    drop <- grepl(paste0(
+      "(^|[._ ])(id|ids|weight|weights|wt)([._ ]|$)",
+      "|(case|resp|respondent|user|person|subject|panel|row)ids?$",
+      "|[a-z0-9]weights?$"),
+      nms, ignore.case = TRUE)
     answers <- setdiff(nms[!drop], demographics)
   }
   answers <- intersect(answers, nms)
