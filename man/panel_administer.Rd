@@ -35,15 +35,19 @@ cannot fire thousands of calls by accident. Default 5000.}
 \item{confirm}{Logical. Set \code{TRUE} to proceed past \code{max_calls}.}
 
 \item{price_table, tokens_per_call}{Optional. When both are supplied, the
-preflight reports a cost figure from your own \code{price_table} (the
-\code{\link[LLMR:llm_usage]{LLMR::llm_usage()}} format) and \code{tokens_per_call} assumption; the package
-itself ships no prices and estimates no token counts.}
+preflight reports a cost figure computed from your own \code{price_table} (the
+\code{\link[LLMR:llm_usage]{LLMR::llm_usage()}} format: columns \code{model}, \code{input}, \code{output}, prices per
+million tokens) and your \code{tokens_per_call} assumption -- either one number
+(total tokens per call, priced as a range from all-input to all-output) or
+two, \code{c(input, output)} (priced exactly). The package itself ships no
+prices and estimates no token counts.}
 
 \item{...}{Passed to the runner (e.g. \code{tries}, \code{progress}).}
 }
 \value{
 A \code{panel_responses} tibble: \code{persona_id}, \code{item_id}, \code{type},
-\code{option_order} (what this respondent saw, \code{|}-separated), \code{response}
+\code{item_position} (the 1-based position at which this respondent saw the
+item), \code{option_order} (what this respondent saw, \code{|}-separated), \code{response}
 (matched option or \code{NA}; verbatim text for open items), \code{score}
 (1-based scale position for Likert items). \code{score} is the position of the
 chosen response in the item's canonical scale, the order in which the levels
