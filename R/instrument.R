@@ -140,7 +140,11 @@ conjoint_design <- function(attributes, n_tasks = 5L, profiles_per_task = 2L) {
     abort("`attributes` must be a named list of level vectors.")
   }
   draw_profile <- function() {
-    vapply(attributes, function(lv) as.character(sample(lv, 1L)), character(1))
+    # index-based draw: sample(lv, 1L) on a single numeric level would trigger
+    # R's scalar-sampling rule and fabricate levels 1..lv.
+    vapply(attributes,
+           function(lv) as.character(lv[[sample.int(length(lv), 1L)]]),
+           character(1))
   }
   rows <- list()
   cramped <- FALSE
