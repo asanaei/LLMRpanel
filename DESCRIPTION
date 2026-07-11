@@ -7,14 +7,13 @@ Authors@R:
 Description: Quantitative silicon sampling that requires a recorded calibration
   comparison before any human-population claim, built on 'LLMR'. Persona panels
   are drawn from user-supplied population margins. Survey and experimental
-  instruments, including Likert items, forced choices, open responses, vignettes,
-  and conjoint tasks, are administered with item- and option-order randomization.
-  Every result object carries a calibration slot and prints an UNCALIBRATED
-  banner until benchmark comparison fills it. The package's stance is printed into
-  its objects: silicon panels are design-stage instruments for instrument
-  pretesting and power analysis, and instruments for measuring model behavior.
-  They do not estimate human population quantities unless calibration earns that
-  reading.
+  instruments, such as Likert items and conjoint tasks, are administered with
+  item- and option-order randomization. Every result object carries a calibration
+  slot and prints an UNCALIBRATED banner until benchmark comparison fills it. The
+  package's stance is printed into its objects: silicon panels are design-stage
+  tools for pretesting instruments and analyzing power, and for measuring model
+  behavior. They do not estimate human population quantities unless calibration
+  earns that reading.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
