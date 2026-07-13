@@ -49,6 +49,13 @@ API with `panel_administer_batch()` and `panel_administer_fetch()`.
 `panel_administer()` reports the call count before a run and stops above
 `max_calls` unless you pass `confirm = TRUE`.
 
+## Installation
+
+```r
+install.packages("LLMR")   # from CRAN
+remotes::install_github("asanaei/LLMRpanel")
+```
+
 ## Which package?
 
 | Package | Use it when | Not for |
