@@ -25,7 +25,8 @@ Imports:
     tibble,
     rlang,
     cli,
-    stats
+    stats,
+    utils
 Suggests:
     testthat (>= 3.0.0),
     ggplot2,

@@ -16,8 +16,10 @@ of starting the app.
 \description{
 A point-and-click front end to the panel workflow: draw a persona panel from
 population margins, administer a choice item, calibrate against a benchmark,
-and read the report with its mandatory calibration banner. The model here
-stands in for a survey respondent, not a measurement instrument.
+read the report with its mandatory calibration banner, and download the
+run's artifacts as a zip (the responses and, once run, the calibration table
+as CSV; the report as text). The model here stands in for a survey
+respondent, not a measurement instrument.
 }
 \details{
 The GUI is optional. It needs the suggested packages \code{shiny}, \code{bslib}, \code{DT},

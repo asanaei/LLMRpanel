@@ -9,8 +9,10 @@
 #'
 #' A point-and-click front end to the panel workflow: draw a persona panel from
 #' population margins, administer a choice item, calibrate against a benchmark,
-#' and read the report with its mandatory calibration banner. The model here
-#' stands in for a survey respondent, not a measurement instrument.
+#' read the report with its mandatory calibration banner, and download the
+#' run's artifacts as a zip (the responses and, once run, the calibration table
+#' as CSV; the report as text). The model here stands in for a survey
+#' respondent, not a measurement instrument.
 #'
 #' The GUI is optional. It needs the suggested packages `shiny`, `bslib`, `DT`,
 #' and `LLMR.shiny`; install them first. Keys are read from environment variables
@@ -60,6 +62,48 @@ run_panel_studio <- function(...) {
   }
 }
 
+# Bundle the run's artifacts into a zip for the download handler: the responses
+# as CSV, the panel_report() text (which carries the calibration banner), and,
+# when a calibration has been run, its comparison table as a second CSV. All
+# writes go through tempfile(); in demo mode the CSV gains a demo_notice column
+# and the report is prefixed, so deterministic offline output cannot pass as
+# model output once it leaves the app.
+.panel_gui_bundle_artifacts <- function(responses, file, demo = FALSE) {
+  stopifnot(inherits(responses, "panel_responses"))
+  file <- normalizePath(file, mustWork = FALSE)
+  out_dir <- tempfile("llmrpanel-artifacts-")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  old <- getwd()
+  on.exit({
+    setwd(old)
+    unlink(out_dir, recursive = TRUE, force = TRUE)
+  }, add = TRUE)
+  notice <- if (isTRUE(demo)) LLMR.shiny::demo_notice() else NULL
+
+  resp_df <- as.data.frame(tibble::as_tibble(responses))
+  if (!is.null(notice)) resp_df$demo_notice <- notice
+  utils::write.csv(resp_df, file.path(out_dir, "responses.csv"),
+                   row.names = FALSE)
+
+  report_text <- paste(unclass(panel_report(responses)), collapse = "\n")
+  if (!is.null(notice)) report_text <- paste(notice, report_text, sep = "\n\n")
+  writeLines(report_text, file.path(out_dir, "report.txt"))
+
+  files <- c("responses.csv", "report.txt")
+  cal <- attr(responses, "calibration")
+  if (!is.null(cal)) {
+    cal_df <- as.data.frame(cal$table)
+    if (!is.null(notice)) cal_df$demo_notice <- notice
+    utils::write.csv(cal_df, file.path(out_dir, "calibration.csv"),
+                     row.names = FALSE)
+    files <- c(files, "calibration.csv")
+  }
+
+  setwd(out_dir)
+  utils::zip(zipfile = file, files = files)
+  invisible(file)
+}
+
 .panel_gui_ui <- function() {
   bslib::page_navbar(
     title = "LLMRpanel",
@@ -87,6 +131,7 @@ run_panel_studio <- function(...) {
     panel       <- shiny::reactiveVal(NULL)
     responses   <- shiny::reactiveVal(NULL)
     calibration <- shiny::reactiveVal(NULL)
+    run_is_demo <- shiny::reactiveVal(NULL)
     run_error   <- shiny::reactiveVal(NULL)
 
     output$module_ui <- shiny::renderUI({
@@ -189,7 +234,7 @@ run_panel_studio <- function(...) {
         }, shared$provider())
       }
       if (!res$ok) { run_error(res$ui); return() }
-      panel(res$value); responses(NULL); calibration(NULL)
+      panel(res$value); responses(NULL); calibration(NULL); run_is_demo(NULL)
     })
 
     output$panel_status <- shiny::renderUI({
@@ -214,6 +259,7 @@ run_panel_studio <- function(...) {
       }, shared$provider())
       if (!res$ok) { run_error(res$ui); return() }
       responses(res$value); calibration(NULL)
+      run_is_demo(identical(shared$mode(), "demo"))
       shared$add_usage(list(calls = nrow(panel())))
     })
 
@@ -237,9 +283,20 @@ run_panel_studio <- function(...) {
         shiny::tags$h5("Responses"),
         DT::DTOutput(ns("responses_tbl")),
         shiny::tags$h5("Report (carries the calibration banner)"),
-        shiny::verbatimTextOutput(ns("report"))
+        shiny::verbatimTextOutput(ns("report")),
+        shiny::downloadButton(ns("download_bundle"), "Download artifacts"),
+        shiny::tags$p(class = "text-muted",
+          "A zip: responses.csv, report.txt, and calibration.csv once a benchmark has been run.")
       )
     })
+
+    output$download_bundle <- shiny::downloadHandler(
+      filename = function() paste0("llmrpanel_artifacts_", Sys.Date(), ".zip"),
+      content = function(file) {
+        r <- if (!is.null(calibration())) calibration() else responses()
+        .panel_gui_bundle_artifacts(r, file, demo = isTRUE(run_is_demo()))
+      }
+    )
 
     output$responses_tbl <- DT::renderDT({
       shiny::req(responses())
