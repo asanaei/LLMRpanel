@@ -29,6 +29,7 @@ reference:
 - title: Calibration and audits
   contents:
   - panel_calibrate
+  - plot.panel_responses
   - panel_bias_audit
   - panel_report
 - title: Design-stage estimation
