@@ -60,7 +60,7 @@
 NULL
 
 utils::globalVariables(c("item_id", "response", "share", "share_human",
-                         "share_silicon", "series"))
+                         "share_silicon", "response_key", "series"))
 
 # A NULL binding for base::requireNamespace so the test suite can substitute it
 # (testthat's documented route for mocking base functions: the namespace is

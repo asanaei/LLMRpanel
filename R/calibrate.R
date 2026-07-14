@@ -176,48 +176,97 @@ plot.panel_responses <- function(x, ...) {
   }
   tab <- as.data.frame(cal$table)
 
-  # Order levels by the instrument's canonical option order (Likert scales read
-  # low to high, not alphabetically); benchmark-only levels follow at the end.
+  wrap_text <- function(x, width) {
+    vapply(as.character(x), function(value) {
+      if (is.na(value) || !nzchar(value)) return(value)
+      words <- strsplit(value, "[[:space:]]+")[[1]]
+      words <- unlist(lapply(words, function(word) {
+        starts <- seq.int(1L, nchar(word), by = width)
+        substring(word, starts, pmin(starts + width - 1L, nchar(word)))
+      }), use.names = FALSE)
+      paste(strwrap(paste(words, collapse = " "), width = width),
+            collapse = "\n")
+    }, character(1), USE.NAMES = FALSE)
+  }
+
+  # The item-response key lets each facet retain its own canonical option order
+  # even when two items reuse the same labels in different orders.
   instr <- attr(x, "instrument")
-  lev <- unlist(lapply(split(tab$response, tab$item_id), function(rs) {
-    rs <- unique(as.character(rs))
-    canon <- character(0)
+  item_levels <- unique(as.character(tab$item_id))
+  if (!is.null(instr) && is.list(instr$items)) {
+    instr_ids <- vapply(instr$items, `[[`, "", "id")
+    item_levels <- c(intersect(instr_ids, item_levels),
+                     setdiff(item_levels, instr_ids))
+  }
+  tab$item_id <- factor(tab$item_id, levels = item_levels)
+  response_levels <- unlist(lapply(item_levels, function(id) {
+    rs <- unique(as.character(tab$response[as.character(tab$item_id) == id]))
+    canonical <- character(0)
     if (!is.null(instr) && is.list(instr$items)) {
-      for (it in instr$items) canon <- c(canon, it$options)
+      item <- Find(function(candidate) identical(candidate$id, id), instr$items)
+      if (!is.null(item)) canonical <- item$options
     }
-    c(intersect(canon, rs), setdiff(rs, canon))
+    ordered <- c(intersect(canonical, rs), setdiff(rs, canonical))
+    paste(id, ordered, sep = "\r")
   }), use.names = FALSE)
-  tab$response <- factor(tab$response, levels = unique(lev))
+  tab$response_key <- factor(
+    paste(as.character(tab$item_id), as.character(tab$response), sep = "\r"),
+    levels = response_levels)
+  label_rows <- !duplicated(tab$response_key)
+  response_labels <- stats::setNames(
+    wrap_text(tab$response[label_rows], width = 32),
+    as.character(tab$response_key[label_rows]))
 
   sil_lab <- "silicon"
-  hum_lab <- sprintf("human (%s)", cal$benchmark_name)
+  hum_lab <- "human"
   long <- rbind(
-    data.frame(item_id = tab$item_id, response = tab$response,
+    data.frame(item_id = tab$item_id, response_key = tab$response_key,
                share = tab$share_silicon, series = sil_lab),
-    data.frame(item_id = tab$item_id, response = tab$response,
+    data.frame(item_id = tab$item_id, response_key = tab$response_key,
                share = tab$share_human, series = hum_lab))
   long$series <- factor(long$series, levels = c(hum_lab, sil_lab))
+
+  benchmark_line <- wrap_text(
+    paste0("Benchmark: ", cal$benchmark_name), width = 76)
 
   ggplot2::ggplot(tab) +
     ggplot2::geom_segment(
       ggplot2::aes(x = share_human, xend = share_silicon,
-                   y = response, yend = response),
+                   y = response_key, yend = response_key),
       colour = "grey65", linewidth = 0.6) +
     ggplot2::geom_point(
-      data = long, ggplot2::aes(x = share, y = response, colour = series),
+      data = long,
+      ggplot2::aes(x = share, y = response_key, colour = series),
       size = 3) +
     ggplot2::scale_colour_manual(
       values = stats::setNames(c("grey25", "#2C7FB8"), c(hum_lab, sil_lab))) +
-    ggplot2::expand_limits(x = 0) +
-    ggplot2::facet_wrap(~item_id, ncol = 1, scales = "free_y") +
+    ggplot2::scale_y_discrete(labels = response_labels) +
+    ggplot2::expand_limits(x = c(0, 1)) +
+    ggplot2::facet_grid(
+      rows = ggplot2::vars(item_id), scales = "free_y", space = "free_y",
+      switch = "y",
+      labeller = ggplot2::labeller(
+        item_id = function(value) wrap_text(value, width = 36))) +
     ggplot2::labs(
       x = "share of valid responses", y = NULL, colour = NULL,
-      title = sprintf("Calibration against '%s'", cal$benchmark_name),
-      subtitle = sprintf(
-        "%d/%d item(s) covered; mean absolute deviation %.3f, max %.3f",
-        cal$items_covered, cal$items_total, cal$mad, cal$max_dev)) +
+      title = "Calibration: silicon and human response shares",
+      subtitle = paste(
+        benchmark_line,
+        sprintf("%d/%d item(s) covered; mean absolute deviation %.3f, max %.3f",
+                cal$items_covered, cal$items_total, cal$mad, cal$max_dev),
+        sep = "\n")) +
     ggplot2::theme_minimal(base_size = 12) +
-    ggplot2::theme(legend.position = "bottom")
+    ggplot2::theme(
+      legend.position = "bottom",
+      plot.title.position = "plot",
+      plot.subtitle = ggplot2::element_text(lineheight = 1.05),
+      axis.text = ggplot2::element_text(size = 11),
+      axis.text.y = ggplot2::element_text(lineheight = 1.05),
+      legend.text = ggplot2::element_text(size = 11),
+      strip.placement = "outside",
+      strip.text.y.left = ggplot2::element_text(
+        angle = 0, hjust = 0, size = 11),
+      plot.margin = ggplot2::margin(10, 14, 10, 10))
 }
 
 #' Audit silicon response style
