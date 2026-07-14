@@ -29,6 +29,8 @@ Do not present uncalibrated silicon marginals as population estimates.
 panel_from_margins(margins, n, persona_template = NULL)
 panel_from_data(data, n, persona_template = NULL, columns = NULL,
                 weights = NULL)             # joint draws from microdata rows
+panel_from_personas(data = NULL, rows = NULL, n = NULL, weights = NULL)
+as_persona_frame(data, questions = NULL, demographics = NULL, answers = NULL)
 item_likert(id, text, scale = c("strongly disagree", "disagree", "neutral",
                                 "agree", "strongly agree"))
 item_choice(id, text, options)
@@ -40,11 +42,16 @@ conjoint_instrument(design, question = "Which profile do you prefer?")
 
 panel_administer(panel, instr, config, .runner = NULL, max_calls = 5000L,
                  confirm = FALSE, price_table = NULL, tokens_per_call = NULL, ...)
+panel_administer_batch(panel, instr, config, state_path = NULL)
+panel_administer_fetch(job)
+panel_batch_status(job)
+panel_usage(responses, price_table = NULL)
 panel_calibrate(responses, benchmark, benchmark_name = "benchmark")
 panel_bias_audit(responses)
 amce(responses)                              # AMCEs, persona-clustered SEs
 panel_power(responses, effect, items = NULL, focal = NULL, alpha = 0.05, power = 0.80)
 panel_report(responses)
+run_panel_studio(...)
 
 LLMR::diagnostics(responses)
 LLMR::report(responses)

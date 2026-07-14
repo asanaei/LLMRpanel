@@ -68,6 +68,13 @@ Both packages share one workflow: you build a first object, extend it, run it
 draft `report()`. LLMRcontent can also seal the whole run into a replication
 archive.
 
+### From a silicon panel to a focus group
+
+`FocusGroup::create_agents_from_data()` accepts a `silicon_panel` as its
+persona frame, so the respondent descriptions used for survey administration
+can also define participants in a moderated group discussion.
+`LLMR::anes_2024_personas` is the persona substrate shared across the package
+family.
 
 ```r
 # remotes::install_github("asanaei/LLMRpanel")

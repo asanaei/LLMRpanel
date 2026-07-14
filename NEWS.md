@@ -11,9 +11,12 @@ Initial CRAN release.
   item and option order randomized per respondent and recorded in the
   responses (`item_position`, `option_order`).
 - Calibration-first stance: every result prints an UNCALIBRATED banner until
-  `panel_calibrate()` compares it to a human benchmark, coverage counted.
+  `panel_calibrate()` compares it to a human benchmark, with coverage counted
+  and `plot()` showing silicon and human shares by item and response level.
 - Bias audit (`panel_bias_audit()`), analytic two-arm power (`panel_power()`),
   and conjoint AMCEs (`conjoint_instrument()`, `amce()`) with
   respondent-clustered standard errors.
-- Optional Shiny GUI (`run_panel_studio()`); all GUI dependencies are in
-  Suggests and guarded.
+- Optional Shiny GUI (`run_panel_studio()`) with a downloadable archive
+  containing the responses table as CSV, the report as text, and the
+  calibration table as CSV when present; all GUI dependencies are in Suggests
+  and guarded.
