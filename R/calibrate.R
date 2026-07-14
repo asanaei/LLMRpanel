@@ -126,6 +126,149 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
   responses
 }
 
+#' Plot a calibration: silicon against human shares, item by item
+#'
+#' Draws the comparison [panel_calibrate()] recorded: for every covered item
+#' and response level, one point for the silicon share and one for the human
+#' benchmark share, joined by a segment whose length is the deviation. Levels
+#' follow the instrument's option order (so a Likert scale reads in scale
+#' order), items sit in separate panels, and the subtitle carries the coverage
+#' and the summary deviations. An uncalibrated result has nothing to show and
+#' is refused; that refusal is the plot-level form of the printed banner.
+#'
+#' @param x A [panel_administer()] result that [panel_calibrate()] has been run
+#'   on (the calibration travels in `attr(x, "calibration")`).
+#' @param ... Ignored; reserved for generic dispatch.
+#' @return A ggplot object.
+#' @examples
+#' if (requireNamespace("ggplot2", quietly = TRUE)) {
+#'   set.seed(110)
+#'   panel <- panel_from_margins(list(party = c(left = .5, right = .5)),
+#'                               n = 12,
+#'                               persona_template = "A voter who leans {party}.")
+#'   instr <- panel_instrument(
+#'     item_choice("plan", "Which plan do you prefer?", c("Plan A", "Plan B")))
+#'   cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
+#'   by_party <- function(experiments, ...) {
+#'     experiments$response_text <- ifelse(
+#'       grepl("leans left", vapply(experiments$messages, `[[`, "", "system")),
+#'       "Plan A", "Plan B")
+#'     experiments
+#'   }
+#'   r <- panel_administer(panel, instr, cfg, .runner = by_party)
+#'   bench <- data.frame(item_id = "plan",
+#'                       response = c("Plan A", "Plan B"),
+#'                       share = c(.55, .45))
+#'   plot(panel_calibrate(r, bench, "city survey 2025"))
+#' }
+#' @export
+plot.panel_responses <- function(x, ...) {
+  cal <- attr(x, "calibration")
+  if (is.null(cal)) {
+    abort(paste(
+      "Nothing to plot: this result is UNCALIBRATED (no benchmark comparison",
+      "has been run). Run panel_calibrate() first; the plot shows silicon",
+      "against human shares."))
+  }
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Plotting a calibration needs the ggplot2 package; install it with ",
+         "install.packages(\"ggplot2\").", call. = FALSE)
+  }
+  tab <- as.data.frame(cal$table)
+
+  wrap_text <- function(x, width) {
+    vapply(as.character(x), function(value) {
+      if (is.na(value) || !nzchar(value)) return(value)
+      words <- strsplit(value, "[[:space:]]+")[[1]]
+      words <- unlist(lapply(words, function(word) {
+        starts <- seq.int(1L, nchar(word), by = width)
+        substring(word, starts, pmin(starts + width - 1L, nchar(word)))
+      }), use.names = FALSE)
+      paste(strwrap(paste(words, collapse = " "), width = width),
+            collapse = "\n")
+    }, character(1), USE.NAMES = FALSE)
+  }
+
+  # The item-response key lets each facet retain its own canonical option order
+  # even when two items reuse the same labels in different orders.
+  instr <- attr(x, "instrument")
+  item_levels <- unique(as.character(tab$item_id))
+  if (!is.null(instr) && is.list(instr$items)) {
+    instr_ids <- vapply(instr$items, `[[`, "", "id")
+    item_levels <- c(intersect(instr_ids, item_levels),
+                     setdiff(item_levels, instr_ids))
+  }
+  tab$item_id <- factor(tab$item_id, levels = item_levels)
+  response_levels <- unlist(lapply(item_levels, function(id) {
+    rs <- unique(as.character(tab$response[as.character(tab$item_id) == id]))
+    canonical <- character(0)
+    if (!is.null(instr) && is.list(instr$items)) {
+      item <- Find(function(candidate) identical(candidate$id, id), instr$items)
+      if (!is.null(item)) canonical <- item$options
+    }
+    ordered <- c(intersect(canonical, rs), setdiff(rs, canonical))
+    paste(id, ordered, sep = "\r")
+  }), use.names = FALSE)
+  tab$response_key <- factor(
+    paste(as.character(tab$item_id), as.character(tab$response), sep = "\r"),
+    levels = response_levels)
+  label_rows <- !duplicated(tab$response_key)
+  response_labels <- stats::setNames(
+    wrap_text(tab$response[label_rows], width = 32),
+    as.character(tab$response_key[label_rows]))
+
+  sil_lab <- "silicon"
+  hum_lab <- "human"
+  long <- rbind(
+    data.frame(item_id = tab$item_id, response_key = tab$response_key,
+               share = tab$share_silicon, series = sil_lab),
+    data.frame(item_id = tab$item_id, response_key = tab$response_key,
+               share = tab$share_human, series = hum_lab))
+  long$series <- factor(long$series, levels = c(hum_lab, sil_lab))
+
+  benchmark_line <- wrap_text(
+    paste0("Benchmark: ", cal$benchmark_name), width = 76)
+
+  ggplot2::ggplot(tab) +
+    ggplot2::geom_segment(
+      ggplot2::aes(x = share_human, xend = share_silicon,
+                   y = response_key, yend = response_key),
+      colour = "grey65", linewidth = 0.6) +
+    ggplot2::geom_point(
+      data = long,
+      ggplot2::aes(x = share, y = response_key, colour = series),
+      size = 3) +
+    ggplot2::scale_colour_manual(
+      values = stats::setNames(c("grey25", "#2C7FB8"), c(hum_lab, sil_lab))) +
+    ggplot2::scale_y_discrete(labels = response_labels) +
+    ggplot2::expand_limits(x = c(0, 1)) +
+    ggplot2::facet_grid(
+      rows = ggplot2::vars(item_id), scales = "free_y", space = "free_y",
+      switch = "y",
+      labeller = ggplot2::labeller(
+        item_id = function(value) wrap_text(value, width = 36))) +
+    ggplot2::labs(
+      x = "share of valid responses", y = NULL, colour = NULL,
+      title = "Calibration: silicon and human response shares",
+      subtitle = paste(
+        benchmark_line,
+        sprintf("%d/%d item(s) covered; mean absolute deviation %.3f, max %.3f",
+                cal$items_covered, cal$items_total, cal$mad, cal$max_dev),
+        sep = "\n")) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(
+      legend.position = "bottom",
+      plot.title.position = "plot",
+      plot.subtitle = ggplot2::element_text(lineheight = 1.05),
+      axis.text = ggplot2::element_text(size = 11),
+      axis.text.y = ggplot2::element_text(lineheight = 1.05),
+      legend.text = ggplot2::element_text(size = 11),
+      strip.placement = "outside",
+      strip.text.y.left = ggplot2::element_text(
+        angle = 0, hjust = 0, size = 11),
+      plot.margin = ggplot2::margin(10, 14, 10, 10))
+}
+
 #' Audit silicon response style
 #'
 #' The artifacts silicon respondents are known for, measured from the
