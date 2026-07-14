@@ -2,6 +2,7 @@
 
 S3method(LLMR::diagnostics,panel_responses)
 S3method(LLMR::report,panel_responses)
+S3method(plot,panel_responses)
 S3method(print,panel_batch_job)
 S3method(print,panel_instrument)
 S3method(print,panel_report)

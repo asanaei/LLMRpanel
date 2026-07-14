@@ -59,7 +59,14 @@
 #'   as_tibble.silicon_panel as_tibble.panel_responses
 NULL
 
-utils::globalVariables(c("item_id", "response"))
+utils::globalVariables(c("item_id", "response", "share", "share_human",
+                         "share_silicon", "series"))
+
+# A NULL binding for base::requireNamespace so the test suite can substitute it
+# (testthat's documented route for mocking base functions: the namespace is
+# locked under R CMD check, so the binding must exist beforehand). At run time
+# R's function-call lookup skips the NULL and finds the base function.
+requireNamespace <- NULL
 
 # Internal: literal placeholder substitution ({var} -> value), brace-safe.
 .fill <- function(template, values) {

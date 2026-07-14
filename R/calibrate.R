@@ -126,6 +126,100 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
   responses
 }
 
+#' Plot a calibration: silicon against human shares, item by item
+#'
+#' Draws the comparison [panel_calibrate()] recorded: for every covered item
+#' and response level, one point for the silicon share and one for the human
+#' benchmark share, joined by a segment whose length is the deviation. Levels
+#' follow the instrument's option order (so a Likert scale reads in scale
+#' order), items sit in separate panels, and the subtitle carries the coverage
+#' and the summary deviations. An uncalibrated result has nothing to show and
+#' is refused; that refusal is the plot-level form of the printed banner.
+#'
+#' @param x A [panel_administer()] result that [panel_calibrate()] has been run
+#'   on (the calibration travels in `attr(x, "calibration")`).
+#' @param ... Ignored; reserved for generic dispatch.
+#' @return A ggplot object.
+#' @examples
+#' if (requireNamespace("ggplot2", quietly = TRUE)) {
+#'   set.seed(110)
+#'   panel <- panel_from_margins(list(party = c(left = .5, right = .5)),
+#'                               n = 12,
+#'                               persona_template = "A voter who leans {party}.")
+#'   instr <- panel_instrument(
+#'     item_choice("plan", "Which plan do you prefer?", c("Plan A", "Plan B")))
+#'   cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
+#'   by_party <- function(experiments, ...) {
+#'     experiments$response_text <- ifelse(
+#'       grepl("leans left", vapply(experiments$messages, `[[`, "", "system")),
+#'       "Plan A", "Plan B")
+#'     experiments
+#'   }
+#'   r <- panel_administer(panel, instr, cfg, .runner = by_party)
+#'   bench <- data.frame(item_id = "plan",
+#'                       response = c("Plan A", "Plan B"),
+#'                       share = c(.55, .45))
+#'   plot(panel_calibrate(r, bench, "city survey 2025"))
+#' }
+#' @export
+plot.panel_responses <- function(x, ...) {
+  cal <- attr(x, "calibration")
+  if (is.null(cal)) {
+    abort(paste(
+      "Nothing to plot: this result is UNCALIBRATED (no benchmark comparison",
+      "has been run). Run panel_calibrate() first; the plot shows silicon",
+      "against human shares."))
+  }
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Plotting a calibration needs the ggplot2 package; install it with ",
+         "install.packages(\"ggplot2\").", call. = FALSE)
+  }
+  tab <- as.data.frame(cal$table)
+
+  # Order levels by the instrument's canonical option order (Likert scales read
+  # low to high, not alphabetically); benchmark-only levels follow at the end.
+  instr <- attr(x, "instrument")
+  lev <- unlist(lapply(split(tab$response, tab$item_id), function(rs) {
+    rs <- unique(as.character(rs))
+    canon <- character(0)
+    if (!is.null(instr) && is.list(instr$items)) {
+      for (it in instr$items) canon <- c(canon, it$options)
+    }
+    c(intersect(canon, rs), setdiff(rs, canon))
+  }), use.names = FALSE)
+  tab$response <- factor(tab$response, levels = unique(lev))
+
+  sil_lab <- "silicon"
+  hum_lab <- sprintf("human (%s)", cal$benchmark_name)
+  long <- rbind(
+    data.frame(item_id = tab$item_id, response = tab$response,
+               share = tab$share_silicon, series = sil_lab),
+    data.frame(item_id = tab$item_id, response = tab$response,
+               share = tab$share_human, series = hum_lab))
+  long$series <- factor(long$series, levels = c(hum_lab, sil_lab))
+
+  ggplot2::ggplot(tab) +
+    ggplot2::geom_segment(
+      ggplot2::aes(x = share_human, xend = share_silicon,
+                   y = response, yend = response),
+      colour = "grey65", linewidth = 0.6) +
+    ggplot2::geom_point(
+      data = long, ggplot2::aes(x = share, y = response, colour = series),
+      size = 3) +
+    ggplot2::scale_colour_manual(
+      values = stats::setNames(c("grey25", "#2C7FB8"), c(hum_lab, sil_lab))) +
+    ggplot2::expand_limits(x = 0) +
+    ggplot2::facet_wrap(~item_id, ncol = 1, scales = "free_y") +
+    ggplot2::labs(
+      x = "share of valid responses", y = NULL, colour = NULL,
+      title = sprintf("Calibration against '%s'", cal$benchmark_name),
+      subtitle = sprintf(
+        "%d/%d item(s) covered; mean absolute deviation %.3f, max %.3f",
+        cal$items_covered, cal$items_total, cal$mad, cal$max_dev)) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(legend.position = "bottom")
+}
+
 #' Audit silicon response style
 #'
 #' The artifacts silicon respondents are known for, measured from the
