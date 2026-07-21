@@ -7,7 +7,7 @@
 panel_batch_status(job)
 }
 \arguments{
-\item{job}{A \code{\link[=panel_administer_batch]{panel_administer_batch()}} handle (or a \code{state_path} to one).}
+\item{job}{A \code{\link[=panel_batch_submit]{panel_batch_submit()}} handle (or a \code{state_path} to one).}
 }
 \value{
 The LLMR batch status (a one-row tibble).
@@ -16,5 +16,5 @@ The LLMR batch status (a one-row tibble).
 Check the status of a panel batch job
 }
 \seealso{
-\code{\link[=panel_administer_batch]{panel_administer_batch()}}, \code{\link[=panel_administer_fetch]{panel_administer_fetch()}}.
+\code{\link[=panel_batch_submit]{panel_batch_submit()}}, \code{\link[=panel_batch_fetch]{panel_batch_fetch()}}.
 }

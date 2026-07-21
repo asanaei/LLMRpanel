@@ -3,7 +3,7 @@
 # never runs it; you are billed only when you run it yourself. It exercises:
 #   item_likert() + item_choice() -> panel_instrument()
 #   panel_from_margins() (synthetic personas) -> panel_administer() (live)
-#   -> panel_report()
+#   -> LLMR::report()
 #
 # The survey items are neutral, authored for this demo (no copyrighted text).
 # Options are terse because panel_administer() exact-matches the model's reply
@@ -31,7 +31,7 @@ run_panel_demo <- function(provider = Sys.getenv("LLMR_DEMO_PROVIDER", "groq"),
 
   # Terse option strings: the model is asked to answer with exactly one of them,
   # and panel_administer() exact-matches the reply.
-  instr <- panel_instrument(
+  instrument <- panel_instrument(
     list(
       item_likert("libraries_value",
                   paste0("On a scale of 1 to 5, how strongly do you agree that public ",
@@ -61,8 +61,8 @@ run_panel_demo <- function(provider = Sys.getenv("LLMR_DEMO_PROVIDER", "groq"),
   cfg <- LLMR::llm_config(provider, model, temperature = 0, max_tokens = 160)
 
   # Live administration (the model answers each item as each persona).
-  responses <- panel_administer(panel, instr, cfg, .runner = .live_runner)
-  report <- panel_report(responses)
+  responses <- panel_administer(panel, instrument, cfg, .runner = .live_runner)
+  report <- LLMR::report(responses)
 
   list(responses = responses, report = report, panel = panel, config = cfg)
 }
@@ -71,6 +71,6 @@ if (sys.nframe() == 0L) {
   res <- run_panel_demo()
   cat("\n==== LLMRpanel responses ====\n")
   print(as.data.frame(res$responses)[, c("persona_id", "item_id", "response", "score")])
-  cat("\n==== panel_report ====\n")
+  cat("\n==== LLMR report ====\n")
   print(res$report)
 }

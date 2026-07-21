@@ -1,4 +1,4 @@
-# calibrate.R --------------------------------------------------------------------
+# benchmark.R --------------------------------------------------------------------
 # Benchmark comparisons, response diagnostics, and design calculations.
 
 #' Compare silicon responses with a human benchmark
@@ -14,25 +14,26 @@
 #'   to 1; a deviation beyond rounding draws a warning.
 #' @param benchmark_name How the source should be cited in reports (e.g.
 #'   `"ANES 2024 pilot"`).
-#' @return `responses` with the calibration attribute set:
+#' @return `responses` with the benchmark attribute set:
 #'   `$table` (per covered item and response: `share_silicon`,
-#'   `share_human`, `deviation`), `$nonresponse` (per item),
+#'   `share_human`, `deviation`), `$nonresponse` (nonresponse and execution
+#'   failure rates per item),
 #'   `$items_covered` / `$items_total`, `$mean_abs_dev`, `$max_dev`.
 #' @examples
 #' \dontrun{
 #' set.seed(110)
 #' panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 12)
-#' instr <- panel_instrument(item_choice("plan", "Which plan do you prefer?",
-#'                                       c("A", "B")))
+#' instrument <- panel_instrument(item_choice("plan", "Which plan do you prefer?",
+#'                                            c("A", "B")))
 #' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-#' r <- panel_administer(panel, instr, cfg)
+#' r <- panel_administer(panel, instrument, cfg)
 #' r
 #' bench <- data.frame(item_id = "plan", response = c("A", "B"),
 #'                     share = c(.5, .5))
-#' panel_calibrate(r, bench, "toy human study")
+#' panel_benchmark(r, bench, "toy human study")
 #' }
 #' @export
-panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") {
+panel_benchmark <- function(responses, benchmark, benchmark_name = "benchmark") {
   stopifnot(inherits(responses, "panel_responses"), is.data.frame(benchmark))
   need <- c("item_id", "response", "share")
   if (!all(need %in% names(benchmark))) {
@@ -45,11 +46,21 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
   }
 
   closed_all <- responses[responses$type != "open", ]
-  if (!nrow(closed_all)) abort("No closed-item responses to calibrate.")
+  if (!nrow(closed_all)) abort("No closed-item responses to benchmark.")
   items_total <- unique(closed_all$item_id)
   items_covered <- intersect(items_total, unique(benchmark$item_id))
   if (!length(items_covered)) {
     abort("The benchmark covers none of the administered items.")
+  }
+  covered <- closed_all[closed_all$item_id %in% items_covered, ]
+  successful <- !(covered$success %in% FALSE)
+  successful_items <- unique(covered$item_id[successful])
+  failed_items <- setdiff(items_covered, successful_items)
+  if (length(failed_items)) {
+    abort(paste0(
+      "Cannot compare item(s) ", paste(sprintf("'%s'", failed_items),
+                                      collapse = ", "),
+      ": every execution failed."))
   }
 
   # Benchmark response labels that are not among an item's offered options can
@@ -57,10 +68,10 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
   # silicon share is 0 by construction. That is a labeling problem, not a
   # finding; say so instead of letting a case difference or a typo masquerade
   # as total divergence.
-  instr <- attr(responses, "instrument")
-  if (!is.null(instr) && is.list(instr$items)) {
+  instrument <- attr(responses, "instrument")
+  if (!is.null(instrument) && is.list(instrument$items)) {
     for (id in items_covered) {
-      it <- Find(function(x) identical(x$id, id), instr$items)
+      it <- Find(function(x) identical(x$id, id), instrument$items)
       if (is.null(it) || is.null(it$options)) next
       lev <- unique(as.character(benchmark$response[benchmark$item_id == id]))
       bad <- setdiff(lev, it$options)
@@ -74,10 +85,18 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
   }
 
   nonresp <- do.call(rbind, lapply(split(closed_all, closed_all$item_id),
-    function(ri) tibble::tibble(item_id = ri$item_id[1],
-                                nonresponse_rate = mean(is.na(ri$response)))))
+    function(ri) {
+      failed <- ri$success %in% FALSE
+      tibble::tibble(
+        item_id = ri$item_id[1],
+        execution_failures = sum(failed),
+        execution_failure_rate = mean(failed),
+        nonresponse_rate = if (all(failed)) NA_real_ else
+          mean(is.na(ri$response[!failed])))
+    }))
 
-  closed <- closed_all[!is.na(closed_all$response) &
+  closed <- closed_all[!(closed_all$success %in% FALSE) &
+                         !is.na(closed_all$response) &
                          closed_all$item_id %in% items_covered, ]
   if (nrow(closed)) {
     sil <- stats::aggregate(persona_id ~ item_id + response, data = closed,
@@ -89,7 +108,7 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
     sil$share_silicon <- sil$n / sil$n_total
   } else {
     # Every covered closed item was all parse failures: there are no valid
-    # silicon responses to tabulate. Keep the calibration artifact rather than
+    # silicon responses to tabulate. Keep the benchmark artifact rather than
     # erroring -- the benchmark merge below fills share_silicon = 0 and the
     # nonresponse table records the full nonresponse.
     sil <- data.frame(item_id = character(0), response = character(0),
@@ -106,7 +125,7 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
   cmp$share_human[is.na(cmp$share_human)] <- 0
   cmp$deviation <- cmp$share_silicon - cmp$share_human
 
-  attr(responses, "calibration") <- list(
+  attr(responses, "benchmark") <- list(
     benchmark_name = benchmark_name,
     table = tibble::as_tibble(cmp),
     nonresponse = tibble::as_tibble(nonresp),
@@ -120,14 +139,14 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
 
 #' Plot a benchmark comparison
 #'
-#' Plots the comparison recorded by [panel_calibrate()]. Each covered response
+#' Plots the comparison recorded by [panel_benchmark()]. Each covered response
 #' level has one point for the panel share and one for the benchmark share,
 #' joined by a segment. Response levels follow the instrument's option order,
-#' and items appear in separate panels. The method requires a calibration
+#' and items appear in separate panels. The method requires a benchmark
 #' record.
 #'
-#' @param x A [panel_administer()] result that [panel_calibrate()] has been run
-#'   on (the calibration travels in `attr(x, "calibration")`).
+#' @param x A [panel_administer()] result that [panel_benchmark()] has been run
+#'   on (the comparison travels in `attr(x, "benchmark")`).
 #' @param ... Ignored; reserved for generic dispatch.
 #' @return A ggplot object.
 #' @examples
@@ -136,7 +155,7 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
 #'   panel <- panel_from_margins(list(party = c(left = .5, right = .5)),
 #'                               n = 12,
 #'                               persona_template = "A voter who leans {party}.")
-#'   instr <- panel_instrument(
+#'   instrument <- panel_instrument(
 #'     item_choice("plan", "Which plan do you prefer?", c("Plan A", "Plan B")))
 #'   cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
 #'   by_party <- function(experiments, ...) {
@@ -145,26 +164,26 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
 #'       "Plan A", "Plan B")
 #'     experiments
 #'   }
-#'   r <- panel_administer(panel, instr, cfg, .runner = by_party)
+#'   r <- panel_administer(panel, instrument, cfg, .runner = by_party)
 #'   bench <- data.frame(item_id = "plan",
 #'                       response = c("Plan A", "Plan B"),
 #'                       share = c(.55, .45))
-#'   plot(panel_calibrate(r, bench, "city survey 2025"))
+#'   plot(panel_benchmark(r, bench, "city survey 2025"))
 #' }
 #' @export
 plot.panel_responses <- function(x, ...) {
-  cal <- attr(x, "calibration")
-  if (is.null(cal)) {
+  benchmark_record <- attr(x, "benchmark")
+  if (is.null(benchmark_record)) {
     abort(paste(
-      "Nothing to plot: this result is UNCALIBRATED (no benchmark comparison",
-      "has been run). Run panel_calibrate() first; the plot shows silicon",
+      "Nothing to plot: this result is NOT BENCHMARKED (no benchmark comparison",
+      "has been run). Run panel_benchmark() first; the plot shows silicon",
       "against human shares."))
   }
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("Plotting a calibration needs the ggplot2 package; install it with ",
+    stop("Plotting a benchmark comparison needs the ggplot2 package; install it with ",
          "install.packages(\"ggplot2\").", call. = FALSE)
   }
-  tab <- as.data.frame(cal$table)
+  tab <- as.data.frame(benchmark_record$table)
 
   wrap_text <- function(x, width) {
     vapply(as.character(x), function(value) {
@@ -181,19 +200,20 @@ plot.panel_responses <- function(x, ...) {
 
   # The item-response key lets each facet retain its own canonical option order
   # even when two items reuse the same labels in different orders.
-  instr <- attr(x, "instrument")
+  instrument <- attr(x, "instrument")
   item_levels <- unique(as.character(tab$item_id))
-  if (!is.null(instr) && is.list(instr$items)) {
-    instr_ids <- vapply(instr$items, `[[`, "", "id")
-    item_levels <- c(intersect(instr_ids, item_levels),
-                     setdiff(item_levels, instr_ids))
+  if (!is.null(instrument) && is.list(instrument$items)) {
+    instrument_ids <- vapply(instrument$items, `[[`, "", "id")
+    item_levels <- c(intersect(instrument_ids, item_levels),
+                     setdiff(item_levels, instrument_ids))
   }
   tab$item_id <- factor(tab$item_id, levels = item_levels)
   response_levels <- unlist(lapply(item_levels, function(id) {
     rs <- unique(as.character(tab$response[as.character(tab$item_id) == id]))
     canonical <- character(0)
-    if (!is.null(instr) && is.list(instr$items)) {
-      item <- Find(function(candidate) identical(candidate$id, id), instr$items)
+    if (!is.null(instrument) && is.list(instrument$items)) {
+      item <- Find(function(candidate) identical(candidate$id, id),
+                   instrument$items)
       if (!is.null(item)) canonical <- item$options
     }
     ordered <- c(intersect(canonical, rs), setdiff(rs, canonical))
@@ -217,7 +237,7 @@ plot.panel_responses <- function(x, ...) {
   long$series <- factor(long$series, levels = c(hum_lab, sil_lab))
 
   benchmark_line <- wrap_text(
-    paste0("Benchmark: ", cal$benchmark_name), width = 76)
+    paste0("Benchmark: ", benchmark_record$benchmark_name), width = 76)
 
   ggplot2::ggplot(tab) +
     ggplot2::geom_segment(
@@ -239,12 +259,12 @@ plot.panel_responses <- function(x, ...) {
         item_id = function(value) wrap_text(value, width = 36))) +
     ggplot2::labs(
       x = "share of valid responses", y = NULL, colour = NULL,
-      title = "Calibration: silicon and human response shares",
+      title = "Benchmark: silicon and human response shares",
       subtitle = paste(
         benchmark_line,
         sprintf("%d/%d item(s) covered; mean absolute deviation %.3f, max %.3f",
-                cal$items_covered, cal$items_total,
-                cal$mean_abs_dev, cal$max_dev),
+                benchmark_record$items_covered, benchmark_record$items_total,
+                benchmark_record$mean_abs_dev, benchmark_record$max_dev),
         sep = "\n")) +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(
@@ -260,23 +280,25 @@ plot.panel_responses <- function(x, ...) {
       plot.margin = ggplot2::margin(10, 14, 10, 10))
 }
 
-#' Summarize parse failures and first-option sensitivity
+#' Summarize execution failures, parse failures, and first-option sensitivity
 #'
-#' Counts parse failures by item. For closed items administered with randomized
-#' option order, it also applies a chi-squared test to the chosen response and
-#' the option shown first. The test does not use the full option permutation.
+#' Counts execution and parse failures by item. For closed items administered
+#' with randomized option order, it also applies a chi-squared test to the
+#' chosen response and the option shown first. The test does not use the full
+#' option permutation.
 #'
 #' @param responses A [panel_administer()] result.
-#' @return A tibble: `item_id`, `n`, `parse_failures`, `order_effect_p`
-#'   (the first-option chi-squared p-value; NA when order was not randomized or
-#'   cells are too sparse).
+#' @return A tibble: `item_id`, `n`, `parse_failures`, `execution_failures`,
+#'   `order_effect_p` (the first-option chi-squared p-value; NA when order was
+#'   not randomized or cells are too sparse).
 #' @export
 panel_bias_audit <- function(responses) {
   stopifnot(inherits(responses, "panel_responses"))
   items <- split(responses, responses$item_id)
   out <- lapply(items, function(ri) {
     closed <- ri$type[1] != "open"
-    pf <- if (closed) sum(is.na(ri$response)) else 0L
+    failed <- ri$success %in% FALSE
+    pf <- if (closed) sum(is.na(ri$response) & !failed) else 0L
     p <- NA_real_
     if (closed && length(unique(stats::na.omit(ri$option_order))) > 1L) {
       first_seen <- vapply(strsplit(ri$option_order, "|", fixed = TRUE),
@@ -292,7 +314,8 @@ panel_bias_audit <- function(responses) {
       }
     }
     tibble::tibble(item_id = ri$item_id[1], n = nrow(ri),
-                   parse_failures = pf, order_effect_p = p)
+                   parse_failures = pf, execution_failures = sum(failed),
+                   order_effect_p = p)
   })
   tibble::as_tibble(do.call(rbind, out))
 }
@@ -300,19 +323,23 @@ panel_bias_audit <- function(responses) {
 #' @exportS3Method LLMR::diagnostics
 diagnostics.panel_responses <- function(x, ...) {
   out <- panel_bias_audit(x)
-  cal <- attr(x, "calibration")
-  if (is.null(cal)) {
-    state <- "UNCALIBRATED"
+  benchmark <- attr(x, "benchmark")
+  if (is.null(benchmark)) {
+    state <- "NOT BENCHMARKED"
     items_covered <- 0L
     items_total <- length(unique(x$item_id[x$type != "open"]))
     mean_abs_dev <- NA_real_
   } else {
-    state <- if (cal$items_covered < cal$items_total) "PARTIAL" else "CALIBRATED"
-    items_covered <- cal$items_covered
-    items_total <- cal$items_total
-    mean_abs_dev <- cal$mean_abs_dev %||% NA_real_
+    state <- if (benchmark$items_covered < benchmark$items_total) {
+      "PARTIALLY BENCHMARKED"
+    } else {
+      "BENCHMARKED"
+    }
+    items_covered <- benchmark$items_covered
+    items_total <- benchmark$items_total
+    mean_abs_dev <- benchmark$mean_abs_dev %||% NA_real_
   }
-  out$calibration_state <- state
+  out$benchmark_state <- state
   out$items_covered <- items_covered
   out$items_total <- items_total
   out$mean_abs_dev <- mean_abs_dev
@@ -348,12 +375,12 @@ diagnostics.panel_responses <- function(x, ...) {
 #' \dontrun{
 #' set.seed(110)
 #' panel <- panel_from_margins(list(group = c(A = .5, B = .5)), n = 8)
-#' instr <- panel_instrument(list(
+#' instrument <- panel_instrument(list(
 #'   item_likert("lik", "Rate the proposal.", scale = c("low", "mid", "high")),
 #'   item_choice("pick", "Pick one.", c("A", "B"))),
 #'   randomize = character(0))
 #' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-#' r <- panel_administer(panel, instr, cfg)
+#' r <- panel_administer(panel, instrument, cfg)
 #' panel_power(r, effect = c(lik = 0.5, pick = 0.2))
 #' }
 #' @export
@@ -398,10 +425,10 @@ panel_power <- function(responses, effect, items = NULL, focal = NULL,
   # well-defined estimand. Read it from the instrument when present (a pilot may
   # not exercise every option, so the observed table can undercount); fall back
   # to the observed options only when no instrument is attached.
-  instr <- attr(responses, "instrument")
+  instrument <- attr(responses, "instrument")
   offered_opts <- function(id) {
-    if (is.null(instr) || is.null(instr$items)) return(NULL)
-    it <- Find(function(x) identical(x$id, id), instr$items)
+    if (is.null(instrument) || is.null(instrument$items)) return(NULL)
+    it <- Find(function(x) identical(x$id, id), instrument$items)
     if (is.null(it)) return(NULL)
     it$options
   }
@@ -417,6 +444,17 @@ panel_power <- function(responses, effect, items = NULL, focal = NULL,
     ri <- responses[responses$item_id == id, , drop = FALSE]
     type <- as.character(ri$type[1])
     if (identical(type, "open")) next
+    failed <- ri$success %in% FALSE
+    if (all(failed)) {
+      abort(sprintf(
+        "panel_power() cannot use item '%s': every execution failed.", id))
+    }
+    if (any(failed)) {
+      cli::cli_warn(paste(
+        "Item {.val {id}} has {sum(failed)} execution failure(s);",
+        "the power calculation uses successful executions only."))
+      ri <- ri[!failed, , drop = FALSE]
+    }
     eff <- effect_for(id)
     if (!is.finite(eff) || eff <= 0) {
       abort("`effect` must be positive for every analyzed item.")
@@ -513,13 +551,13 @@ panel_power <- function(responses, effect, items = NULL, focal = NULL,
 #'
 #' @param responses A [panel_administer()] result whose instrument came from
 #'   [conjoint_instrument()].
-#' @return A tibble: `attribute`, `level`, `estimate`, `std_error`,
+#' @return A `conjoint_amce` tibble: `attribute`, `level`, `estimate`, `std_error`,
 #'   `ci_lo`, `ci_hi`. Baseline levels (the first level present, in the
 #'   design's order) appear with estimate 0 and `std_error = NA`, so the
-#'   table feeds the familiar conjoint plot directly. Attributes
-#'   `n_profiles`, `n_respondents`, and `n_dropped_na` record the profile
-#'   rows used, the respondents administered, and missing task responses
-#'   dropped.
+#'   table feeds the familiar conjoint plot directly. The ordinary columns
+#'   `n_profiles`, `n_respondents`, `n_dropped_na`, and
+#'   `n_execution_failures` record the profile rows used, the respondents
+#'   administered, missing task responses dropped, and failed executions.
 #' @examples
 #' \dontrun{
 #' set.seed(110)
@@ -527,22 +565,22 @@ panel_power <- function(responses, effect, items = NULL, focal = NULL,
 #' design <- conjoint_design(
 #'   list(color = c("blue", "red"), cost = c("low", "high")),
 #'   n_tasks = 6)
-#' instr <- conjoint_instrument(design)
+#' instrument <- conjoint_instrument(design)
 #' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-#' r <- panel_administer(panel, instr, cfg)
-#' amce(r)
+#' r <- panel_administer(panel, instrument, cfg)
+#' conjoint_amce(r)
 #' }
 #' @references Hainmueller, Jens, Daniel J. Hopkins, and Teppei Yamamoto
 #'   (2014). "Causal Inference in Conjoint Analysis: Understanding
 #'   Multidimensional Choices via Stated Preference Experiments."
 #'   \emph{Political Analysis} 22(1), 1-30.
 #' @export
-amce <- function(responses) {
+conjoint_amce <- function(responses) {
   stopifnot(inherits(responses, "panel_responses"))
-  instr <- attr(responses, "instrument")
-  design <- instr$conjoint
+  instrument <- attr(responses, "instrument")
+  design <- instrument$conjoint
   if (is.null(design)) {
-    abort("amce() needs an administration of a conjoint_instrument().")
+    abort("conjoint_amce() needs an administration of a conjoint_instrument().")
   }
   attrs <- attr(design, "attributes")
   if (is.null(attrs) || !is.list(attrs) ||
@@ -558,8 +596,16 @@ amce <- function(responses) {
   tasks <- sort(unique(design$task))
   task_ids <- paste0("task_", tasks)
   r_all <- responses[responses$item_id %in% task_ids, , drop = FALSE]
-  n_dropped_na <- sum(is.na(r_all$response))
-  r <- r_all[!is.na(r_all$response), , drop = FALSE]
+  failed <- r_all$success %in% FALSE
+  n_execution_failures <- sum(failed)
+  if (all(failed)) abort("conjoint_amce() cannot run: every execution failed.")
+  if (n_execution_failures) {
+    cli::cli_warn(paste(
+      "The conjoint administration has {n_execution_failures} execution",
+      "failure(s); the estimate uses successful executions only."))
+  }
+  n_dropped_na <- sum(is.na(r_all$response) & !failed)
+  r <- r_all[!failed & !is.na(r_all$response), , drop = FALSE]
   if (!nrow(r)) abort("No non-missing conjoint responses to estimate AMCEs.")
 
   rows <- list()
@@ -577,7 +623,7 @@ amce <- function(responses) {
   clusters <- unique(long$persona_id)
   G <- length(clusters)
   if (G < 2L) {
-    abort("amce() needs at least two personas for clustered standard errors.")
+    abort("conjoint_amce() needs at least two personas for clustered standard errors.")
   }
 
   level_list <- stats::setNames(lapply(attr_names, function(a) {
@@ -634,48 +680,77 @@ amce <- function(responses) {
         ci_lo = est - crit * serr, ci_hi = est + crit * serr)
     }
   }
-  out <- do.call(rbind, out_rows)
-  attr(out, "n_profiles") <- nrow(long)
-  attr(out, "n_respondents") <- length(unique(r_all$persona_id))
-  attr(out, "n_dropped_na") <- n_dropped_na
+  out <- tibble::as_tibble(do.call(rbind, out_rows))
+  out$n_profiles <- as.integer(nrow(long))
+  out$n_respondents <- as.integer(length(unique(r_all$persona_id)))
+  out$n_dropped_na <- as.integer(n_dropped_na)
+  out$n_execution_failures <- as.integer(n_execution_failures)
+  class(out) <- c("conjoint_amce", class(out))
   out
 }
 
-#' Create a panel report
-#'
-#' Returns lines describing panel composition, response and parse counts,
-#' first-option sensitivity, and benchmark comparison status.
-#'
-#' @param responses A [panel_administer()] result.
-#' @param ... Ignored; reserved for generic dispatch.
-#' @return Character lines of class `panel_report`, with a print method.
 #' @export
+print.conjoint_amce <- function(x, ...) {
+  cat(sprintf(paste0(
+    "<conjoint_amce | %d profile row(s) | %d respondent(s) | ",
+    "%d missing, %d execution failure(s)>\n"),
+    x$n_profiles[1], x$n_respondents[1], x$n_dropped_na[1],
+    x$n_execution_failures[1]))
+  estimates <- x
+  class(estimates) <- setdiff(class(estimates), "conjoint_amce")
+  print(estimates[, c("attribute", "level", "estimate", "std_error",
+                      "ci_lo", "ci_hi")], ...)
+  invisible(x)
+}
+
+#' @export
+`[.conjoint_amce` <- function(x, i, j, drop = FALSE, ...) {
+  out <- NextMethod("[")
+  class(out) <- setdiff(class(out), "conjoint_amce")
+  out
+}
+
+# Internal constructor for the LLMR::report() method.
 panel_report <- function(responses, ...) {
   stopifnot(inherits(responses, "panel_responses"))
   panel <- attr(responses, "panel")
-  cal <- attr(responses, "calibration")
+  benchmark <- attr(responses, "benchmark")
   ba <- panel_bias_audit(responses)
+  source <- switch(
+    attr(panel, "source") %||% "unknown",
+    margins = "drawn from supplied margins",
+    microdata = "sampled from microdata rows",
+    personas = "built from supplied personas",
+    "built from source data")
+  distribution_fields <- names(attr(panel, "margins"))
+  distribution_text <- if (length(distribution_fields)) {
+    paste(distribution_fields, collapse = ", ")
+  } else {
+    "no recognized demographic fields"
+  }
   lines <- c(
-    if (is.null(cal))
-      "UNCALIBRATED. No benchmark comparison was run; readings below describe the model under these personas, not any human population."
-    else if (cal$items_covered < cal$items_total)
-      sprintf("PARTIALLY CALIBRATED (%d/%d items). Against '%s': mean absolute deviation %.3f on covered items; uncovered items remain design-stage readings. Nonresponse rates in attr(x,'calibration')$nonresponse.",
-              cal$items_covered, cal$items_total, cal$benchmark_name,
-              cal$mean_abs_dev)
+    if (is.null(benchmark))
+      "NOT BENCHMARKED. No benchmark comparison was run; readings below describe the model under these personas, not any human population."
+    else if (benchmark$items_covered < benchmark$items_total)
+      sprintf("PARTIALLY BENCHMARKED (%d/%d). Against '%s': mean absolute deviation %.3f on covered items; uncovered items remain design-stage readings. Nonresponse rates in attr(x,'benchmark')$nonresponse.",
+              benchmark$items_covered, benchmark$items_total,
+              benchmark$benchmark_name, benchmark$mean_abs_dev)
     else
-      sprintf("CALIBRATION (%d/%d items). Against '%s': mean absolute deviation %.3f, max %.3f (full table in attr(x,'calibration')$table; nonresponse in $nonresponse).",
-              cal$items_covered, cal$items_total, cal$benchmark_name,
-              cal$mean_abs_dev, cal$max_dev),
-    sprintf("PANEL. %d persona(s) drawn from margins over: %s.",
-            nrow(panel), paste(names(attr(panel, "margins")), collapse = ", ")),
-    sprintf("RESPONSES. %d total; %d parse failure(s).",
-            nrow(responses), sum(ba$parse_failures)),
+      sprintf("BENCHMARKED (%d/%d items). Against '%s': mean absolute deviation %.3f, max %.3f (full table in attr(x,'benchmark')$table; nonresponse in $nonresponse).",
+              benchmark$items_covered, benchmark$items_total,
+              benchmark$benchmark_name, benchmark$mean_abs_dev,
+              benchmark$max_dev),
+    sprintf("PANEL. %d persona(s) %s over: %s.",
+            nrow(panel), source, distribution_text),
+    sprintf("RESPONSES. %d total; %d execution failure(s); %d parse failure(s).",
+            nrow(responses), sum(ba$execution_failures),
+            sum(ba$parse_failures)),
     "FIRST-OPTION SENSITIVITY (chi-squared p by item; small p = which option was listed first moved the answers):",
-    sprintf("  %-12s n = %3d  parse failures = %2d  order p = %s",
-            ba$item_id, ba$n, ba$parse_failures,
+    sprintf("  %-12s n = %3d  execution failures = %2d  parse failures = %2d  order p = %s",
+            ba$item_id, ba$n, ba$execution_failures, ba$parse_failures,
             ifelse(is.na(ba$order_effect_p), "n/a",
                    format(round(ba$order_effect_p, 4)))),
-    "STANCE. Silicon panels are design-stage instruments; estimation of human quantities requires calibration to carry that reading."
+    "STANCE. Silicon panels are design-stage instruments; estimation of human quantities requires comparison with a human benchmark."
   )
   structure(lines, class = "panel_report")
 }

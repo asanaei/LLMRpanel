@@ -17,7 +17,7 @@ of starting the app.
 Starts a Shiny application that builds a persona panel, administers one
 choice item, and compares response shares with an optional benchmark. The
 application can download the responses and report in a zip file. It adds
-the calibration table when one is available.
+the benchmark table when one is available.
 }
 \details{
 The GUI is optional. It needs the suggested packages \code{shiny}, \code{bslib}, \code{DT},

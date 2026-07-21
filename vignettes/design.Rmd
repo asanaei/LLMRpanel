@@ -15,9 +15,9 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = RUN_LIVE)
 ```
 
 LLMRpanel administers survey and experimental instruments to panels of
-language model personas. Use it to pretest questions, pilot factorial
+language model personas. Use it to pretest questions, pilot conjoint
 designs, calculate sample sizes from pilot dispersion, or measure responses
-from a configured model. `panel_calibrate()` compares closed-item response
+from a configured model. `panel_benchmark()` compares closed-item response
 shares with benchmark shares supplied by the user. It records deviations by
 item and response, nonresponse, and the number of closed items covered.
 
@@ -30,7 +30,7 @@ or charges.
 1. **Instrument pretesting.** Administer draft items and inspect unmatched
 replies and first-option sensitivity.
 
-2. **Design piloting.** Run vignette and conjoint tasks and estimate response
+2. **Design piloting.** Run conjoint tasks and estimate response
 dispersion before planning human data collection.
 
 3. **Model measurement.** Compare response distributions across personas,
@@ -61,7 +61,7 @@ panel = panel_from_margins(
 )
 panel
 
-instr = panel_instrument(list(
+instrument = panel_instrument(list(
   item_likert("wk4", "A four day work week would benefit society."),
   item_choice(
     "fund",
@@ -70,13 +70,15 @@ instr = panel_instrument(list(
   ),
   item_open("why", "In one sentence, why?")
 ))
-instr
+instrument
 ```
 
 Margins are useful when targets are published as tables. When microdata is
 available, `panel_from_data()` is the joint distribution counterpart. It
 draws personas from observed rows and therefore preserves relationships
 among attributes rather than sampling each margin independently.
+`LLMR::report()` identifies whether a panel came from supplied margins,
+microdata rows, or supplied personas.
 
 `panel_administer()` sends each item to each persona. It randomizes item and
 option order by default and records `item_position` and `option_order`. The
@@ -87,12 +89,12 @@ response patterns can be compared across models.
 cfg = LLMR::llm_config("groq", "openai/gpt-oss-20b", temperature = 0.8)
 cfg_qwen = LLMR::llm_config("groq", "qwen/qwen3-32b", temperature = 0.8)
 
-resp = panel_administer(panel, instr, cfg)
+resp = panel_administer(panel, instrument, cfg)
 resp
 panel_bias_audit(resp)
 LLMR::diagnostics(resp)
 
-resp_qwen = panel_administer(panel, instr, cfg_qwen)
+resp_qwen = panel_administer(panel, instrument, cfg_qwen)
 panel_bias_audit(resp_qwen)
 ```
 
@@ -101,18 +103,18 @@ human benchmark.
 
 ## Compare responses with a benchmark
 
-`panel_calibrate()` compares valid model response shares with benchmark
+`panel_benchmark()` compares valid model response shares with benchmark
 shares for matching item-response pairs. It also records benchmark coverage
 and item-level nonresponse. `bench_fund` supplies shares for one closed item.
 
-```{r calibrate_partial}
+```{r benchmark_partial}
 bench_fund = data.frame(
   item_id = rep("fund", 2),
   response = c("public transit", "road repair"),
   share = c(0.41, 0.59)
 )
 
-resp_partial = panel_calibrate(
+resp_partial = panel_benchmark(
   resp,
   bench_fund,
   benchmark_name = "toy city survey"
@@ -123,7 +125,7 @@ resp_partial
 `bench_fund` covers one of the instrument's two closed items. `bench_all`
 adds shares for `wk4` and covers both.
 
-```{r calibrate_full}
+```{r benchmark_full}
 bench_all = rbind(
   bench_fund,
   data.frame(
@@ -139,35 +141,21 @@ bench_all = rbind(
   )
 )
 
-resp = panel_calibrate(
+resp = panel_benchmark(
   resp,
   bench_all,
   benchmark_name = "toy city survey"
 )
 resp
-panel_report(resp)
 LLMR::report(resp)
-attr(resp, "calibration")$nonresponse
+attr(resp, "benchmark")$nonresponse
 ```
 
-`attr(resp, "calibration")$nonresponse` gives the missing response proportion
+`attr(resp, "benchmark")$nonresponse` gives the missing response proportion
 for each closed item. The comparison shares use nonmissing responses as their
 denominator.
 
-## Factorial stimuli
-
-`vignette_design()` expands a text template over every combination of factor
-levels.
-
-```{r designs}
-vignette_design(
-  "A {age} applicant with {experience} of experience applies.",
-  list(
-    age = c("younger", "older"),
-    experience = c("5 years", "20 years")
-  )
-)
-```
+## Conjoint designs
 
 `conjoint_design()` uses R's random-number generator to construct the design
 specification. `panel_administer()` draws the profiles each respondent sees.
@@ -188,19 +176,20 @@ design
 `conjoint_design()` attempts to use distinct profiles within each task and
 warns when the attribute space cannot supply them. `conjoint_instrument()`
 creates one forced-choice item per task. Administration renders a fresh draw
-for each respondent and records it with the response. `amce()` estimates from
-those recorded profiles relative to the first level of each attribute and
-calculates standard errors clustered by persona.
+for each respondent and records it with the response. `conjoint_amce()`
+estimates from those recorded profiles relative to the first level of each
+attribute and calculates standard errors clustered by persona.
 
-```{r amce}
+```{r conjoint_amce}
 cj_instr = conjoint_instrument(design, "Which product would you buy?")
 cj = panel_administer(panel, cj_instr, cfg)
-amce(cj)
+conjoint_amce(cj)
 ```
 
-`amce()` returns one row for each observed attribute level. Baseline levels have
-estimate 0 and missing standard errors. Other rows contain the estimated
-contrast and 95 percent interval.
+`conjoint_amce()` returns a classed result with one row for each observed
+attribute level. Baseline levels have estimate 0 and missing standard errors.
+Other rows contain the estimated contrast and 95 percent interval. Run counts
+remain in ordinary columns.
 
 ## Two-arm sample sizes
 
@@ -218,7 +207,9 @@ panel_power(resp, effect = c(wk4 = 0.4, fund = 0.15))
 `panel_administer()` makes one request per persona-item pair. Item and option
 randomization do not add requests. Provider prices and prompt and response
 lengths determine cost. A versioned local model can support later reruns when
-hosted endpoints change.
+hosted endpoints change. Each response retains `response_text`, `response_id`,
+`success`, `model`, and `provider`, including when a reply cannot be matched to
+a closed-item option. `finish_reason` is retained when the runner supplies it.
 
 ## Relations
 

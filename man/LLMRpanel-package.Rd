@@ -13,16 +13,17 @@ supplied margins. \code{\link[=panel_from_data]{panel_from_data()}} samples micr
 }
 \details{
 Build instruments with \code{\link[=panel_instrument]{panel_instrument()}} and the item constructors.
-\code{\link[=vignette_design]{vignette_design()}} expands factorial vignettes. \code{\link[=conjoint_design]{conjoint_design()}} and
-\code{\link[=conjoint_instrument]{conjoint_instrument()}} create forced-choice conjoint tasks.
+\code{\link[=conjoint_design]{conjoint_design()}} and \code{\link[=conjoint_instrument]{conjoint_instrument()}} create forced-choice conjoint
+tasks.
 \code{\link[=panel_administer]{panel_administer()}} records the item and option order used for each response.
-\code{\link[=panel_administer_batch]{panel_administer_batch()}} submits larger administrations through a provider's
+\code{\link[=panel_batch_submit]{panel_batch_submit()}} submits larger administrations through a provider's
 batch API.
 
-\code{\link[=panel_calibrate]{panel_calibrate()}} compares response shares with a supplied benchmark.
+\code{\link[=panel_benchmark]{panel_benchmark()}} compares response shares with a supplied benchmark.
 \code{\link[=panel_bias_audit]{panel_bias_audit()}} counts parse failures and tests first-option sensitivity.
-\code{\link[=amce]{amce()}} estimates conjoint effects. \code{\link[=panel_power]{panel_power()}} calculates two-arm sample
-sizes from pilot dispersion. \code{\link[=panel_report]{panel_report()}} summarizes an administration.
+\code{\link[=conjoint_amce]{conjoint_amce()}} estimates conjoint effects. \code{\link[=panel_power]{panel_power()}} calculates
+two-arm sample sizes from pilot dispersion. \code{\link[LLMR:report]{LLMR::report()}} summarizes an
+administration.
 
 Without a benchmark, response shares describe the configured model under the
 supplied personas. They do not estimate a human population.

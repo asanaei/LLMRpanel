@@ -16,25 +16,23 @@ reference:
   contents:
   - panel_items
   - panel_instrument
-  - vignette_design
   - conjoint_design
   - conjoint_instrument
 - title: Administration
   contents:
   - panel_administer
-  - panel_administer_batch
-  - panel_administer_fetch
+  - panel_batch_submit
+  - panel_batch_fetch
   - panel_batch_status
   - panel_usage
-- title: Calibration and audits
+- title: Benchmarking and audits
   contents:
-  - panel_calibrate
+  - panel_benchmark
   - plot.panel_responses
   - panel_bias_audit
-  - panel_report
 - title: Design-stage estimation
   contents:
-  - amce
+  - conjoint_amce
   - panel_power
 - title: Graphical interface
   contents:

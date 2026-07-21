@@ -19,6 +19,7 @@ known_design <- function() {
               "low", "high", "low", "high", "low", "low", "high", "high"))
   attr(out, "attributes") <- list(color = c("blue", "red"),
                                   cost = c("low", "high"))
+  class(out) <- c("conjoint_design", class(out))
   out
 }
 
@@ -63,23 +64,46 @@ test_that("conjoint_instrument builds task items and stores the design", {
   expect_identical(instr$conjoint, design)
 })
 
-test_that("conjoint_design stores its attribute list", {
+test_that("conjoint_design is classed, printable, and stores its attribute list", {
   set.seed(110)
   d <- conjoint_design(list(a = c("x", "y"), b = c("p", "q")), n_tasks = 3)
+  expect_s3_class(d, "conjoint_design")
   expect_identical(attr(d, "attributes"), list(a = c("x", "y"), b = c("p", "q")))
+  printed <- utils::capture.output(print(d))
+  expect_match(printed[1], "conjoint_design")
+  expect_true(any(grepl("3 task", printed, fixed = TRUE)))
+  expect_lte(length(printed), 2L)
 })
 
-test_that("amce recovers a known positive effect and includes baselines", {
+test_that("conjoint metadata loss is detected before use", {
+  design <- known_design()
+  attr(design, "attributes") <- NULL
+  expect_error(conjoint_instrument(design), "metadata|conjoint_design")
+
+  design <- known_design()
+  class(design) <- setdiff(class(design), "conjoint_design")
+  expect_error(conjoint_instrument(design), "conjoint_design")
+})
+
+test_that("conjoint_amce recovers a known positive effect and includes baselines", {
   panel <- test_panel(6)
   instr <- conjoint_instrument(known_design())
   cfg <- LLMR::llm_config("groq", "any-model")
   set.seed(110)
   responses <- panel_administer(panel, instr, cfg, .runner = prefer_red_runner)
-  out <- amce(responses)
+  out <- conjoint_amce(responses)
+  expect_s3_class(out, "conjoint_amce")
   expect_s3_class(out, "tbl_df")
   expect_equal(names(out),
-               c("attribute", "level", "estimate", "std_error", "ci_lo", "ci_hi"))
+               c("attribute", "level", "estimate", "std_error", "ci_lo", "ci_hi",
+                 "n_profiles", "n_respondents", "n_dropped_na",
+                 "n_execution_failures"))
   expect_equal(nrow(out), 4)
+  expect_output(print(out), "conjoint_amce")
+  estimates_only <- out[, c("attribute", "level", "estimate", "std_error",
+                            "ci_lo", "ci_hi")]
+  expect_false(inherits(estimates_only, "conjoint_amce"))
+  expect_no_warning(utils::capture.output(print(estimates_only)))
   red <- out[out$attribute == "color" & out$level == "red", ]
   expect_gt(red$estimate, 0.6)
   baselines <- out[(out$attribute == "color" & out$level == "blue") |
@@ -88,19 +112,19 @@ test_that("amce recovers a known positive effect and includes baselines", {
   expect_true(all(is.na(baselines$std_error)))
 })
 
-test_that("amce clustered standard errors are finite and positive", {
+test_that("conjoint_amce clustered standard errors are finite and positive", {
   panel <- test_panel(8)
   instr <- conjoint_instrument(known_design())
   cfg <- LLMR::llm_config("groq", "any-model")
   set.seed(110)
   responses <- panel_administer(panel, instr, cfg, .runner = mixed_runner)
-  out <- amce(responses)
+  out <- conjoint_amce(responses)
   nb <- out[!is.na(out$std_error), ]
   expect_true(all(is.finite(nb$std_error)))
   expect_true(all(nb$std_error > 0))
 })
 
-test_that("amce drops NA task responses and counts them", {
+test_that("conjoint_amce drops NA task responses and counts them", {
   panel <- test_panel(6)
   instr <- conjoint_instrument(known_design())
   cfg <- LLMR::llm_config("groq", "any-model")
@@ -111,9 +135,27 @@ test_that("amce drops NA task responses and counts them", {
   }
   set.seed(110)
   responses <- panel_administer(panel, instr, cfg, .runner = fake)
-  out <- amce(responses)
-  expect_equal(attr(out, "n_dropped_na"), 1L)
-  expect_equal(attr(out, "n_profiles"), (nrow(responses) - 1L) * 2L)
+  out <- conjoint_amce(responses)
+  expect_true(all(out$n_dropped_na == 1L))
+  expect_true(all(out$n_profiles == (nrow(responses) - 1L) * 2L))
+})
+
+test_that("conjoint_amce reports and excludes execution failures", {
+  panel <- test_panel(6)
+  instrument <- conjoint_instrument(known_design())
+  config <- LLMR::llm_config("groq", "any-model")
+  failed_one <- function(experiments, ...) {
+    out <- prefer_red_runner(experiments, ...)
+    out$success <- TRUE
+    out$success[1] <- FALSE
+    out
+  }
+  set.seed(110)
+  responses <- panel_administer(panel, instrument, config,
+                                .runner = failed_one)
+  expect_warning(out <- conjoint_amce(responses), "execution failure")
+  expect_true(all(out$n_execution_failures == 1L))
+  expect_true(all(out$n_profiles == (nrow(responses) - 1L) * 2L))
 })
 
 test_that("conjoint administration records independent respondent profile draws", {
@@ -158,7 +200,7 @@ test_that("conjoint administration records independent respondent profile draws"
   replay <- LLMRpanel:::.panel_build_grid(panel, instr, cfg)
   expect_identical(replay$profiles, responses$profiles)
 
-  estimates <- amce(responses)
+  estimates <- conjoint_amce(responses)
   expect_true(all(is.finite(estimates$estimate)))
   expect_true(all(is.finite(stats::na.omit(estimates$std_error))))
 })
@@ -183,7 +225,7 @@ test_that("the batch builder uses the synchronous conjoint profile structure", {
     llm_batch_submit = fake_submit,
     .package = "LLMR",
     {
-      job <- panel_administer_batch(panel, instr, cfg)
+      job <- panel_batch_submit(panel, instr, cfg)
       expect_identical(submitted, synchronous$messages)
       expect_identical(job$meta$profiles, synchronous$profiles)
       expect_true(all(vapply(job$meta$profiles, function(x) {
@@ -192,14 +234,14 @@ test_that("the batch builder uses the synchronous conjoint profile structure", {
     })
 })
 
-test_that("amce aborts for non-conjoint administrations", {
+test_that("conjoint_amce aborts for non-conjoint administrations", {
   panel <- test_panel(4)
   instr <- panel_instrument(item_choice("vote", "Choose.", c("A", "B")),
                             randomize = character(0))
   fake <- function(experiments, ...) { experiments$response_text <- "A"; experiments }
   cfg <- LLMR::llm_config("groq", "any-model")
   responses <- panel_administer(panel, instr, cfg, .runner = fake)
-  expect_error(amce(responses),
+  expect_error(conjoint_amce(responses),
                "needs an administration of a conjoint_instrument")
 })
 
@@ -254,6 +296,16 @@ test_that("panel_power warns on a zero-variance prior", {
                                     items = "lik"),
                  "no variance in the pilot")
   expect_true(is.na(out$n_per_arm))
+})
+
+test_that("panel_power reports and excludes execution failures", {
+  responses <- power_responses()
+  pick <- which(responses$item_id == "pick")
+  responses$success[pick[1]] <- FALSE
+  expect_warning(
+    out <- panel_power(responses, effect = 0.2, items = "pick"),
+    "execution failure")
+  expect_true(is.finite(out$n_per_arm))
 })
 
 test_that("panel_from_data preserves joint structure", {

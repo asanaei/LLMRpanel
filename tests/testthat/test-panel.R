@@ -58,19 +58,13 @@ test_that("panels draw from margins and render personas", {
   expect_null(attr(pt, "margins"))
 })
 
-test_that("instruments validate and stimulus designs have the right shape", {
+test_that("instruments validate and conjoint designs have the right shape", {
   expect_output(print(fix_instr()), "3 item")
   expect_error(panel_instrument(list("not an item")), "item_likert")
   expect_error(panel_instrument(list(item_open("a", "t"), item_open("a", "t"))),
                "unique")
   expect_error(panel_instrument(list(item_open("a", "t")), randomize = "colors"),
                "item_order")
-
-  v <- vignette_design("A {age} applicant with {exp} experience.",
-                       list(age = c("younger", "older"),
-                            exp = c("5 years", "20 years")))
-  expect_equal(nrow(v), 4L)
-  expect_match(v$text[1], "younger applicant with 5 years")
 
   set.seed(110)
   cj <- conjoint_design(list(price = c("low", "high"),
@@ -171,54 +165,57 @@ test_that(".match_option strips quotes and trailing punctuation on a second pass
   expect_true(all(r$score == 3))
 })
 
-test_that("panel_calibrate warns when benchmark levels mismatch the offered options", {
+test_that("panel_benchmark warns when benchmark levels mismatch offered options", {
   set.seed(110)
   r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(),
                         .runner = runner_by_party)
   bench_typo <- data.frame(item_id = "plan", response = c("plan a", "Plan B"),
                            share = c(.5, .5))
-  expect_warning(panel_calibrate(r, bench_typo, "typo bench"),
+  expect_warning(panel_benchmark(r, bench_typo, "typo bench"),
                  "not among its offered options")
   bench_ok <- data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
                          share = c(.5, .5))
-  expect_no_warning(panel_calibrate(r, bench_ok, "clean bench"))
+  expect_no_warning(panel_benchmark(r, bench_ok, "clean bench"))
 })
 
-test_that("the banner walks UNCALIBRATED -> PARTIAL -> calibrated", {
+test_that("the banner walks through benchmark coverage states", {
   set.seed(110)
   r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(),
                         .runner = runner_by_party)
-  expect_output(print(r), "UNCALIBRATED")
+  expect_output(print(r), "NOT BENCHMARKED")
 
   bench_partial <- data.frame(item_id = "plan",
                               response = c("Plan A", "Plan B"),
                               share = c(.5, .5))
-  rp <- panel_calibrate(r, bench_partial, benchmark_name = "narrow study")
-  expect_output(print(rp), "PARTIALLY CALIBRATED")
-  expect_output(print(rp), "1/2 items")
-  calp <- attr(rp, "calibration")
-  expect_equal(calp$items_covered, 1L)
-  expect_equal(calp$items_total, 2L)
-  expect_true(all(calp$table$item_id == "plan"))
-  expect_true(all(c("item_id", "nonresponse_rate") %in% names(calp$nonresponse)))
+  rp <- panel_benchmark(r, bench_partial, benchmark_name = "narrow study")
+  expect_output(print(rp), "PARTIALLY BENCHMARKED")
+  expect_output(print(rp), "PARTIALLY BENCHMARKED \\(1/2\\)")
+  bmp <- attr(rp, "benchmark")
+  expect_equal(bmp$items_covered, 1L)
+  expect_equal(bmp$items_total, 2L)
+  expect_true(all(bmp$table$item_id == "plan"))
+  expect_true(all(c("item_id", "nonresponse_rate") %in% names(bmp$nonresponse)))
+  expect_true(all(LLMR::diagnostics(rp)$benchmark_state ==
+                    "PARTIALLY BENCHMARKED"))
 
   bench_full <- rbind(bench_partial,
                       data.frame(item_id = "wk4",
                                  response = c("disagree", "neutral", "agree"),
                                  share = c(.4, .2, .4)))
-  rc <- panel_calibrate(r, bench_full, benchmark_name = "toy human study")
-  expect_output(print(rc), "toy human study")
-  expect_output(print(rc), "2/2 items")
-  expect_false(any(grepl("UNCALIBRATED|PARTIALLY",
-                         utils::capture.output(print(rc)))))
+  rb <- panel_benchmark(r, bench_full, benchmark_name = "toy human study")
+  expect_output(print(rb), "BENCHMARKED")
+  expect_output(print(rb), "toy human study")
+  expect_output(print(rb), "2/2 items")
+  expect_false(any(grepl("NOT BENCHMARKED|PARTIALLY",
+                         utils::capture.output(print(rb)))))
 
   expect_warning(
-    panel_calibrate(r, data.frame(item_id = "plan",
+    panel_benchmark(r, data.frame(item_id = "plan",
                                   response = c("Plan A", "Plan B"),
                                   share = c(.7, .6))),
     "sum to 1")
-  expect_error(panel_calibrate(r, data.frame(x = 1)), "item_id")
-  expect_error(panel_calibrate(r, data.frame(item_id = "ghost", response = "z",
+  expect_error(panel_benchmark(r, data.frame(x = 1)), "item_id")
+  expect_error(panel_benchmark(r, data.frame(item_id = "ghost", response = "z",
                                              share = 1)),
                "covers none")
 })
@@ -228,6 +225,10 @@ test_that("bias_audit detects option-order effects", {
   r <- panel_administer(fix_panel(40), fix_instr(), fix_cfg(),
                         .runner = runner_first_option)
   ba <- panel_bias_audit(r)
+  expect_identical(
+    names(ba),
+    c("item_id", "n", "parse_failures", "execution_failures",
+      "order_effect_p"))
   p_choice <- ba$order_effect_p[ba$item_id == "plan"]
   expect_lt(p_choice, 0.01)
   expect_true(is.na(ba$order_effect_p[ba$item_id == "why"]))
@@ -239,18 +240,48 @@ test_that("bias_audit detects option-order effects", {
   expect_true(all(is.na(ba2$order_effect_p)))
 })
 
-test_that("the report leads with calibration status, coverage included", {
+test_that("the generic report leads with benchmark status and coverage", {
   set.seed(110)
   r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(),
                         .runner = runner_by_party)
-  rep <- panel_report(r)
-  expect_match(rep[1], "^UNCALIBRATED")
+  rep <- LLMR::report(r)
+  expect_match(rep[1], "^NOT BENCHMARKED")
   expect_output(print(rep), "STANCE")
 
   bench <- data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
                       share = c(.5, .5))
-  rep2 <- panel_report(panel_calibrate(r, bench, "toy"))
-  expect_match(rep2[1], "^PARTIALLY CALIBRATED \\(1/2")
+  rep2 <- LLMR::report(panel_benchmark(r, bench, "toy"))
+  expect_match(rep2[1], "^PARTIALLY BENCHMARKED \\(1/2")
+})
+
+test_that("the generic report identifies the panel's actual source", {
+  instrument <- panel_instrument(
+    item_choice("q", "Choose.", c("yes", "no")),
+    randomize = character(0))
+  runner <- function(experiments, ...) {
+    experiments$response_text <- "yes"
+    experiments
+  }
+  config <- fix_cfg()
+
+  from_margins <- panel_from_margins(
+    list(group = c(a = .5, b = .5)), n = 2)
+  from_data <- panel_from_data(
+    data.frame(group = c("a", "b"), stringsAsFactors = FALSE), n = 2)
+  persona_data <- as_persona_frame(
+    data.frame(age = c("30", "40"), opinion = c("a", "b"),
+               stringsAsFactors = FALSE),
+    demographics = "age")
+  from_personas <- panel_from_personas(persona_data)
+
+  reports <- vapply(
+    list(from_margins, from_data, from_personas),
+    function(panel) paste(LLMR::report(panel_administer(
+      panel, instrument, config, .runner = runner)), collapse = "\n"),
+    character(1))
+  expect_true(grepl("supplied margins", reports[1], fixed = TRUE))
+  expect_true(grepl("microdata rows", reports[2], fixed = TRUE))
+  expect_true(grepl("supplied personas", reports[3], fixed = TRUE))
 })
 
 test_that("subsetting responses drops panel provenance", {
@@ -259,17 +290,17 @@ test_that("subsetting responses drops panel provenance", {
                         .runner = runner_by_party)
   bench <- data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
                       share = c(.5, .5))
-  calibrated <- panel_calibrate(r, bench, "toy")
-  original_report <- panel_report(calibrated)
+  benchmarked <- panel_benchmark(r, bench, "toy")
+  original_report <- LLMR::report(benchmarked)
 
-  one <- calibrated[1, , drop = FALSE]
+  one <- benchmarked[1, , drop = FALSE]
   expect_s3_class(one, "tbl_df")
   expect_false(inherits(one, "panel_responses"))
   expect_null(attr(one, "panel"))
   expect_null(attr(one, "instrument"))
-  expect_null(attr(one, "calibration"))
-  expect_error(panel_report(one), "panel_responses")
-  expect_identical(panel_report(calibrated), original_report)
+  expect_null(attr(one, "benchmark"))
+  expect_error(LLMR::report(one), "No report\\(\\) method")
+  expect_identical(LLMR::report(benchmarked), original_report)
 })
 
 test_that("shared generics dispatch for panel responses", {
@@ -280,41 +311,41 @@ test_that("shared generics dispatch for panel responses", {
   dg <- LLMR::diagnostics(r)
   expect_s3_class(dg, "tbl_df")
   expect_equal(names(dg),
-               c("item_id", "n", "parse_failures", "order_effect_p",
-                 "calibration_state", "items_covered", "items_total",
-                 "mean_abs_dev"))
-  expect_true(all(dg$calibration_state == "UNCALIBRATED"))
+               c("item_id", "n", "parse_failures", "execution_failures",
+                 "order_effect_p", "benchmark_state", "items_covered",
+                 "items_total", "mean_abs_dev"))
+  expect_true(all(dg$benchmark_state == "NOT BENCHMARKED"))
   expect_equal(unique(dg$items_covered), 0L)
   expect_equal(unique(dg$items_total), 2L)
   expect_true(all(is.na(dg$mean_abs_dev)))
 
   gen_rep <- LLMR::report(r)
   expect_s3_class(gen_rep, "panel_report")
-  expect_match(gen_rep[1], "^UNCALIBRATED")
+  expect_match(gen_rep[1], "^NOT BENCHMARKED")
 
   rt <- tibble::as_tibble(r)
   expect_s3_class(rt, "tbl_df")
   expect_false(inherits(rt, "panel_responses"))
   expect_null(attr(rt, "panel"))
   expect_null(attr(rt, "instrument"))
-  expect_null(attr(rt, "calibration"))
+  expect_null(attr(rt, "benchmark"))
 
   bench <- rbind(
     data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
                share = c(.5, .5)),
     data.frame(item_id = "wk4", response = c("disagree", "neutral", "agree"),
                share = c(.4, .2, .4)))
-  rc <- panel_calibrate(r, bench, "toy human study")
-  dgc <- LLMR::diagnostics(rc)
-  expect_true(all(dgc$calibration_state == "CALIBRATED"))
-  expect_equal(unique(dgc$items_covered), 2L)
-  expect_equal(unique(dgc$items_total), 2L)
-  cal <- attr(rc, "calibration")
-  expect_true("mean_abs_dev" %in% names(cal))
-  expect_false("mad" %in% names(cal))
-  expect_equal(cal$mean_abs_dev, mean(abs(cal$table$deviation)))
-  expect_equal(unique(dgc$mean_abs_dev), cal$mean_abs_dev)
-  expect_false("mad" %in% names(dgc))
+  rb <- panel_benchmark(r, bench, "toy human study")
+  dgb <- LLMR::diagnostics(rb)
+  expect_true(all(dgb$benchmark_state == "BENCHMARKED"))
+  expect_equal(unique(dgb$items_covered), 2L)
+  expect_equal(unique(dgb$items_total), 2L)
+  bm <- attr(rb, "benchmark")
+  expect_true("mean_abs_dev" %in% names(bm))
+  expect_false("mad" %in% names(bm))
+  expect_equal(bm$mean_abs_dev, mean(abs(bm$table$deviation)))
+  expect_equal(unique(dgb$mean_abs_dev), bm$mean_abs_dev)
+  expect_false("mad" %in% names(dgb))
 })
 
 test_that("the ecosystem hash convention is pinned (drift guard vs LLMR)", {
@@ -323,7 +354,7 @@ test_that("the ecosystem hash convention is pinned (drift guard vs LLMR)", {
     "7c5ffbb0b308f20bf188a3efd962a2895f45ad202307234ee1965d86abc0606c")
 })
 
-test_that("calibration of an all-parse-failure item does not crash", {
+test_that("benchmarking an all-parse-failure item does not crash", {
   # a runner whose choice answers never match the options -> all NA responses
   unparseable <- function(experiments, ...) {
     experiments$response_text <- "this is not one of the options"
@@ -333,15 +364,31 @@ test_that("calibration of an all-parse-failure item does not crash", {
   r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(), .runner = unparseable)
   bench <- data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
                       share = c(.5, .5))
-  expect_no_error(rc <- panel_calibrate(r, bench, "all-NA study"))
-  cal <- attr(rc, "calibration")
-  # the calibration artifact still exists; the covered item is full nonresponse
-  expect_true(!is.null(cal))
-  nr <- cal$nonresponse
+  expect_no_error(rb <- panel_benchmark(r, bench, "all-NA study"))
+  bm <- attr(rb, "benchmark")
+  # The benchmark artifact still exists; the covered item is full nonresponse.
+  expect_true(!is.null(bm))
+  nr <- bm$nonresponse
   expect_equal(nr$nonresponse_rate[nr$item_id == "plan"], 1)
   # the benchmark responses survive with silicon share 0
-  plan_rows <- cal$table[cal$table$item_id == "plan", ]
+  plan_rows <- bm$table[bm$table$item_id == "plan", ]
   expect_true(all(plan_rows$share_silicon == 0))
+})
+
+test_that("benchmarking refuses an item with only execution failures", {
+  failed <- function(experiments, ...) {
+    experiments$response_text <- "Plan A"
+    experiments$success <- FALSE
+    experiments$error_message <- "provider unavailable"
+    experiments
+  }
+  responses <- panel_administer(
+    fix_panel(4), fix_instr(), fix_cfg(), .runner = failed)
+  benchmark <- data.frame(
+    item_id = "plan", response = c("Plan A", "Plan B"), share = c(.5, .5))
+
+  expect_error(panel_benchmark(responses, benchmark, "failed run"),
+               "execution|successful")
 })
 
 test_that("panel_power requires a focal response for 3+ option choice items", {

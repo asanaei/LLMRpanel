@@ -1,5 +1,5 @@
 # instrument.R --------------------------------------------------------------------
-# Instruments: items with response options, plus factorial stimulus builders.
+# Instruments: items with response options and conjoint task builders.
 # Option order is data, not noise: panel_administer() randomizes it per response
 # and records what each respondent saw.
 
@@ -85,32 +85,6 @@ print.panel_instrument <- function(x, ...) {
   invisible(x)
 }
 
-#' Factorial vignettes
-#'
-#' Expands `factors` into the full factorial and renders the vignette text
-#' per cell with literal `{factor}` substitution. Each rendered vignette is
-#' typically paired with one or two items via [panel_instrument()].
-#'
-#' @param template Vignette text containing `{factor}` placeholders.
-#' @param factors Named list of level vectors.
-#' @return A tibble: `vignette_id`, one column per factor, `text`.
-#' @examples
-#' vignette_design(
-#'   "A {age} applicant with {experience} experience applies for the job.",
-#'   list(age = c("younger", "older"), experience = c("5 years", "20 years"))
-#' )
-#' @export
-vignette_design <- function(template, factors) {
-  stopifnot(is.character(template), length(template) == 1L,
-            is.list(factors), length(factors) >= 1L)
-  grid <- expand.grid(factors, stringsAsFactors = FALSE)
-  grid$text <- vapply(seq_len(nrow(grid)), function(i) {
-    .fill(template, as.list(grid[i, , drop = FALSE]))
-  }, character(1))
-  out <- tibble::as_tibble(grid)
-  tibble::add_column(out, vignette_id = seq_len(nrow(out)), .before = 1)
-}
-
 .draw_conjoint_task <- function(attributes, task, profiles) {
   draw_profile <- function() {
     # index-based draw: sample(lv, 1L) on a single numeric level would trigger
@@ -147,10 +121,11 @@ vignette_design <- function(template, factors) {
 #' @param attributes Named list of level vectors.
 #' @param n_tasks Tasks per respondent.
 #' @param profiles_per_task Profiles shown per task (default 2).
-#' @return A tibble: `task`, `profile`, one column per attribute, carrying
+#' @return A `conjoint_design` tibble: `task`, `profile`, one column per
+#'   attribute, carrying
 #'   the original attribute list in `attr(x, "attributes")`. Render it into
 #'   forced-choice items with [conjoint_instrument()] and estimate with
-#'   [amce()] after administration. Profiles within a task are guaranteed
+#'   [conjoint_amce()] after administration. Profiles within a task are guaranteed
 #'   distinct (a forced choice between identical profiles measures
 #'   nothing); when the attribute space is too small to allow distinct
 #'   profiles, duplicates remain and a warning says so.
@@ -178,7 +153,16 @@ conjoint_design <- function(attributes, n_tasks = 5L, profiles_per_task = 2L) {
   }
   out <- do.call(rbind, rows)
   attr(out, "attributes") <- attributes
+  class(out) <- c("conjoint_design", class(out))
   out
+}
+
+#' @export
+print.conjoint_design <- function(x, ...) {
+  cat(sprintf("<conjoint_design | %d task(s) x %d profile(s) | %d attribute(s)>\n",
+              length(unique(x$task)), length(unique(x$profile)),
+              length(attr(x, "attributes"))))
+  invisible(x)
 }
 
 #' Build a conjoint instrument
@@ -195,7 +179,7 @@ conjoint_design <- function(attributes, n_tasks = 5L, profiles_per_task = 2L) {
 #'   (ids `task_1`, `task_2`, ...; options `"Profile 1"`, `"Profile 2"`,
 #'   ...). Each item carries the attribute levels used for its respondent-level
 #'   draws, and the instrument's `$conjoint` field carries the design metadata
-#'   for [amce()].
+#'   for [conjoint_amce()].
 #' @details Only option order is randomized; item order stays fixed so the
 #'   task ids remain interpretable. Attribute order inside each profile
 #'   description follows the design's column order. The profiles recorded in
@@ -206,15 +190,18 @@ conjoint_design <- function(attributes, n_tasks = 5L, profiles_per_task = 2L) {
 #' design <- conjoint_design(
 #'   list(economy = c("weak", "strong"), taxes = c("lower", "higher")),
 #'   n_tasks = 3)
-#' instr <- conjoint_instrument(design, "Which candidate do you prefer?")
-#' instr
+#' instrument <- conjoint_instrument(design, "Which candidate do you prefer?")
+#' instrument
 #' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
 #' \dontrun{
-#' panel_administer(panel, instr, cfg)
+#' panel_administer(panel, instrument, cfg)
 #' }
 #' @export
 conjoint_instrument <- function(design,
                                 question = "Which profile do you prefer?") {
+  if (!inherits(design, "conjoint_design")) {
+    abort("`design` must be a conjoint_design built with conjoint_design().")
+  }
   stopifnot(is.data.frame(design), is.character(question),
             length(question) == 1L, nzchar(question))
   if (!all(c("task", "profile") %in% names(design))) {

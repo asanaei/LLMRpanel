@@ -12,15 +12,15 @@ panel_usage(responses, price_table = NULL)
 \item{price_table}{Optional price table passed to \code{\link[LLMR:llm_usage]{LLMR::llm_usage()}}.}
 }
 \value{
-A one-row usage tibble, or \code{NULL} when no diagnostics were retained
-(for example an offline \code{.runner} that returned no token columns).
+A one-row usage tibble, or a typed empty tibble when the runner
+returned no token columns.
 }
 \description{
 Summarizes token and outcome diagnostics recorded by \code{\link[=panel_administer]{panel_administer()}} or
-\code{\link[=panel_administer_fetch]{panel_administer_fetch()}}. The diagnostics are stored in the \code{usage}
+\code{\link[=panel_batch_fetch]{panel_batch_fetch()}}. The diagnostics are stored in the \code{usage}
 attribute of a \code{panel_responses} object and summarized by \code{\link[LLMR:llm_usage]{LLMR::llm_usage()}}.
-A supplied \code{price_table} adds a cost column. The package contains no price
-table.
+Model and provider remain in the returned frame. A supplied \code{price_table}
+adds a cost column. The package contains no price table.
 }
 \seealso{
 \code{\link[=panel_administer]{panel_administer()}}, \code{\link[LLMR:llm_usage]{LLMR::llm_usage()}}.

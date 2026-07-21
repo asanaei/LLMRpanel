@@ -16,30 +16,42 @@ population margins. `panel_from_data()` samples complete microdata rows, and
 `panel_from_personas()` uses a prepared persona data frame such as
 `LLMR::anes_2024_personas`. The package contains no population data.
 Instruments may contain Likert, choice, and open items.
-`vignette_design()` and `conjoint_design()` create factorial designs.
+`conjoint_design()` creates randomized conjoint designs.
 
 `panel_administer()` sends every item to every persona. It can randomize item
 and option order for each persona and records both orders.
 `panel_bias_audit()` counts parse failures and tests whether responses are
 associated with the first option shown.
 
-`panel_calibrate()` compares closed-item response shares with a supplied human
+`panel_benchmark()` compares closed-item response shares with a supplied human
 benchmark. It records benchmark coverage, deviations, and nonresponse.
-`plot()` displays the compared shares, and `panel_report()` summarizes the
+`plot()` displays the compared shares, and `LLMR::report()` summarizes the
 administration. Without a benchmark, response shares describe the configured
-model under the supplied personas. They do not estimate a human population.
+model under the supplied personas. Printed results state `NOT BENCHMARKED`,
+`PARTIALLY BENCHMARKED (n/m)`, or `BENCHMARKED`. They do not estimate a human
+population.
+The report identifies whether the panel came from supplied margins, sampled
+microdata rows, or supplied personas.
 
 `conjoint_instrument()` creates forced-choice items from a conjoint design.
-`amce()` estimates average marginal component effects with standard errors
-clustered by persona. `panel_power()` calculates two-arm sample sizes from
-pilot dispersion.
+`conjoint_amce()` estimates average marginal component effects with standard
+errors clustered by persona. Its classed result keeps run counts as ordinary
+columns. `panel_power()` calculates two-arm sample sizes from pilot dispersion.
 
 `as_persona_frame()` attaches question wording and identifies demographic and
 answer columns in microdata. For large administrations,
-`panel_administer_batch()` submits requests to a provider's asynchronous batch
-API, and `panel_administer_fetch()` retrieves the results. The synchronous
-`panel_administer()` reports the request count and stops above `max_calls`
-unless `confirm = TRUE`.
+`panel_batch_submit()` submits requests to a provider's asynchronous batch
+API, and `panel_batch_fetch()` retrieves the results. Both administration paths
+require an explicit `LLMR::llm_config()` and stop above `max_calls` unless
+`confirm = TRUE`. A `state_path` saves the panel batch job for later status or
+fetch calls.
+
+Every administration retains `response_text`, `response_id`, `success`,
+`model`, and `provider` as response columns. `finish_reason` is retained when
+the runner supplies it. This keeps an unmatched reply inspectable.
+`panel_usage()` retains model and provider in its summary so a supplied price
+table can be joined to the model that incurred the usage. Synchronous and batch
+administration return the same response schema.
 
 ## Installation
 
@@ -76,14 +88,14 @@ panel <- panel_from_margins(
   n = 60,
   persona_template = "A {cohort} voter who leans {party}.")
 
-instr <- panel_instrument(list(
+instrument <- panel_instrument(list(
   item_likert("wk4",  "A four-day work week would benefit society."),
   item_choice("fund", "Which investment should be funded first?",
               c("public transit", "road repair"))))
 
 cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b", temperature = 0.8)
 
-resp <- panel_administer(panel, instr, cfg)
+resp <- panel_administer(panel, instrument, cfg)
 resp
 panel_bias_audit(resp)
 LLMR::diagnostics(resp)
@@ -91,8 +103,7 @@ LLMR::diagnostics(resp)
 bench <- data.frame(item_id = "fund",
                     response = c("public transit", "road repair"),
                     share = c(.41, .59))
-resp <- panel_calibrate(resp, bench, "city survey, 2025")
-panel_report(resp)
+resp <- panel_benchmark(resp, bench, "city survey, 2025")
 LLMR::report(resp)
 
 panel_power(resp, effect = 0.3)

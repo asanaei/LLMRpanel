@@ -117,7 +117,7 @@ panel_from_margins <- function(margins, n, persona_template = NULL) {
     }
   }, character(1))
   structure(out, class = c("silicon_panel", class(out)),
-            margins = margins)
+            margins = margins, source = "margins")
 }
 
 #' Draw a persona panel from microdata rows
@@ -217,7 +217,8 @@ panel_from_data <- function(data, n, persona_template = NULL,
       prop.table(w)
     }
   })
-  structure(out, class = c("silicon_panel", class(out)), margins = margins)
+  structure(out, class = c("silicon_panel", class(out)), margins = margins,
+            source = "microdata")
 }
 
 #' Draw a panel from a persona data frame
@@ -238,11 +239,11 @@ panel_from_data <- function(data, n, persona_template = NULL,
 #' one itself).
 #'
 #' @param data A persona data frame. Defaults to `LLMR::anes_2024_personas`.
-#' @param rows Optional row selector: an integer or logical vector, or a predicate
-#'   `function(df)` returning a logical vector. Applied before sampling.
 #' @param n Optional panel size. With `NULL`, every selected row is used; with a
 #'   number, rows are sampled (without replacement when `n` does not exceed the
 #'   pool, otherwise with replacement).
+#' @param rows Optional row selector: an integer or logical vector, or a predicate
+#'   `function(df)` returning a logical vector. Applied before sampling.
 #' @param weights Optional survey weights for the draw: a column name in `data`,
 #'   or a numeric vector aligned to the selected rows. Used only when `n` is
 #'   given. `NULL` (default) draws uniformly.
@@ -257,7 +258,7 @@ panel_from_data <- function(data, n, persona_template = NULL,
 #' }
 #' }
 #' @export
-panel_from_personas <- function(data = NULL, rows = NULL, n = NULL,
+panel_from_personas <- function(data = NULL, n = NULL, rows = NULL,
                                 weights = NULL) {
   if (is.null(data)) {
     if (!requireNamespace("LLMR", quietly = TRUE))
@@ -323,7 +324,8 @@ panel_from_personas <- function(data = NULL, rows = NULL, n = NULL,
 
   margins <- lapply(chosen[, demo_cols, drop = FALSE],
                     function(col) prop.table(table(col[!is.na(col)])))
-  structure(out, class = c("silicon_panel", class(out)), margins = margins)
+  structure(out, class = c("silicon_panel", class(out)), margins = margins,
+            source = "personas")
 }
 
 #' @export
@@ -337,6 +339,7 @@ print.silicon_panel <- function(x, ...) {
 #' @exportS3Method tibble::as_tibble
 as_tibble.silicon_panel <- function(x, ...) {
   attr(x, "margins") <- NULL
+  attr(x, "source") <- NULL
   class(x) <- setdiff(class(x), "silicon_panel")
   tibble::as_tibble(x, ...)
 }

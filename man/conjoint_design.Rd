@@ -14,10 +14,11 @@ conjoint_design(attributes, n_tasks = 5L, profiles_per_task = 2L)
 \item{profiles_per_task}{Profiles shown per task (default 2).}
 }
 \value{
-A tibble: \code{task}, \code{profile}, one column per attribute, carrying
+A \code{conjoint_design} tibble: \code{task}, \code{profile}, one column per
+attribute, carrying
 the original attribute list in \code{attr(x, "attributes")}. Render it into
 forced-choice items with \code{\link[=conjoint_instrument]{conjoint_instrument()}} and estimate with
-\code{\link[=amce]{amce()}} after administration. Profiles within a task are guaranteed
+\code{\link[=conjoint_amce]{conjoint_amce()}} after administration. Profiles within a task are guaranteed
 distinct (a forced choice between identical profiles measures
 nothing); when the attribute space is too small to allow distinct
 profiles, duplicates remain and a warning says so.

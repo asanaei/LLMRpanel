@@ -89,6 +89,17 @@ test_that("panel_from_personas handles a frame with no recognized demographics",
   expect_output(print(p), "silicon_panel")
 })
 
+test_that("panel_from_personas uses its second positional argument as n", {
+  pf <- as_persona_frame(
+    data.frame(age = c("20", "30", "40", "50"),
+               answer = c("a", "b", "c", "d"),
+               stringsAsFactors = FALSE),
+    demographics = "age")
+  set.seed(110)
+  p <- panel_from_personas(pf, 2)
+  expect_equal(nrow(p), 2L)
+})
+
 # --- A3: weights + large-n warning -------------------------------------------
 
 test_that("panel_from_personas accepts weights and warns on heavy duplication", {
@@ -117,6 +128,35 @@ test_that("panel_administer gates a run above max_calls", {
   expect_s3_class(
     panel_administer(panel, instr, cfg, .runner = det, max_calls = 3, confirm = TRUE),
     "panel_responses")
+})
+
+test_that("panel_batch_submit applies the same max_calls gate", {
+  panel <- panel_from_margins(list(g = c(a = .5, b = .5)), n = 5)
+  instrument <- panel_instrument(item_likert("q", "A statement."),
+                                 randomize = character(0))
+  config <- LLMR::llm_config("groq", "fake")
+  submissions <- 0L
+  fake_submit <- function(config, messages, state_path = NULL) {
+    submissions <<- submissions + 1L
+    structure(list(provider = "groq",
+                   custom_ids = sprintf("llmr-%06d", seq_along(messages))),
+              class = "llmr_batch_job")
+  }
+
+  testthat::with_mocked_bindings(
+    llm_batch_submit = fake_submit,
+    .package = "LLMR",
+    {
+      expect_error(
+        panel_batch_submit(panel, instrument, config, max_calls = 3),
+        "max_calls")
+      expect_equal(submissions, 0L)
+      expect_s3_class(
+        panel_batch_submit(panel, instrument, config, max_calls = 3,
+                           confirm = TRUE),
+        "panel_batch_job")
+      expect_equal(submissions, 1L)
+    })
 })
 
 test_that("the preflight computes a cost figure from caller-supplied numbers", {
@@ -171,9 +211,21 @@ test_that("the batch path joins responses by id even when rows are shuffled", {
     # answer "Yes" for odd request index, "No" for even -- a known pattern
     ans <- ifelse(seq_along(ids) %% 2 == 1, "Yes", "No")
     out <- tibble::tibble(custom_id = ids, response_text = ans,
+                          response_id = paste0("response-", ids),
                           sent_tokens = 5L, rec_tokens = 1L, total_tokens = 6L,
-                          success = TRUE)
+                          success = TRUE, model = "provider-returned-model",
+                          provider = "provider-returned-provider")
     out[sample(nrow(out)), ]                       # SHUFFLE the rows
+  }
+  synchronous_runner <- function(experiments, ...) {
+    experiments$response_text <- ifelse(
+      seq_len(nrow(experiments)) %% 2 == 1, "Yes", "No")
+    experiments$response_id <- paste0("response-", experiments$request_id)
+    experiments$sent_tokens <- 5L
+    experiments$rec_tokens <- 1L
+    experiments$total_tokens <- 6L
+    experiments$success <- TRUE
+    experiments
   }
 
   testthat::with_mocked_bindings(
@@ -181,9 +233,10 @@ test_that("the batch path joins responses by id even when rows are shuffled", {
     llm_batch_fetch = fake_fetch,
     .package = "LLMR",
     {
-      job <- panel_administer_batch(panel, instr, cfg)
+      job <- panel_batch_submit(panel, instr, cfg)
       expect_s3_class(job, "panel_batch_job")
-      resp <- panel_administer_fetch(job)
+      expect_output(print(job), "panel_batch_fetch")
+      resp <- panel_batch_fetch(job)
       expect_s3_class(resp, "panel_responses")
       expect_equal(nrow(resp), 8L)                 # 4 personas x 2 items
       # the id-keyed join must map each request's known answer to the right row:
@@ -198,7 +251,48 @@ test_that("the batch path joins responses by id even when rows are shuffled", {
       expect_equal(resp$item_id, grid$item_id)
       expect_equal(resp$item_position, grid$item_position)
       expect_equal(resp$response, expected)
-    })
+      expect_true(all(resp$model == "fake"))
+      expect_true(all(resp$provider == "groq"))
+
+      sync <- panel_administer(panel, instr, cfg,
+                               .runner = synchronous_runner)
+      expect_identical(names(resp), names(sync))
+      expect_identical(vapply(resp, typeof, ""), vapply(sync, typeof, ""))
+      expect_identical(tibble::as_tibble(resp), tibble::as_tibble(sync))
+  })
+})
+
+test_that("panel_batch_fetch refuses missing or duplicate request ids", {
+  panel <- panel_from_margins(list(g = c(a = .5, b = .5)), n = 2)
+  instrument <- panel_instrument(
+    item_choice("q", "Choose.", c("No", "Yes")),
+    randomize = character(0))
+  config <- LLMR::llm_config("groq", "fake")
+  fake_submit <- function(config, messages, state_path = NULL) {
+    structure(list(provider = "groq",
+                   custom_ids = sprintf("llmr-%06d", seq_along(messages))),
+              class = "llmr_batch_job")
+  }
+  job <- testthat::with_mocked_bindings(
+    llm_batch_submit = fake_submit,
+    .package = "LLMR",
+    panel_batch_submit(panel, instrument, config))
+
+  missing_fetch <- function(job) {
+    tibble::tibble(custom_id = job$custom_ids[1], response_text = "Yes")
+  }
+  duplicate_fetch <- function(job) {
+    tibble::tibble(custom_id = rep(job$custom_ids[1], 2),
+                   response_text = c("Yes", "No"))
+  }
+  testthat::with_mocked_bindings(
+    llm_batch_fetch = missing_fetch,
+    .package = "LLMR",
+    expect_error(panel_batch_fetch(job), "omit"))
+  testthat::with_mocked_bindings(
+    llm_batch_fetch = duplicate_fetch,
+    .package = "LLMR",
+    expect_error(panel_batch_fetch(job), "duplicate"))
 })
 
 test_that("the batch job carries no api key", {
@@ -210,21 +304,117 @@ test_that("the batch job carries no api key", {
               class = "llmr_batch_job")
   }
   testthat::with_mocked_bindings(llm_batch_submit = fake_submit, .package = "LLMR", {
-    job <- panel_administer_batch(panel, instr, cfg)
-    # the panel-side job stores only grid metadata + the LLMR job, no config field
+    job <- panel_batch_submit(panel, instr, cfg)
+    # The panel job keeps sanitized model identity, but no config or key field.
     expect_null(job$config)
+    expect_true(all(job$meta$model == "fake"))
+    expect_true(all(job$meta$provider == "groq"))
     flat <- unlist(job$meta)
-    expect_false(any(grepl("fake|api[_-]?key|sk-", flat, ignore.case = TRUE)))
+    expect_false(any(grepl("api[_-]?key|sk-", flat, ignore.case = TRUE)))
   })
 })
 
-# --- B3: token retention + panel_usage ---------------------------------------
+test_that("panel and provider batch state do not share one state file", {
+  panel <- panel_from_margins(list(g = c(a = .5, b = .5)), n = 2)
+  instrument <- panel_instrument(item_likert("q", "S."),
+                                 randomize = character(0))
+  config <- LLMR::llm_config("groq", "fake")
+  provider_state_path <- "not-called"
+  fake_submit <- function(config, messages, state_path = NULL) {
+    provider_state_path <<- state_path
+    structure(list(provider = "groq",
+                   custom_ids = sprintf("llmr-%06d", seq_along(messages))),
+              class = "llmr_batch_job")
+  }
+  panel_state_path <- tempfile(fileext = ".rds")
 
-test_that("panel_usage reports retained tokens and is NULL without them", {
+  testthat::with_mocked_bindings(
+    llm_batch_submit = fake_submit,
+    .package = "LLMR",
+    {
+      job <- panel_batch_submit(panel, instrument, config,
+                                state_path = panel_state_path)
+      expect_s3_class(job, "panel_batch_job")
+      expect_true(file.exists(panel_state_path))
+      expect_s3_class(readRDS(panel_state_path), "panel_batch_job")
+      expect_false(identical(provider_state_path, panel_state_path))
+    })
+})
+
+# --- B3: response provenance + panel_usage -----------------------------------
+
+test_that("responses retain raw replies, execution state, and model identity", {
+  panel <- panel_from_margins(list(g = c(a = .5, b = .5)), n = 3)
+  instrument <- panel_instrument(
+    item_likert("q", "S.", scale = c("No", "Yes")),
+    randomize = character(0))
+  config <- LLMR::llm_config("groq", "fake-model")
+  mixed <- function(experiments, ...) {
+    experiments$response_text <- c("Yes", "unmatched raw reply", "Yes")
+    experiments$response_id <- c("response-1", NA_character_, "response-3")
+    experiments$success <- c(TRUE, TRUE, FALSE)
+    experiments$error_message <- c(NA_character_, NA_character_,
+                                   "provider unavailable")
+    experiments$finish_reason <- c("stop", "stop", NA_character_)
+    experiments
+  }
+
+  responses <- panel_administer(panel, instrument, config, .runner = mixed)
+  expect_true(all(c("response_text", "response_id", "success",
+                    "error_message", "finish_reason", "model", "provider") %in%
+                  names(responses)))
+  expect_type(responses$response_text, "character")
+  expect_type(responses$response_id, "character")
+  expect_type(responses$success, "logical")
+  expect_type(responses$error_message, "character")
+  expect_type(responses$finish_reason, "character")
+  expect_type(responses$model, "character")
+  expect_type(responses$provider, "character")
+  expect_true(all(responses$model == "fake-model"))
+  expect_true(all(responses$provider == "groq"))
+  expect_identical(responses$response_text[2], "unmatched raw reply")
+  expect_true(is.na(responses$response[2]))
+  expect_false(responses$success[3])
+  expect_identical(responses$response_text[3], "Yes")
+  expect_identical(responses$error_message[3], "provider unavailable")
+  expect_true(is.na(responses$response[3]))
+  expect_true(is.na(responses$score[3]))
+  expect_false(any(c("config", "messages") %in% names(responses)))
+  audit <- panel_bias_audit(responses)
+  expect_identical(audit$parse_failures, 1L)
+  expect_identical(audit$execution_failures, 1L)
+})
+
+test_that("bare runners still produce typed provenance columns", {
+  panel <- panel_from_margins(list(g = c(a = .5, b = .5)), n = 2)
+  instrument <- panel_instrument(
+    item_choice("q", "Choose.", c("No", "Yes")),
+    randomize = character(0))
+  config <- LLMR::llm_config("groq", "fake-model")
+  bare <- function(experiments, ...) {
+    experiments$response_text <- "Yes"
+    experiments
+  }
+  responses <- panel_administer(panel, instrument, config, .runner = bare)
+
+  expect_named(
+    responses,
+    c("persona_id", "item_id", "type", "item_position", "option_order",
+      "response_text", "response_id", "success", "error_message",
+      "finish_reason", "model", "provider", "response", "score"))
+  expect_true(all(is.na(responses$response_id)))
+  expect_true(all(is.na(responses$success)))
+  expect_true(all(is.na(responses$error_message)))
+  expect_true(all(is.na(responses$finish_reason)))
+  expect_true(all(responses$model == "fake-model"))
+  expect_true(all(responses$provider == "groq"))
+})
+
+test_that("panel_usage reports retained tokens and has a typed empty state", {
   panel <- panel_from_margins(list(g = c(a = .5, b = .5)), n = 3)
   instr <- panel_instrument(item_likert("q", "S.", scale = c("No", "Yes")),
                             randomize = character(0))
-  cfg <- LLMR::llm_config("groq", "fake")
+  cfg <- LLMR::llm_config("groq", "fake-model")
   # a runner that returns token columns
   with_tokens <- function(experiments, ...) {
     experiments$response_text <- "Yes"
@@ -236,9 +426,25 @@ test_that("panel_usage reports retained tokens and is NULL without them", {
   expect_false(is.null(attr(r1, "usage")))
   u <- panel_usage(r1)
   expect_false(is.null(u))
+  expect_true(all(c("model", "provider") %in% names(u)))
+  expect_identical(u$model, "fake-model")
+  expect_identical(u$provider, "groq")
+  priced <- panel_usage(
+    r1,
+    price_table = data.frame(model = "fake-model", input = 1, output = 2))
+  expect_equal(priced$cost_estimate, 21e-6)
+  expect_identical(priced$model, "fake-model")
+  expect_identical(priced$provider, "groq")
 
-  # a runner with no token columns -> usage attr absent, panel_usage NULL
+  # A runner with no token columns yields a stable, typed empty usage table.
   bare <- function(experiments, ...) { experiments$response_text <- "Yes"; experiments }
   r2 <- panel_administer(panel, instr, cfg, .runner = bare)
-  expect_null(panel_usage(r2))
+  empty <- panel_usage(r2)
+  expect_s3_class(empty, "tbl_df")
+  expect_equal(nrow(empty), 0L)
+  expect_identical(names(empty), names(u))
+  expect_identical(vapply(empty, typeof, ""), vapply(u, typeof, ""))
+  expect_identical(names(empty)[1:2], c("model", "provider"))
+  expect_type(empty$model, "character")
+  expect_type(empty$provider, "character")
 })

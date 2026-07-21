@@ -33,11 +33,38 @@ test_that("the AI capsule keeps the expanded core signatures exact", {
   }
 
   expanded <- c(
-    "panel_from_personas", "as_persona_frame", "panel_administer_batch",
-    "panel_administer_fetch", "panel_batch_status", "panel_usage",
-    "run_panel_studio")
+    "panel_from_personas", "as_persona_frame", "panel_administer",
+    "panel_batch_submit", "panel_batch_fetch", "panel_batch_status",
+    "panel_usage", "run_panel_studio")
   for (name in expanded) {
     expected <- signature(name)
     expect_true(grepl(expected, txt, fixed = TRUE), info = expected)
   }
+})
+
+test_that("the public surface is the intended initial-release surface", {
+  expected <- c(
+    "as_persona_frame", "conjoint_amce", "conjoint_design",
+    "conjoint_instrument", "item_choice", "item_likert", "item_open",
+    "panel_administer", "panel_batch_fetch", "panel_batch_status",
+    "panel_batch_submit", "panel_benchmark", "panel_bias_audit",
+    "panel_from_data", "panel_from_margins", "panel_from_personas",
+    "panel_instrument", "panel_power", "panel_usage", "run_panel_studio")
+
+  exports <- getNamespaceExports("LLMRpanel")
+  expect_setequal(exports, expected)
+  expect_false("panel_report" %in% exports)
+  expect_true(exists("panel_report", envir = asNamespace("LLMRpanel"),
+                     inherits = FALSE))
+})
+
+test_that("administration signatures use instrument and put .runner last", {
+  administer <- names(formals(panel_administer))
+  expect_true("instrument" %in% administer)
+  expect_false("instr" %in% administer)
+  expect_identical(tail(administer, 2), c(".runner", "..."))
+
+  submit <- names(formals(panel_batch_submit))
+  expect_true("instrument" %in% submit)
+  expect_false("instr" %in% submit)
 })

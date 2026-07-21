@@ -1,7 +1,7 @@
-# The calibration plot: structure assertions only (a ggplot comes back; the
+# The benchmark plot: structure assertions only (a ggplot comes back; the
 # refusals are informative). All offline, through the .runner seam.
 
-plot_fixture <- function(calibrated = TRUE) {
+plot_fixture <- function(benchmarked = TRUE) {
   set.seed(110)
   panel <- panel_from_margins(
     list(party = c(left = .5, right = .5)), n = 10,
@@ -22,16 +22,16 @@ plot_fixture <- function(calibrated = TRUE) {
   }
   r <- panel_administer(panel, instr, LLMR::llm_config("groq", "fake-model"),
                         .runner = by_party)
-  if (!calibrated) return(r)
+  if (!benchmarked) return(r)
   bench <- rbind(
     data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
                share = c(.5, .5)),
     data.frame(item_id = "wk4", response = c("disagree", "neutral", "agree"),
                share = c(.4, .2, .4)))
-  panel_calibrate(r, bench, "toy human study")
+  panel_benchmark(r, bench, "toy human study")
 }
 
-test_that("plot() on a calibrated result returns a ggplot object", {
+test_that("plot() on a benchmarked result returns a ggplot object", {
   skip_if_not_installed("ggplot2")
   p <- plot(plot_fixture())
   expect_s3_class(p, "ggplot")
@@ -46,6 +46,7 @@ test_that("plot() on a calibrated result returns a ggplot object", {
   expect_identical(p$theme$strip.text.y.left$angle, 0)
   expect_identical(p$theme$legend.position, "bottom")
   expect_identical(p$theme$plot.title.position, "plot")
+  expect_match(p$labels$title, "Benchmark")
 
   built <- ggplot2::ggplot_build(p)
   expect_setequal(unique(built$data[[2]]$colour), c("grey25", "#2C7FB8"))
@@ -73,7 +74,7 @@ test_that("plot() preserves response order within each item", {
     data.frame(item_id = "first", response = c("A", "B"), share = c(.5, .5)),
     data.frame(item_id = "second", response = c("B", "A"), share = c(.5, .5)))
 
-  p <- plot(panel_calibrate(responses, benchmark, "order benchmark"))
+  p <- plot(panel_benchmark(responses, benchmark, "order benchmark"))
   expect_identical(
     levels(p$layers[[2]]$data$response_key),
     c("first\rA", "first\rB", "second\rB", "second\rA"))
@@ -84,11 +85,11 @@ test_that("plot() preserves response order within each item", {
 test_that("plot() wraps a long benchmark citation outside the legend", {
   skip_if_not_installed("ggplot2")
   responses <- plot_fixture()
-  cal <- attr(responses, "calibration")
-  cal$benchmark_name <- paste(
+  bm <- attr(responses, "benchmark")
+  bm$benchmark_name <- paste(
     paste(rep("long benchmark citation", 8), collapse = " "),
     paste0("https://example.org/", strrep("a", 100)))
-  attr(responses, "calibration") <- cal
+  attr(responses, "benchmark") <- bm
 
   p <- plot(responses)
   subtitle_lines <- strsplit(p$labels$subtitle, "\n", fixed = TRUE)[[1]]
@@ -97,10 +98,10 @@ test_that("plot() wraps a long benchmark citation outside the legend", {
   expect_setequal(levels(p$layers[[2]]$data$series), c("human", "silicon"))
 })
 
-test_that("plot() refuses an uncalibrated result and names the way forward", {
-  r <- plot_fixture(calibrated = FALSE)
-  expect_error(plot(r), "UNCALIBRATED")
-  expect_error(plot(r), "panel_calibrate")
+test_that("plot() refuses a result without a benchmark and names the way forward", {
+  r <- plot_fixture(benchmarked = FALSE)
+  expect_error(plot(r), "NOT BENCHMARKED")
+  expect_error(plot(r), "panel_benchmark")
 })
 
 test_that("plot() errors informatively when ggplot2 is absent", {

@@ -4,17 +4,17 @@
 \alias{panel_from_personas}
 \title{Draw a panel from a persona data frame}
 \usage{
-panel_from_personas(data = NULL, rows = NULL, n = NULL, weights = NULL)
+panel_from_personas(data = NULL, n = NULL, rows = NULL, weights = NULL)
 }
 \arguments{
 \item{data}{A persona data frame. Defaults to \code{LLMR::anes_2024_personas}.}
 
-\item{rows}{Optional row selector: an integer or logical vector, or a predicate
-\verb{function(df)} returning a logical vector. Applied before sampling.}
-
 \item{n}{Optional panel size. With \code{NULL}, every selected row is used; with a
 number, rows are sampled (without replacement when \code{n} does not exceed the
 pool, otherwise with replacement).}
+
+\item{rows}{Optional row selector: an integer or logical vector, or a predicate
+\verb{function(df)} returning a logical vector. Applied before sampling.}
 
 \item{weights}{Optional survey weights for the draw: a column name in \code{data},
 or a numeric vector aligned to the selected rows. Used only when \code{n} is

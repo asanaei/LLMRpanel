@@ -10,7 +10,7 @@
 #' Starts a Shiny application that builds a persona panel, administers one
 #' choice item, and compares response shares with an optional benchmark. The
 #' application can download the responses and report in a zip file. It adds
-#' the calibration table when one is available.
+#' the benchmark table when one is available.
 #'
 #' The GUI is optional. It needs the suggested packages `shiny`, `bslib`, `DT`,
 #' and `LLMR.shiny`; install them first. Keys are read from environment variables
@@ -61,7 +61,7 @@ run_panel_studio <- function(...) {
 }
 
 # Bundle the run's artifacts into a zip for the download handler: responses as
-# CSV, panel_report() text, and an optional comparison table as a second CSV. All
+# CSV, LLMR::report() text, and an optional comparison table as a second CSV. All
 # writes go through tempfile(); in demo mode the CSV gains a demo_notice column
 # and the report is prefixed, so deterministic offline output cannot pass as
 # model output once it leaves the app.
@@ -82,18 +82,18 @@ run_panel_studio <- function(...) {
   utils::write.csv(resp_df, file.path(out_dir, "responses.csv"),
                    row.names = FALSE)
 
-  report_text <- paste(unclass(panel_report(responses)), collapse = "\n")
+  report_text <- paste(unclass(LLMR::report(responses)), collapse = "\n")
   if (!is.null(notice)) report_text <- paste(notice, report_text, sep = "\n\n")
   writeLines(report_text, file.path(out_dir, "report.txt"))
 
   files <- c("responses.csv", "report.txt")
-  cal <- attr(responses, "calibration")
-  if (!is.null(cal)) {
-    cal_df <- as.data.frame(cal$table)
-    if (!is.null(notice)) cal_df$demo_notice <- notice
-    utils::write.csv(cal_df, file.path(out_dir, "calibration.csv"),
+  benchmark <- attr(responses, "benchmark")
+  if (!is.null(benchmark)) {
+    benchmark_df <- as.data.frame(benchmark$table)
+    if (!is.null(notice)) benchmark_df$demo_notice <- notice
+    utils::write.csv(benchmark_df, file.path(out_dir, "benchmark.csv"),
                      row.names = FALSE)
-    files <- c(files, "calibration.csv")
+    files <- c(files, "benchmark.csv")
   }
 
   setwd(out_dir)
@@ -127,7 +127,7 @@ run_panel_studio <- function(...) {
     ns <- session$ns
     panel       <- shiny::reactiveVal(NULL)
     responses   <- shiny::reactiveVal(NULL)
-    calibration <- shiny::reactiveVal(NULL)
+    benchmark_result <- shiny::reactiveVal(NULL)
     run_is_demo <- shiny::reactiveVal(NULL)
     run_error   <- shiny::reactiveVal(NULL)
 
@@ -168,11 +168,12 @@ run_panel_studio <- function(...) {
           if (identical(shared$mode(), "demo")) LLMR.shiny::demo_banner_ui(),
           shiny::actionButton(ns("administer"), "Administer to panel", class = "btn-primary"),
           shiny::tags$hr(),
-          shiny::tags$strong("4. Calibrate (optional benchmark)"),
+          shiny::tags$strong("4. Benchmark comparison (optional)"),
           shiny::tags$p(class = "text-muted",
-            "Benchmark as 'level=share, level=share' for the item; leave blank to see the UNCALIBRATED result."),
+            "Benchmark as 'level=share, level=share' for the item; leave blank to see the NOT BENCHMARKED result."),
           shiny::textInput(ns("benchmark"), NULL, value = "yes=0.5, no=0.4, unsure=0.1"),
-          shiny::actionButton(ns("calibrate"), "Calibrate", class = "btn-primary"),
+          shiny::actionButton(ns("compare_benchmark"), "Compare with benchmark",
+                              class = "btn-primary"),
           shiny::tags$hr(),
           shiny::uiOutput(ns("results"))
         )
@@ -231,7 +232,7 @@ run_panel_studio <- function(...) {
         }, shared$provider())
       }
       if (!res$ok) { run_error(res$ui); return() }
-      panel(res$value); responses(NULL); calibration(NULL); run_is_demo(NULL)
+      panel(res$value); responses(NULL); benchmark_result(NULL); run_is_demo(NULL)
     })
 
     output$panel_status <- shiny::renderUI({
@@ -248,19 +249,19 @@ run_panel_studio <- function(...) {
         run_error(LLMR.shiny::live_run_blocker_ui(shared$key())); return()
       }
       res <- LLMR.shiny::safe_llmr_call({
-        instr <- panel_instrument(item_choice("q1", input$item_text, opts))
+        instrument <- panel_instrument(item_choice("q1", input$item_text, opts))
         cfg <- LLMR.shiny::build_llm_config(shared$provider(), shared$model(), temperature = 0)
         runner <- LLMR.shiny::build_runner(shared$mode(), .panel_gui_demo_responder())
         set.seed(110)
-        panel_administer(panel(), instr, cfg, .runner = runner)
+        panel_administer(panel(), instrument, cfg, .runner = runner)
       }, shared$provider())
       if (!res$ok) { run_error(res$ui); return() }
-      responses(res$value); calibration(NULL)
+      responses(res$value); benchmark_result(NULL)
       run_is_demo(identical(shared$mode(), "demo"))
       shared$add_usage(list(calls = nrow(panel())))
     })
 
-    shiny::observeEvent(input$calibrate, {
+    shiny::observeEvent(input$compare_benchmark, {
       run_error(NULL)
       if (is.null(responses())) { run_error(warn_card("Administer the instrument first.")); return() }
       bench <- parse_named_shares(input$benchmark)
@@ -268,10 +269,10 @@ run_panel_studio <- function(...) {
       bench_df <- data.frame(item_id = "q1", response = names(bench),
                              share = as.numeric(bench), stringsAsFactors = FALSE)
       res <- LLMR.shiny::safe_llmr_call(
-        panel_calibrate(responses(), bench_df, benchmark_name = "user benchmark"),
+        panel_benchmark(responses(), bench_df, benchmark_name = "user benchmark"),
         shared$provider())
       if (!res$ok) { run_error(res$ui); return() }
-      calibration(res$value)
+      benchmark_result(res$value)
     })
 
     output$results <- shiny::renderUI({
@@ -283,14 +284,14 @@ run_panel_studio <- function(...) {
         shiny::verbatimTextOutput(ns("report")),
         shiny::downloadButton(ns("download_bundle"), "Download artifacts"),
         shiny::tags$p(class = "text-muted",
-          "A zip: responses.csv, report.txt, and calibration.csv once a benchmark has been run.")
+          "A zip: responses.csv, report.txt, and benchmark.csv once a benchmark has been run.")
       )
     })
 
     output$download_bundle <- shiny::downloadHandler(
       filename = function() paste0("llmrpanel_artifacts_", Sys.Date(), ".zip"),
       content = function(file) {
-        r <- if (!is.null(calibration())) calibration() else responses()
+        r <- if (!is.null(benchmark_result())) benchmark_result() else responses()
         .panel_gui_bundle_artifacts(r, file, demo = isTRUE(run_is_demo()))
       }
     )
@@ -303,8 +304,8 @@ run_panel_studio <- function(...) {
 
     output$report <- shiny::renderText({
       shiny::req(responses())
-      r <- if (!is.null(calibration())) calibration() else responses()
-      LLMR.shiny::report_text(panel_report(r))
+      r <- if (!is.null(benchmark_result())) benchmark_result() else responses()
+      LLMR.shiny::report_text(LLMR::report(r))
     })
   })
 }

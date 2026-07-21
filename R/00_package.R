@@ -8,16 +8,17 @@
 #' [panel_from_personas()] uses a prepared persona data frame.
 #'
 #' Build instruments with [panel_instrument()] and the item constructors.
-#' [vignette_design()] expands factorial vignettes. [conjoint_design()] and
-#' [conjoint_instrument()] create forced-choice conjoint tasks.
+#' [conjoint_design()] and [conjoint_instrument()] create forced-choice conjoint
+#' tasks.
 #' [panel_administer()] records the item and option order used for each response.
-#' [panel_administer_batch()] submits larger administrations through a provider's
+#' [panel_batch_submit()] submits larger administrations through a provider's
 #' batch API.
 #'
-#' [panel_calibrate()] compares response shares with a supplied benchmark.
+#' [panel_benchmark()] compares response shares with a supplied benchmark.
 #' [panel_bias_audit()] counts parse failures and tests first-option sensitivity.
-#' [amce()] estimates conjoint effects. [panel_power()] calculates two-arm sample
-#' sizes from pilot dispersion. [panel_report()] summarizes an administration.
+#' [conjoint_amce()] estimates conjoint effects. [panel_power()] calculates
+#' two-arm sample sizes from pilot dispersion. [LLMR::report()] summarizes an
+#' administration.
 #'
 #' Without a benchmark, response shares describe the configured model under the
 #' supplied personas. They do not estimate a human population.

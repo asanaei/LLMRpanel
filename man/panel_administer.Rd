@@ -6,13 +6,13 @@
 \usage{
 panel_administer(
   panel,
-  instr,
+  instrument,
   config,
-  .runner = NULL,
   max_calls = 5000L,
   confirm = FALSE,
   price_table = NULL,
   tokens_per_call = NULL,
+  .runner = NULL,
   ...
 )
 }
@@ -20,14 +20,9 @@ panel_administer(
 \item{panel}{A \code{\link[=panel_from_margins]{panel_from_margins()}}, \code{\link[=panel_from_data]{panel_from_data()}}, or
 \code{\link[=panel_from_personas]{panel_from_personas()}} result.}
 
-\item{instr}{A \code{\link[=panel_instrument]{panel_instrument()}}.}
+\item{instrument}{A \code{\link[=panel_instrument]{panel_instrument()}}.}
 
 \item{config}{An \code{LLMR::llm_config()} for a generative model.}
-
-\item{.runner}{Optional runner for offline or deterministic testing: a
-\verb{function(experiments, ...)} that returns the experiments with a
-\code{response_text} column. Defaults to a live LLM call via
-\code{LLMR::call_llm_par()}.}
 
 \item{max_calls}{Integer. If the run would make more than this many calls
 (personas times items), it stops unless \code{confirm = TRUE}, so a large panel
@@ -43,6 +38,12 @@ million tokens) and your \code{tokens_per_call} assumption -- either one number
 two, \code{c(input, output)} (priced exactly). The package itself ships no
 prices and estimates no token counts.}
 
+\item{.runner}{Optional runner for offline or deterministic testing: a
+\verb{function(experiments, ...)} that receives a data frame with \code{config} and
+\code{messages} list-columns and returns those rows with at least a
+\code{response_text} column. Defaults to a live LLM call via
+\code{LLMR::call_llm_par()}.}
+
 \item{...}{Passed to the runner (e.g. \code{tries}, \code{progress}).}
 }
 \value{
@@ -54,10 +55,12 @@ item), \code{option_order} (what this respondent saw, \code{|}-separated), \code
 chosen response in the item's canonical scale, the order in which the levels
 were defined, not the position in the shuffled order this respondent saw
 (\code{option_order}); randomizing the display therefore does not change the
-score. Conjoint administrations also include a \code{profiles} list-column;
-each element is the task profile table that respondent saw. The panel and
-instrument are attached as attributes. The calibration attribute is \code{NULL}
-until \code{\link[=panel_calibrate]{panel_calibrate()}} is called.
+score. \code{response_text}, \code{response_id}, \code{success}, \code{error_message},
+\code{finish_reason}, \code{model}, and \code{provider} retain execution provenance as
+ordinary columns. Conjoint administrations also include a \code{profiles}
+list-column; each element is the task profile table that respondent saw.
+The panel and instrument are attached as attributes. The benchmark
+attribute is \code{NULL} until \code{\link[=panel_benchmark]{panel_benchmark()}} is called.
 }
 \description{
 Creates one request for each combination of persona and item. Persona text
@@ -68,12 +71,12 @@ replies are recorded as \code{NA}. Open-item replies are returned as text.
 \examples{
 set.seed(110)   # the panel draw is local; the model call is not
 panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 6)
-instr <- panel_instrument(
+instrument <- panel_instrument(
   item_likert("wk4", "A four-day work week would benefit society."),
   randomize = character(0))
 cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
 \dontrun{
-resp <- panel_administer(panel, instr, cfg)
+resp <- panel_administer(panel, instrument, cfg)
 resp
 }
 
@@ -83,5 +86,5 @@ deterministic <- function(experiments, ...) {
   experiments$response_text <- "agree"
   experiments
 }
-panel_administer(panel, instr, cfg, .runner = deterministic)
+panel_administer(panel, instrument, cfg, .runner = deterministic)
 }

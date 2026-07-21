@@ -5,20 +5,24 @@ Initial CRAN release.
 - `panel_from_margins()`, `panel_from_data()`, and
   `panel_from_personas()` create panels from supplied margins, microdata
   rows, or persona data frames. `as_persona_frame()` attaches question and
-  field metadata to a data frame.
+  field metadata to a data frame. Reports identify which panel source was used.
 - `panel_administer()` administers every item to every persona. It can
   randomize item and option order and records `item_position` and
-  `option_order`.
-- `panel_administer_batch()` submits an administration to a provider's
-  asynchronous batch API. `panel_batch_status()` and
-  `panel_administer_fetch()` inspect and retrieve the job.
-- `panel_calibrate()` compares response shares with supplied human
+  `option_order`. Responses also retain `response_text`, `response_id`,
+  `success`, `model`, and `provider` as columns.
+- `panel_batch_submit()` submits an administration to a provider's
+  asynchronous batch API. `panel_batch_status()` and `panel_batch_fetch()`
+  inspect and retrieve the job. Synchronous and batch submission share the
+  `max_calls` and `confirm` gate.
+- `panel_benchmark()` compares response shares with supplied human
   benchmarks and records benchmark coverage. `plot()` displays the
   compared shares.
 - `panel_bias_audit()` reports parse failures and first-option sensitivity.
 - `conjoint_instrument()` creates conjoint choice tasks with profiles randomized
-  independently for each respondent. `amce()` estimates from the recorded
-  respondent-level profiles with standard errors clustered by respondent.
+  independently for each respondent. `conjoint_design()` returns a classed
+  design, and `conjoint_amce()` estimates from the recorded respondent-level
+  profiles with standard errors clustered by respondent in a classed result
+  that retains run counts as columns.
 - `panel_power()` calculates two-arm sample sizes from pilot dispersion.
 - `run_panel_studio()` provides the panel workflow in an optional Shiny
-  application and can download responses, reports, and calibration tables.
+  application and can download responses, reports, and benchmark tables.

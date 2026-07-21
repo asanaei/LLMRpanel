@@ -18,7 +18,7 @@ A \code{panel_instrument} whose items are task-level choice items
 (ids \code{task_1}, \code{task_2}, ...; options \code{"Profile 1"}, \code{"Profile 2"},
 ...). Each item carries the attribute levels used for its respondent-level
 draws, and the instrument's \verb{$conjoint} field carries the design metadata
-for \code{\link[=amce]{amce()}}.
+for \code{\link[=conjoint_amce]{conjoint_amce()}}.
 }
 \description{
 Converts a \code{\link[=conjoint_design]{conjoint_design()}} into one forced-choice item per task:
@@ -37,10 +37,10 @@ panel <- panel_from_margins(list(group = c(A = .5, B = .5)), n = 4)
 design <- conjoint_design(
   list(economy = c("weak", "strong"), taxes = c("lower", "higher")),
   n_tasks = 3)
-instr <- conjoint_instrument(design, "Which candidate do you prefer?")
-instr
+instrument <- conjoint_instrument(design, "Which candidate do you prefer?")
+instrument
 cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
 \dontrun{
-panel_administer(panel, instr, cfg)
+panel_administer(panel, instrument, cfg)
 }
 }
