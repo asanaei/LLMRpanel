@@ -14,12 +14,10 @@ Invisibly, the value of \code{\link[shiny:runApp]{shiny::runApp()}}; called for 
 of starting the app.
 }
 \description{
-A point-and-click front end to the panel workflow: draw a persona panel from
-population margins, administer a choice item, calibrate against a benchmark,
-read the report with its mandatory calibration banner, and download the
-run's artifacts as a zip (the responses and, once run, the calibration table
-as CSV; the report as text). The model here stands in for a survey
-respondent, not a measurement instrument.
+Starts a Shiny application that builds a persona panel, administers one
+choice item, and compares response shares with an optional benchmark. The
+application can download the responses and report in a zip file. It adds
+the calibration table when one is available.
 }
 \details{
 The GUI is optional. It needs the suggested packages \code{shiny}, \code{bslib}, \code{DT},

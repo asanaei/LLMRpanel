@@ -30,17 +30,10 @@ into the prompt.}
 \code{data} with the persona contract attached and class \code{persona_frame}.
 }
 \description{
-Marks a decoded data frame as a persona source so that
-\code{\link[=panel_from_data]{panel_from_data()}} renders each row as a person described by their
-demographics and their stated answers, keyed by the survey question wording,
-rather than by a flat template. This is how an arbitrary data frame becomes
-good text for the model: you supply the column-to-question mapping, and the
-rendering is handled by \code{\link[LLMR:llm_persona_split]{LLMR::llm_persona_split()}}.
-}
-\details{
-Turning a frame into a \code{persona_frame} is the only way to opt into rich
-rendering; a plain data frame is always rendered by the previous flat
-template, so existing panels are unaffected.
+Attaches persona metadata to a decoded data frame. When a \code{persona_frame} is
+passed to \code{\link[=panel_from_data]{panel_from_data()}} without a template, demographic fields and
+stated answers are rendered separately. A question map supplies the wording
+used for answer fields. Plain data frames use the flat key-value rendering.
 }
 \examples{
 df <- data.frame(

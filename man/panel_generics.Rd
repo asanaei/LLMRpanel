@@ -8,6 +8,7 @@
 \alias{as_tibble.panel_responses}
 \title{Shared generic methods}
 \description{
-LLMRpanel registers methods for \code{LLMR::diagnostics()}, \code{LLMR::report()},
-and \code{tibble::as_tibble()} on panel objects.
+LLMRpanel provides \code{LLMR::diagnostics()}, \code{LLMR::report()}, and \code{plot()}
+methods for \code{panel_responses} objects. It provides \code{tibble::as_tibble()}
+methods for \code{panel_responses} and \code{silicon_panel} objects.
 }

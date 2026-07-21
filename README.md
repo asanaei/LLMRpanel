@@ -6,48 +6,40 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 <!-- badges: end -->
 
-LLMRpanel administers survey instruments to panels of language-model
-personas, for the design stage of human studies and for the study of model
-behavior itself. It is built on
-[LLMR](https://asanaei.github.io/LLMR/). Panels come from population
-margins the researcher supplies (`panel_from_margins()`), from rows of
-microdata (`panel_from_data()`, which preserves the joint distribution of
-attributes), or from a ready-made persona frame such as
-`LLMR::anes_2024_personas` (`panel_from_personas()`, with each respondent's
-answers kept intact); the package ships no demographic data of its own. Instruments
-combine Likert, forced-choice, and open items, and factorial stimuli come
-from `vignette_design()` and `conjoint_design()`. `panel_administer()` has every
-persona answer every item, randomizes item and option order per respondent,
-and records what each respondent saw, because with language models the
-order in which options are listed is a treatment.
+LLMRpanel administers survey and experimental instruments to panels of
+language model personas. Use it to pretest questions and designs or to
+measure how a configured model responds under specified personas. It is
+built on [LLMR](https://asanaei.github.io/LLMR/).
 
-The methodological stance is carried by the objects rather than the
-documentation. Every result prints an UNCALIBRATED banner until
-`panel_calibrate()` compares the panel's marginals to a human benchmark, item by
-item; partial benchmarks earn only a partial banner, and deviations are
-reported as found. `panel_bias_audit()` reports two properties of the responses
-themselves: nonresponse, and first-option sensitivity, meaning whether the answer
-depends on which option was listed first. For design work,
-`conjoint_instrument()` renders a conjoint design into forced-choice
-items, `amce()` estimates average marginal component effects with
-respondent-clustered standard errors, and `panel_power()` computes
-analytic two-arm power for the planned human study from the silicon
-pilot's dispersion. `panel_report()` assembles the design-stage report,
-calibration status first. The shared generic surface supports
-`LLMR::diagnostics()`, `LLMR::report()`, and `tibble::as_tibble()`.
+`panel_from_margins()` draws persona attributes independently from supplied
+population margins. `panel_from_data()` samples complete microdata rows, and
+`panel_from_personas()` uses a prepared persona data frame such as
+`LLMR::anes_2024_personas`. The package contains no population data.
+Instruments may contain Likert, choice, and open items.
+`vignette_design()` and `conjoint_design()` create factorial designs.
 
-A silicon panel pilots the instrument and design, not the population: it probes
-question wording, response options, ordering, and statistical power. When used to
-study the model itself, a larger panel mainly reduces Monte-Carlo noise in
-estimating patterns such as order effects, rather than making the synthetic
-respondents representative of people.
+`panel_administer()` sends every item to every persona. It can randomize item
+and option order for each persona and records both orders.
+`panel_bias_audit()` counts parse failures and tests whether responses are
+associated with the first option shown.
 
-For a large panel, hand `panel_from_data()` a frame wrapped with
-`as_persona_frame()` (it then renders each row by its question wording, not a flat
-template), and administer it through the provider's discounted asynchronous batch
-API with `panel_administer_batch()` and `panel_administer_fetch()`.
-`panel_administer()` reports the call count before a run and stops above
-`max_calls` unless you pass `confirm = TRUE`.
+`panel_calibrate()` compares closed-item response shares with a supplied human
+benchmark. It records benchmark coverage, deviations, and nonresponse.
+`plot()` displays the compared shares, and `panel_report()` summarizes the
+administration. Without a benchmark, response shares describe the configured
+model under the supplied personas. They do not estimate a human population.
+
+`conjoint_instrument()` creates forced-choice items from a conjoint design.
+`amce()` estimates average marginal component effects with standard errors
+clustered by persona. `panel_power()` calculates two-arm sample sizes from
+pilot dispersion.
+
+`as_persona_frame()` attaches question wording and identifies demographic and
+answer columns in microdata. For large administrations,
+`panel_administer_batch()` submits requests to a provider's asynchronous batch
+API, and `panel_administer_fetch()` retrieves the results. The synchronous
+`panel_administer()` reports the request count and stops above `max_calls`
+unless `confirm = TRUE`.
 
 ## Installation
 
@@ -60,21 +52,18 @@ remotes::install_github("asanaei/LLMRpanel")
 
 | Package | Use it when | Not for |
 |---|---|---|
-| [LLMRcontent](https://asanaei.github.io/LLMRcontent/) | Validated text measurement: codebook coding with sealed gold-set validation, robustness audits, and replication archives | Accessible qualitative coding or text segmentation |
-| [LLMRpanel](https://asanaei.github.io/LLMRpanel/) | Synthetic survey panels for design-stage work, calibrated against a human benchmark when one is supplied | Human-population estimates without calibration to a human benchmark |
+| [LLMRcontent](https://asanaei.github.io/LLMRcontent/) | Coding text with a codebook and checking labels against human-coded text | Administering survey instruments to persona panels |
+| [LLMRpanel](https://asanaei.github.io/LLMRpanel/) | Administering survey and experimental instruments to persona panels | Coding collections of source text |
 
-Both packages share one workflow: you build a first object, extend it, run it
-(supplying your own runner for offline tests), then read `diagnostics()` and
-draft `report()`. LLMRcontent can also seal the whole run into a replication
-archive.
+Both packages implement `LLMR::diagnostics()` and `LLMR::report()` methods.
+LLMRcontent can also save a replication archive.
 
 ### From a silicon panel to a focus group
 
-`FocusGroup::create_agents_from_data()` accepts a `silicon_panel` as its
-persona frame, so the respondent descriptions used for survey administration
-can also define participants in a moderated group discussion.
-`LLMR::anes_2024_personas` is the persona substrate shared across the package
-family.
+`FocusGroup::create_agents_from_data()` accepts a `silicon_panel`, so the same
+respondent descriptions can define participants in a moderated group
+discussion. `LLMR::anes_2024_personas` supplies personas used by both
+packages.
 
 ```r
 # remotes::install_github("asanaei/LLMRpanel")
@@ -95,7 +84,7 @@ instr <- panel_instrument(list(
 cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b", temperature = 0.8)
 
 resp <- panel_administer(panel, instr, cfg)
-resp                 # prints the UNCALIBRATED banner
+resp
 panel_bias_audit(resp)
 LLMR::diagnostics(resp)
 
@@ -111,13 +100,12 @@ panel_power(resp, effect = 0.3)
 
 ## The LLMR ecosystem
 
-LLMRpanel is one of several packages for LLM-assisted research built on
-[LLMR](https://asanaei.github.io/LLMR/), the provider layer on CRAN. The
-family also includes [LLMRcontent](https://asanaei.github.io/LLMRcontent/),
-which organizes annotation around codebooks and sealed gold-set validation,
-audits the robustness of estimates computed from model labels, and turns audit
-logs into verifiable replication archives; [FocusGroup](https://asanaei.github.io/FocusGroup/),
-which simulates moderated group discussion; and
-[LLMRagent](https://asanaei.github.io/LLMRagent/), which provides agents
-and multi-agent designs. An overview of the family lives at the
-[ecosystem page](https://asanaei.github.io/LLMR-ecosystem/).
+LLMRpanel is built on [LLMR](https://asanaei.github.io/LLMR/), the provider
+layer on CRAN. [LLMRcontent](https://asanaei.github.io/LLMRcontent/) annotates
+text with codebooks and checks model labels against human-coded text. It can
+save robustness summaries and replication archives.
+[FocusGroup](https://asanaei.github.io/FocusGroup/) simulates moderated group
+discussions.
+[LLMRagent](https://asanaei.github.io/LLMRagent/) provides tools for agent
+experiments. The [ecosystem page](https://asanaei.github.io/LLMR-ecosystem/)
+describes how the packages relate.

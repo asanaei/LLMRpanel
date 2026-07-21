@@ -2,7 +2,7 @@
 % Please edit documentation in R/calibrate.R
 \name{panel_calibrate}
 \alias{panel_calibrate}
-\title{Calibrate silicon responses against a human benchmark}
+\title{Compare silicon responses with a human benchmark}
 \usage{
 panel_calibrate(responses, benchmark, benchmark_name = "benchmark")
 }
@@ -23,16 +23,10 @@ to 1; a deviation beyond rounding draws a warning.}
 \verb{$items_covered} / \verb{$items_total}, \verb{$mad}, \verb{$max_dev}.
 }
 \description{
-Compares the panel's response marginals, item by item, to human
-benchmark marginals you supply (from ANES, GSS, Pew, your own fielded
-study). Calibration here reports deviation from the benchmark without
-adjusting the underlying estimates: deviations are reported as found, and
-the comparison is restricted to items the benchmark actually covers.
-Coverage is partial when only some items have a benchmark, and the print
-banner reflects it -- a benchmark touching one of five items yields
-\strong{PARTIALLY CALIBRATED (1/5)}. Nonresponse (parse failures, refusals) is
-recorded per item alongside, since shares computed only over valid
-responses flatter an instrument the model often refuses.
+Compares closed-item response shares with human benchmark shares supplied
+by the user. The result contains deviations for covered item-response
+pairs, the number of closed items covered, and nonresponse rates by item.
+The function does not alter responses or adjust response shares.
 }
 \examples{
 \dontrun{
@@ -42,7 +36,7 @@ instr <- panel_instrument(item_choice("plan", "Which plan do you prefer?",
                                       c("A", "B")))
 cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
 r <- panel_administer(panel, instr, cfg)
-r   # UNCALIBRATED banner
+r
 bench <- data.frame(item_id = "plan", response = c("A", "B"),
                     share = c(.5, .5))
 panel_calibrate(r, bench, "toy human study")

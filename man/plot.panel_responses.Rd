@@ -2,7 +2,7 @@
 % Please edit documentation in R/calibrate.R
 \name{plot.panel_responses}
 \alias{plot.panel_responses}
-\title{Plot a calibration: silicon against human shares, item by item}
+\title{Plot a benchmark comparison}
 \usage{
 \method{plot}{panel_responses}(x, ...)
 }
@@ -16,13 +16,11 @@ on (the calibration travels in \code{attr(x, "calibration")}).}
 A ggplot object.
 }
 \description{
-Draws the comparison \code{\link[=panel_calibrate]{panel_calibrate()}} recorded: for every covered item
-and response level, one point for the silicon share and one for the human
-benchmark share, joined by a segment whose length is the deviation. Levels
-follow the instrument's option order (so a Likert scale reads in scale
-order), items sit in separate panels, and the subtitle carries the coverage
-and the summary deviations. An uncalibrated result has nothing to show and
-is refused; that refusal is the plot-level form of the printed banner.
+Plots the comparison recorded by \code{\link[=panel_calibrate]{panel_calibrate()}}. Each covered response
+level has one point for the panel share and one for the benchmark share,
+joined by a segment. Response levels follow the instrument's option order,
+and items appear in separate panels. The method requires a calibration
+record.
 }
 \examples{
 if (requireNamespace("ggplot2", quietly = TRUE)) {

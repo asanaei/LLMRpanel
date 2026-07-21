@@ -1,10 +1,6 @@
 # batch.R -------------------------------------------------------------------
-# Administer a panel through LLMR's asynchronous, discounted batch API. A large
-# survey panel (thousands of persona x item calls) runs out of process at about
-# half the synchronous price, immune to rate limits, and can be fetched later or
-# from another session. The job is split into submit and fetch: submitting never
-# blocks, and fetching realigns results to the grid BY REQUEST ID, never by the
-# order the provider returns them.
+# Batch administration through LLMR's asynchronous provider APIs. Submission
+# returns a handle, and fetching matches results to the panel grid by request id.
 
 # A panel batch job: the LLMR job plus the grid metadata needed to parse results
 # back into a panel_responses. It deliberately stores no LLM config of its own
@@ -19,12 +15,10 @@
 
 #' Administer a panel asynchronously through the batch API
 #'
-#' Submits one request per persona x item to the provider's batch API (about half
-#' the synchronous price, up to a 24-hour turnaround, no rate-limit pressure) and
-#' returns immediately with a job handle. Complete it later with
-#' [panel_administer_fetch()]; check progress with [panel_batch_status()]. This is
-#' the recommended path for a large panel; the synchronous [panel_administer()]
-#' stays the default for small ones.
+#' Submits one request per persona and item to a provider's batch API and returns
+#' a job handle. Use [panel_batch_status()] to inspect the job and
+#' [panel_administer_fetch()] to retrieve completed results. Provider services
+#' determine prices and completion times.
 #'
 #' All personas are administered under one `config` (one model). The handle and
 #' its optional `state_path` file carry the survey prompts and the rendered

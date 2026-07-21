@@ -1,20 +1,12 @@
 # calibrate.R --------------------------------------------------------------------
-# Calibration and bias audits: the part of silicon sampling that is usually
-# skipped, here made the precondition for reading results as anything more
-# than model behavior.
+# Benchmark comparisons, response diagnostics, and design calculations.
 
-#' Calibrate silicon responses against a human benchmark
+#' Compare silicon responses with a human benchmark
 #'
-#' Compares the panel's response marginals, item by item, to human
-#' benchmark marginals you supply (from ANES, GSS, Pew, your own fielded
-#' study). Calibration here reports deviation from the benchmark without
-#' adjusting the underlying estimates: deviations are reported as found, and
-#' the comparison is restricted to items the benchmark actually covers.
-#' Coverage is partial when only some items have a benchmark, and the print
-#' banner reflects it -- a benchmark touching one of five items yields
-#' **PARTIALLY CALIBRATED (1/5)**. Nonresponse (parse failures, refusals) is
-#' recorded per item alongside, since shares computed only over valid
-#' responses flatter an instrument the model often refuses.
+#' Compares closed-item response shares with human benchmark shares supplied
+#' by the user. The result contains deviations for covered item-response
+#' pairs, the number of closed items covered, and nonresponse rates by item.
+#' The function does not alter responses or adjust response shares.
 #'
 #' @param responses A [panel_administer()] result.
 #' @param benchmark A data frame with columns `item_id`, `response`, and
@@ -34,7 +26,7 @@
 #'                                       c("A", "B")))
 #' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
 #' r <- panel_administer(panel, instr, cfg)
-#' r   # UNCALIBRATED banner
+#' r
 #' bench <- data.frame(item_id = "plan", response = c("A", "B"),
 #'                     share = c(.5, .5))
 #' panel_calibrate(r, bench, "toy human study")
@@ -126,15 +118,13 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
   responses
 }
 
-#' Plot a calibration: silicon against human shares, item by item
+#' Plot a benchmark comparison
 #'
-#' Draws the comparison [panel_calibrate()] recorded: for every covered item
-#' and response level, one point for the silicon share and one for the human
-#' benchmark share, joined by a segment whose length is the deviation. Levels
-#' follow the instrument's option order (so a Likert scale reads in scale
-#' order), items sit in separate panels, and the subtitle carries the coverage
-#' and the summary deviations. An uncalibrated result has nothing to show and
-#' is refused; that refusal is the plot-level form of the printed banner.
+#' Plots the comparison recorded by [panel_calibrate()]. Each covered response
+#' level has one point for the panel share and one for the benchmark share,
+#' joined by a segment. Response levels follow the instrument's option order,
+#' and items appear in separate panels. The method requires a calibration
+#' record.
 #'
 #' @param x A [panel_administer()] result that [panel_calibrate()] has been run
 #'   on (the calibration travels in `attr(x, "calibration")`).
@@ -269,20 +259,11 @@ plot.panel_responses <- function(x, ...) {
       plot.margin = ggplot2::margin(10, 14, 10, 10))
 }
 
-#' Audit silicon response style
+#' Summarize parse failures and first-option sensitivity
 #'
-#' The artifacts silicon respondents are known for, measured from the
-#' responses themselves:
-#'
-#' - **First-option sensitivity**: for items administered with randomized
-#'   option order, a chi-squared test of the chosen response against which
-#'   option was listed first. This is a narrow slice of the broader question of
-#'   option-order effects: it asks whether the answer depends on what appeared in
-#'   position one, not on the full permutation of positions. With LLMs even this
-#'   reduced signal is routinely significant; a result that survives
-#'   [LLMRcontent](https://github.com/asanaei/LLMRcontent)-style scrutiny should
-#'   not depend on it.
-#' - **Non-response**: parse failures and refusals per item.
+#' Counts parse failures by item. For closed items administered with randomized
+#' option order, it also applies a chi-squared test to the chosen response and
+#' the option shown first. The test does not use the full option permutation.
 #'
 #' @param responses A [panel_administer()] result.
 #' @return A tibble: `item_id`, `n`, `parse_failures`, `order_effect_p`
@@ -337,20 +318,17 @@ diagnostics.panel_responses <- function(x, ...) {
   out
 }
 
-#' Two-arm power for the planned human study, priced from the silicon pilot
+#' Calculate two-arm sample sizes from panel responses
 #'
-#' Analytic two-arm sample sizes with dispersion priors taken from the
-#' silicon responses: Likert items use the pilot standard deviation of
-#' `score`; choice items use the pilot share of the modal option; open
-#' items are skipped. The priors inherit the panel's calibration status --
-#' an uncalibrated pilot prices the design stage, it does not certify
-#' effect sizes.
+#' Calculates analytic sample sizes for a two-arm study. Likert items use the
+#' standard deviation of `score`. Choice items use the share of a focal response
+#' or, when appropriate, the modal response. Open items are omitted.
 #'
 #' @param responses A [panel_administer()] result (the silicon pilot).
 #' @param effect Raw minimum detectable difference between the two arms:
 #'   scale points for Likert items, a difference in proportions for choice
 #'   items. A scalar (recycled) or a named vector keyed by `item_id`.
-#' @param items Optional character vector restricting which items to price.
+#' @param items Optional character vector restricting which items to include.
 #' @param focal Optional named character vector keyed by `item_id`, giving the
 #'   focal response level whose proportion the power calculation should target.
 #'   For a binary choice item the modal option is a well-defined estimand and
@@ -661,10 +639,10 @@ amce <- function(responses) {
   out
 }
 
-#' The design-stage report
+#' Create a panel report
 #'
-#' Panel composition, response and parse rates, the bias audit, and --
-#' first, in capitals, when absent -- the calibration status.
+#' Returns lines describing panel composition, response and parse counts,
+#' first-option sensitivity, and benchmark comparison status.
 #'
 #' @param responses A [panel_administer()] result.
 #' @param ... Ignored; reserved for generic dispatch.

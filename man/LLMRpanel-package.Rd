@@ -4,53 +4,28 @@
 \name{LLMRpanel-package}
 \alias{LLMRpanel}
 \alias{LLMRpanel-package}
-\title{LLMRpanel: calibrated silicon samples for survey and experiment design}
+\title{Survey and experiment design with language model persona panels}
 \description{
-Quantitative silicon sampling with the methodological stance baked into
-the objects:
+LLMRpanel administers survey and experimental instruments to panels of
+language model personas. \code{\link[=panel_from_margins]{panel_from_margins()}} draws persona attributes from
+supplied margins. \code{\link[=panel_from_data]{panel_from_data()}} samples microdata rows, and
+\code{\link[=panel_from_personas]{panel_from_personas()}} uses a prepared persona data frame.
 }
 \details{
-\itemize{
-\item \code{\link[=panel_from_margins]{panel_from_margins()}}: persona panels drawn from population margins
-you supply (ACS/ANES-style), with the persona text rendered from a
-template.
-\item \code{\link[=panel_instrument]{panel_instrument()}} with \code{\link[=item_likert]{item_likert()}}, \code{\link[=item_choice]{item_choice()}}, \code{\link[=item_open]{item_open()}};
-\code{\link[=vignette_design]{vignette_design()}} and \code{\link[=conjoint_design]{conjoint_design()}} for factorial stimuli.
-\item \code{\link[=panel_from_data]{panel_from_data()}}: the joint-distribution counterpart, drawing
-personas from microdata rows.
-\item \code{\link[=panel_from_personas]{panel_from_personas()}}: a panel from a ready-made persona data frame
-(such as \code{LLMR::anes_2024_personas}), each respondent answering in
-character with their own bundle of attitudes.
-\item \code{\link[=as_persona_frame]{as_persona_frame()}}: mark a decoded data frame as a persona source so each
-row renders from its demographics and answers, keyed by question wording.
-\item \code{\link[=panel_administer]{panel_administer()}}: every persona answers every item, with item- and
-option-order randomization recorded per response. For a large panel,
-\code{\link[=panel_administer_batch]{panel_administer_batch()}} / \code{\link[=panel_administer_fetch]{panel_administer_fetch()}} run it through the
-provider's discounted asynchronous batch API; \code{\link[=panel_usage]{panel_usage()}} reports the
-token cost.
-\item \code{\link[=panel_calibrate]{panel_calibrate()}}: compare silicon marginals to human benchmarks; until it
-runs, every print method shows an \strong{UNCALIBRATED} banner.
-\item \code{\link[=panel_bias_audit]{panel_bias_audit()}}: option-order effects and refusal/parse rates -- the
-response-style artifacts silicon respondents are known for.
-\item \code{\link[=conjoint_instrument]{conjoint_instrument()}} and \code{\link[=amce]{amce()}}: forced-choice conjoint items and
-their average marginal component effects, with respondent-clustered
-standard errors.
-\item \code{\link[=panel_power]{panel_power()}}: analytic two-arm power for the planned human study,
-priced from the silicon pilot.
-\item \code{\link[=panel_report]{panel_report()}}: the design-stage report, banner included.
-}
+Build instruments with \code{\link[=panel_instrument]{panel_instrument()}} and the item constructors.
+\code{\link[=vignette_design]{vignette_design()}} expands factorial vignettes. \code{\link[=conjoint_design]{conjoint_design()}} and
+\code{\link[=conjoint_instrument]{conjoint_instrument()}} create forced-choice conjoint tasks.
+\code{\link[=panel_administer]{panel_administer()}} records the item and option order used for each response.
+\code{\link[=panel_administer_batch]{panel_administer_batch()}} submits larger administrations through a provider's
+batch API.
 
-The stance, printed rather than preached: silicon panels are instruments
-for the design stage -- pretesting questionnaires, piloting vignette and
-conjoint designs, stress-testing instruments -- and for measuring model
-behavior. They estimate human population quantities only to the extent
-that calibration against human data earns that reading, case by case.
+\code{\link[=panel_calibrate]{panel_calibrate()}} compares response shares with a supplied benchmark.
+\code{\link[=panel_bias_audit]{panel_bias_audit()}} counts parse failures and tests first-option sensitivity.
+\code{\link[=amce]{amce()}} estimates conjoint effects. \code{\link[=panel_power]{panel_power()}} calculates two-arm sample
+sizes from pilot dispersion. \code{\link[=panel_report]{panel_report()}} summarizes an administration.
 
-A silicon panel pilots the instrument and design, not the population: it
-probes question wording, response options, ordering, and statistical power.
-When used to study the model itself, a larger panel mainly reduces Monte Carlo
-noise in estimating patterns such as order effects, rather than making the
-synthetic respondents representative of people.
+Without a benchmark, response shares describe the configured model under the
+supplied personas. They do not estimate a human population.
 }
 \seealso{
 Useful links:

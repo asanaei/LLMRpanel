@@ -2,7 +2,7 @@
 % Please edit documentation in R/calibrate.R
 \name{panel_report}
 \alias{panel_report}
-\title{The design-stage report}
+\title{Create a panel report}
 \usage{
 panel_report(responses, ...)
 }
@@ -15,6 +15,6 @@ panel_report(responses, ...)
 Character lines of class \code{panel_report}, with a print method.
 }
 \description{
-Panel composition, response and parse rates, the bias audit, and --
-first, in capitals, when absent -- the calibration status.
+Returns lines describing panel composition, response and parse counts,
+first-option sensitivity, and benchmark comparison status.
 }

@@ -23,11 +23,9 @@ attribute, and \code{persona} (the rendered text).
 \description{
 Samples \code{n} personas with attributes drawn independently from the
 supplied margins, and renders each persona's text from a template.
-Independence across attributes is a deliberate simplification: the
-attributes are sampled marginally, not jointly. For instrument
-pretesting this rarely matters; for anything resembling estimation it
-does, and \code{\link[=panel_calibrate]{panel_calibrate()}} will tell you. When you hold microdata and want
-the joint distribution preserved, use \code{\link[=panel_from_data]{panel_from_data()}}.
+Attributes are sampled independently, so the result does not preserve their
+joint distribution. Use \code{\link[=panel_from_data]{panel_from_data()}} to sample complete microdata
+rows.
 }
 \details{
 For a reproducible panel, set a seed before calling (the function never

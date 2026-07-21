@@ -2,7 +2,7 @@
 % Please edit documentation in R/calibrate.R
 \name{panel_power}
 \alias{panel_power}
-\title{Two-arm power for the planned human study, priced from the silicon pilot}
+\title{Calculate two-arm sample sizes from panel responses}
 \usage{
 panel_power(
   responses,
@@ -20,7 +20,7 @@ panel_power(
 scale points for Likert items, a difference in proportions for choice
 items. A scalar (recycled) or a named vector keyed by \code{item_id}.}
 
-\item{items}{Optional character vector restricting which items to price.}
+\item{items}{Optional character vector restricting which items to include.}
 
 \item{focal}{Optional named character vector keyed by \code{item_id}, giving the
 focal response level whose proportion the power calculation should target.
@@ -42,12 +42,9 @@ A tibble: \code{item_id}, \code{type}, \code{dispersion} (sd for Likert, the foc
 or modal share for choice), \code{effect}, \code{n_per_arm}.
 }
 \description{
-Analytic two-arm sample sizes with dispersion priors taken from the
-silicon responses: Likert items use the pilot standard deviation of
-\code{score}; choice items use the pilot share of the modal option; open
-items are skipped. The priors inherit the panel's calibration status --
-an uncalibrated pilot prices the design stage, it does not certify
-effect sizes.
+Calculates analytic sample sizes for a two-arm study. Likert items use the
+standard deviation of \code{score}. Choice items use the share of a focal response
+or, when appropriate, the modal response. Open items are omitted.
 }
 \examples{
 \dontrun{

@@ -17,7 +17,8 @@ panel_administer(
 )
 }
 \arguments{
-\item{panel}{A \code{\link[=panel_from_margins]{panel_from_margins()}} or \code{\link[=panel_from_data]{panel_from_data()}} result.}
+\item{panel}{A \code{\link[=panel_from_margins]{panel_from_margins()}}, \code{\link[=panel_from_data]{panel_from_data()}}, or
+\code{\link[=panel_from_personas]{panel_from_personas()}} result.}
 
 \item{instr}{A \code{\link[=panel_instrument]{panel_instrument()}}.}
 
@@ -53,16 +54,14 @@ item), \code{option_order} (what this respondent saw, \code{|}-separated), \code
 chosen response in the item's canonical scale, the order in which the levels
 were defined, not the position in the shuffled order this respondent saw
 (\code{option_order}); randomizing the display therefore does not change the
-score. Carries the panel and instrument as attributes and an empty
-calibration slot: every print shows the \strong{UNCALIBRATED} banner until
-\code{\link[=panel_calibrate]{panel_calibrate()}} fills it.
+score. The panel and instrument are attached as attributes. The calibration
+attribute is \code{NULL} until \code{\link[=panel_calibrate]{panel_calibrate()}} is called.
 }
 \description{
-One call per persona x item, through LLMR's parallel engine by default.
-The persona is the system message; the item and its (possibly reordered)
-options are the user message; replies are matched to the offered
-options, with failures kept as \code{NA} -- a refusal or an essay instead of
-an option is data about the instrument.
+Creates one request for each combination of persona and item. Persona text
+is placed in the system message, and item text and options in the user
+message. Closed-item replies are matched to offered options; unmatched
+replies are recorded as \code{NA}. Open-item replies are returned as text.
 }
 \examples{
 set.seed(110)   # the panel draw is local; the model call is not
@@ -73,7 +72,7 @@ instr <- panel_instrument(
 cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
 \dontrun{
 resp <- panel_administer(panel, instr, cfg)
-resp                       # UNCALIBRATED banner, by design
+resp
 }
 
 # The `.runner` seam answers without a provider, for tests or for a

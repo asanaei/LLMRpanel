@@ -22,12 +22,10 @@ so it can be fetched from another session.}
 A \code{panel_batch_job} handle.
 }
 \description{
-Submits one request per persona x item to the provider's batch API (about half
-the synchronous price, up to a 24-hour turnaround, no rate-limit pressure) and
-returns immediately with a job handle. Complete it later with
-\code{\link[=panel_administer_fetch]{panel_administer_fetch()}}; check progress with \code{\link[=panel_batch_status]{panel_batch_status()}}. This is
-the recommended path for a large panel; the synchronous \code{\link[=panel_administer]{panel_administer()}}
-stays the default for small ones.
+Submits one request per persona and item to a provider's batch API and returns
+a job handle. Use \code{\link[=panel_batch_status]{panel_batch_status()}} to inspect the job and
+\code{\link[=panel_administer_fetch]{panel_administer_fetch()}} to retrieve completed results. Provider services
+determine prices and completion times.
 }
 \details{
 All personas are administered under one \code{config} (one model). The handle and

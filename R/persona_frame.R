@@ -8,16 +8,10 @@
 
 #' Attach the persona contract to a data frame
 #'
-#' Marks a decoded data frame as a persona source so that
-#' [panel_from_data()] renders each row as a person described by their
-#' demographics and their stated answers, keyed by the survey question wording,
-#' rather than by a flat template. This is how an arbitrary data frame becomes
-#' good text for the model: you supply the column-to-question mapping, and the
-#' rendering is handled by [LLMR::llm_persona_split()].
-#'
-#' Turning a frame into a `persona_frame` is the only way to opt into rich
-#' rendering; a plain data frame is always rendered by the previous flat
-#' template, so existing panels are unaffected.
+#' Attaches persona metadata to a decoded data frame. When a `persona_frame` is
+#' passed to [panel_from_data()] without a template, demographic fields and
+#' stated answers are rendered separately. A question map supplies the wording
+#' used for answer fields. Plain data frames use the flat key-value rendering.
 #'
 #' @param data A decoded data frame, one respondent per row. Values should
 #'   already be human-readable labels (decode a labelled survey file with, for

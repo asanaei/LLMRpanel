@@ -1,49 +1,26 @@
 # 00_package.R ----------------------------------------------------------------
 
-#' LLMRpanel: calibrated silicon samples for survey and experiment design
+#' Survey and experiment design with language model persona panels
 #'
-#' Quantitative silicon sampling with the methodological stance baked into
-#' the objects:
+#' LLMRpanel administers survey and experimental instruments to panels of
+#' language model personas. [panel_from_margins()] draws persona attributes from
+#' supplied margins. [panel_from_data()] samples microdata rows, and
+#' [panel_from_personas()] uses a prepared persona data frame.
 #'
-#' - [panel_from_margins()]: persona panels drawn from population margins
-#'   you supply (ACS/ANES-style), with the persona text rendered from a
-#'   template.
-#' - [panel_instrument()] with [item_likert()], [item_choice()], [item_open()];
-#'   [vignette_design()] and [conjoint_design()] for factorial stimuli.
-#' - [panel_from_data()]: the joint-distribution counterpart, drawing
-#'   personas from microdata rows.
-#' - [panel_from_personas()]: a panel from a ready-made persona data frame
-#'   (such as `LLMR::anes_2024_personas`), each respondent answering in
-#'   character with their own bundle of attitudes.
-#' - [as_persona_frame()]: mark a decoded data frame as a persona source so each
-#'   row renders from its demographics and answers, keyed by question wording.
-#' - [panel_administer()]: every persona answers every item, with item- and
-#'   option-order randomization recorded per response. For a large panel,
-#'   [panel_administer_batch()] / [panel_administer_fetch()] run it through the
-#'   provider's discounted asynchronous batch API; [panel_usage()] reports the
-#'   token cost.
-#' - [panel_calibrate()]: compare silicon marginals to human benchmarks; until it
-#'   runs, every print method shows an **UNCALIBRATED** banner.
-#' - [panel_bias_audit()]: option-order effects and refusal/parse rates -- the
-#'   response-style artifacts silicon respondents are known for.
-#' - [conjoint_instrument()] and [amce()]: forced-choice conjoint items and
-#'   their average marginal component effects, with respondent-clustered
-#'   standard errors.
-#' - [panel_power()]: analytic two-arm power for the planned human study,
-#'   priced from the silicon pilot.
-#' - [panel_report()]: the design-stage report, banner included.
+#' Build instruments with [panel_instrument()] and the item constructors.
+#' [vignette_design()] expands factorial vignettes. [conjoint_design()] and
+#' [conjoint_instrument()] create forced-choice conjoint tasks.
+#' [panel_administer()] records the item and option order used for each response.
+#' [panel_administer_batch()] submits larger administrations through a provider's
+#' batch API.
 #'
-#' The stance, printed rather than preached: silicon panels are instruments
-#' for the design stage -- pretesting questionnaires, piloting vignette and
-#' conjoint designs, stress-testing instruments -- and for measuring model
-#' behavior. They estimate human population quantities only to the extent
-#' that calibration against human data earns that reading, case by case.
+#' [panel_calibrate()] compares response shares with a supplied benchmark.
+#' [panel_bias_audit()] counts parse failures and tests first-option sensitivity.
+#' [amce()] estimates conjoint effects. [panel_power()] calculates two-arm sample
+#' sizes from pilot dispersion. [panel_report()] summarizes an administration.
 #'
-#' A silicon panel pilots the instrument and design, not the population: it
-#' probes question wording, response options, ordering, and statistical power.
-#' When used to study the model itself, a larger panel mainly reduces Monte Carlo
-#' noise in estimating patterns such as order effects, rather than making the
-#' synthetic respondents representative of people.
+#' Without a benchmark, response shares describe the configured model under the
+#' supplied personas. They do not estimate a human population.
 #'
 #' @keywords internal
 #' @importFrom rlang %||% abort
@@ -51,8 +28,9 @@
 
 #' Shared generic methods
 #'
-#' LLMRpanel registers methods for `LLMR::diagnostics()`, `LLMR::report()`,
-#' and `tibble::as_tibble()` on panel objects.
+#' LLMRpanel provides `LLMR::diagnostics()`, `LLMR::report()`, and `plot()`
+#' methods for `panel_responses` objects. It provides `tibble::as_tibble()`
+#' methods for `panel_responses` and `silicon_panel` objects.
 #'
 #' @name panel_generics
 #' @aliases diagnostics.panel_responses report.panel_responses

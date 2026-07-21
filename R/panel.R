@@ -69,11 +69,9 @@
 #'
 #' Samples `n` personas with attributes drawn independently from the
 #' supplied margins, and renders each persona's text from a template.
-#' Independence across attributes is a deliberate simplification: the
-#' attributes are sampled marginally, not jointly. For instrument
-#' pretesting this rarely matters; for anything resembling estimation it
-#' does, and [panel_calibrate()] will tell you. When you hold microdata and want
-#' the joint distribution preserved, use [panel_from_data()].
+#' Attributes are sampled independently, so the result does not preserve their
+#' joint distribution. Use [panel_from_data()] to sample complete microdata
+#' rows.
 #'
 #' For a reproducible panel, set a seed before calling (the function never
 #' sets one itself).
@@ -232,10 +230,9 @@ panel_from_data <- function(data, n, persona_template = NULL,
 #' question wording when the frame carries a dictionary), and each persona is
 #' rendered as a person to answer in character.
 #'
-#' Unlike [panel_from_margins()] and [panel_from_data()], the answers travel with
-#' each respondent (they are not resampled across people), so a persona's stated
-#' views stay internally consistent. The cited `margins` are the demographic
-#' distribution of the chosen rows.
+#' Unlike [panel_from_margins()] and [panel_from_data()], this constructor keeps
+#' each selected respondent's answers together. The `margins` attribute contains
+#' the demographic distribution of the selected rows.
 #'
 #' For a reproducible draw, set a seed before calling (the function never sets
 #' one itself).

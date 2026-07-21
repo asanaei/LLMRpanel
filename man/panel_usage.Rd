@@ -16,12 +16,11 @@ A one-row usage tibble, or \code{NULL} when no diagnostics were retained
 (for example an offline \code{.runner} that returned no token columns).
 }
 \description{
-Returns the token and outcome diagnostics recorded during
-\code{\link[=panel_administer]{panel_administer()}} (or \code{\link[=panel_administer_fetch]{panel_administer_fetch()}}). The figures are attached
-to a \code{panel_responses} object as a \code{usage} attribute, which a thin wrapper over
-\code{\link[LLMR:llm_usage]{LLMR::llm_usage()}} summarizes here so they survive being read off without
-digging into attributes. With a \code{price_table} (the \code{\link[LLMR:llm_usage]{LLMR::llm_usage()}} format),
-a cost column is added; the package itself ships no prices.
+Summarizes token and outcome diagnostics recorded by \code{\link[=panel_administer]{panel_administer()}} or
+\code{\link[=panel_administer_fetch]{panel_administer_fetch()}}. The diagnostics are stored in the \code{usage}
+attribute of a \code{panel_responses} object and summarized by \code{\link[LLMR:llm_usage]{LLMR::llm_usage()}}.
+A supplied \code{price_table} adds a cost column. The package contains no price
+table.
 }
 \seealso{
 \code{\link[=panel_administer]{panel_administer()}}, \code{\link[LLMR:llm_usage]{LLMR::llm_usage()}}.

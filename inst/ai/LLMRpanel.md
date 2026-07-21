@@ -1,13 +1,12 @@
 ---
 name: llmrpanel
-description: Calibrated silicon samples for survey and experiment design in R - persona panels from population margins, Likert/choice/vignette/conjoint instruments with recorded order randomization, coverage-aware calibration against human benchmarks, bias audits.
+description: Create persona panels, administer survey and experimental instruments, and compare response shares with supplied benchmarks.
 ---
 
-# LLMRpanel -- usage capsule for AI assistants
+# LLMRpanel usage guide
 
-This file is the compact manual: enough to use the package correctly
-without reading every help page. `vignette("design", package =
-"LLMRpanel")` goes deeper.
+This guide summarizes the principal objects and functions. For a worked
+example, see `vignette("design", package = "LLMRpanel")`.
 
 ## Install
 
@@ -15,13 +14,14 @@ without reading every help page. `vignette("design", package =
 remotes::install_github("asanaei/LLMRpanel")   # depends on LLMR (>= 0.8.9)
 ```
 
-## The stance (encoded in the objects, not just prose)
+## Scope and benchmark comparison
 
-Silicon panels are design-stage instruments -- pretesting, piloting, power
-planning -- and instruments for measuring model behavior. Results print an
-**UNCALIBRATED** banner until `panel_calibrate()` compares them to a human
-benchmark; partial benchmarks earn only **PARTIALLY CALIBRATED (k/m)**.
-Do not present uncalibrated silicon marginals as population estimates.
+Use persona panels to pretest instruments, pilot experimental designs, or
+measure responses from a configured model under specified personas.
+`panel_calibrate()` compares response shares with a supplied human benchmark.
+Printed results state whether the benchmark covers none, some, or all closed
+items. Without such a benchmark, the shares describe the model run and do not
+estimate a human population.
 
 ## Core API (exact signatures)
 
@@ -93,7 +93,7 @@ design <- conjoint_design(list(price = c("low", "high"),
 cj <- panel_administer(panel, conjoint_instrument(design), cfg)
 amce(cj)
 
-# price the human study from the pilot's dispersion
+# calculate sample sizes from the pilot's dispersion
 panel_power(resp, effect = c(fund = 0.15))
 ```
 
@@ -107,28 +107,31 @@ item and options in `messages[["user"]]`.
 
 ## Rules
 
-- Supply margins yourself (ACS/ANES/CES); the package ships no populations.
-- `panel_from_margins()` samples each margin independently (no joint
-  structure); use `panel_from_data()` to draw from microdata rows and keep
-  the joint distribution. For estimation-like uses the difference matters,
-  and `panel_calibrate()` shows it.
-- Benchmark frame needs `item_id`, `response`, `share`; shares per item
-  should sum to 1 (warned otherwise). Calibration compares only covered
-  items; coverage is part of the printed verdict.
-- Option order is a treatment: leave randomization on and read
-  `panel_bias_audit()`'s per-item order-effect p-values.
-- Likert `score` is the 1-based position on the scale as given.
-- Parse failures stay `NA` and are reported as nonresponse; do not drop.
-- `amce()` needs an administration of a `conjoint_instrument()`; it
-  clusters standard errors by persona and reports baselines as 0 / NA.
-- `panel_power()` priors inherit the pilot's calibration status; an
-  uncalibrated pilot prices the design stage, it does not certify effects.
-- `LLMR::diagnostics()` returns the bias audit plus calibration-state
-  fields; `LLMR::report()` delegates to `panel_report()`.
-- `tibble::as_tibble()` strips panel-specific classes from panels and
-  response objects.
-- Set a seed BEFORE calls for reproducible panels/designs; functions never
-  set seeds internally.
+- The package contains no population data. Supply the margins or source rows
+  used to construct a panel.
+- `panel_from_margins()` samples attributes independently.
+  `panel_from_data()` samples complete microdata rows and retains relationships
+  among the selected columns.
+- A benchmark data frame has columns `item_id`, `response`, and `share`.
+  Shares should sum to 1 within each item. The comparison uses covered items
+  and reports the number of closed items covered.
+- `panel_instrument()` randomizes item and option order by default.
+  `panel_bias_audit()` tests whether responses are associated with the first
+  option shown.
+- Likert `score` is the 1-based position in the scale supplied to
+  `item_likert()`.
+- Unmatched closed-item replies remain `NA` and are counted as nonresponse.
+- `amce()` requires responses from `conjoint_instrument()` and clusters
+  standard errors by persona. Baseline rows have estimate 0 and missing
+  standard errors.
+- `panel_power()` uses pilot dispersion to calculate sample sizes. It does not
+  validate the specified effect.
+- `LLMR::diagnostics()` returns the bias audit and calibration fields.
+  `LLMR::report()` returns `panel_report()`.
+- `tibble::as_tibble()` removes the panel class. For response objects it also
+  removes the panel, instrument, and calibration attributes.
+- Set a seed before reproducible panel or design draws. Package functions do
+  not set one.
 
 ## Error meanings
 

@@ -34,10 +34,9 @@ question wording when the frame carries a dictionary), and each persona is
 rendered as a person to answer in character.
 }
 \details{
-Unlike \code{\link[=panel_from_margins]{panel_from_margins()}} and \code{\link[=panel_from_data]{panel_from_data()}}, the answers travel with
-each respondent (they are not resampled across people), so a persona's stated
-views stay internally consistent. The cited \code{margins} are the demographic
-distribution of the chosen rows.
+Unlike \code{\link[=panel_from_margins]{panel_from_margins()}} and \code{\link[=panel_from_data]{panel_from_data()}}, this constructor keeps
+each selected respondent's answers together. The \code{margins} attribute contains
+the demographic distribution of the selected rows.
 
 For a reproducible draw, set a seed before calling (the function never sets
 one itself).

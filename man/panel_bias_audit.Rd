@@ -2,7 +2,7 @@
 % Please edit documentation in R/calibrate.R
 \name{panel_bias_audit}
 \alias{panel_bias_audit}
-\title{Audit silicon response style}
+\title{Summarize parse failures and first-option sensitivity}
 \usage{
 panel_bias_audit(responses)
 }
@@ -15,19 +15,7 @@ A tibble: \code{item_id}, \code{n}, \code{parse_failures}, \code{order_effect_p}
 cells are too sparse).
 }
 \description{
-The artifacts silicon respondents are known for, measured from the
-responses themselves:
-}
-\details{
-\itemize{
-\item \strong{First-option sensitivity}: for items administered with randomized
-option order, a chi-squared test of the chosen response against which
-option was listed first. This is a narrow slice of the broader question of
-option-order effects: it asks whether the answer depends on what appeared in
-position one, not on the full permutation of positions. With LLMs even this
-reduced signal is routinely significant; a result that survives
-\href{https://github.com/asanaei/LLMRcontent}{LLMRcontent}-style scrutiny should
-not depend on it.
-\item \strong{Non-response}: parse failures and refusals per item.
-}
+Counts parse failures by item. For closed items administered with randomized
+option order, it also applies a chi-squared test to the chosen response and
+the option shown first. The test does not use the full option permutation.
 }

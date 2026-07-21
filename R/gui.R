@@ -7,12 +7,10 @@
 
 #' Launch the LLMRpanel Shiny GUI
 #'
-#' A point-and-click front end to the panel workflow: draw a persona panel from
-#' population margins, administer a choice item, calibrate against a benchmark,
-#' read the report with its mandatory calibration banner, and download the
-#' run's artifacts as a zip (the responses and, once run, the calibration table
-#' as CSV; the report as text). The model here stands in for a survey
-#' respondent, not a measurement instrument.
+#' Starts a Shiny application that builds a persona panel, administers one
+#' choice item, and compares response shares with an optional benchmark. The
+#' application can download the responses and report in a zip file. It adds
+#' the calibration table when one is available.
 #'
 #' The GUI is optional. It needs the suggested packages `shiny`, `bslib`, `DT`,
 #' and `LLMR.shiny`; install them first. Keys are read from environment variables
@@ -62,9 +60,8 @@ run_panel_studio <- function(...) {
   }
 }
 
-# Bundle the run's artifacts into a zip for the download handler: the responses
-# as CSV, the panel_report() text (which carries the calibration banner), and,
-# when a calibration has been run, its comparison table as a second CSV. All
+# Bundle the run's artifacts into a zip for the download handler: responses as
+# CSV, panel_report() text, and an optional comparison table as a second CSV. All
 # writes go through tempfile(); in demo mode the CSV gains a demo_notice column
 # and the report is prefixed, so deterministic offline output cannot pass as
 # model output once it leaves the app.
@@ -282,7 +279,7 @@ run_panel_studio <- function(...) {
       shiny::tagList(
         shiny::tags$h5("Responses"),
         DT::DTOutput(ns("responses_tbl")),
-        shiny::tags$h5("Report (carries the calibration banner)"),
+        shiny::tags$h5("Report"),
         shiny::verbatimTextOutput(ns("report")),
         shiny::downloadButton(ns("download_bundle"), "Download artifacts"),
         shiny::tags$p(class = "text-muted",

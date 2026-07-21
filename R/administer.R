@@ -1,18 +1,16 @@
 # administer.R --------------------------------------------------------------------
-# Administration: every persona answers every item. Order randomization is
-# applied per response and recorded -- with LLMs, the order in which options
-# are listed is a treatment, and pretending otherwise is how silicon
-# "findings" get manufactured.
+# Administration: each persona answers each item. Item and option order can be
+# randomized per response and are recorded with the result.
 
 #' Administer an instrument to a panel
 #'
-#' One call per persona x item, through LLMR's parallel engine by default.
-#' The persona is the system message; the item and its (possibly reordered)
-#' options are the user message; replies are matched to the offered
-#' options, with failures kept as `NA` -- a refusal or an essay instead of
-#' an option is data about the instrument.
+#' Creates one request for each combination of persona and item. Persona text
+#' is placed in the system message, and item text and options in the user
+#' message. Closed-item replies are matched to offered options; unmatched
+#' replies are recorded as `NA`. Open-item replies are returned as text.
 #'
-#' @param panel A [panel_from_margins()] or [panel_from_data()] result.
+#' @param panel A [panel_from_margins()], [panel_from_data()], or
+#'   [panel_from_personas()] result.
 #' @param instr A [panel_instrument()].
 #' @param config An `LLMR::llm_config()` for a generative model.
 #' @param .runner Optional runner for offline or deterministic testing: a
@@ -39,9 +37,8 @@
 #'   chosen response in the item's canonical scale, the order in which the levels
 #'   were defined, not the position in the shuffled order this respondent saw
 #'   (`option_order`); randomizing the display therefore does not change the
-#'   score. Carries the panel and instrument as attributes and an empty
-#'   calibration slot: every print shows the **UNCALIBRATED** banner until
-#'   [panel_calibrate()] fills it.
+#'   score. The panel and instrument are attached as attributes. The calibration
+#'   attribute is `NULL` until [panel_calibrate()] is called.
 #' @examples
 #' set.seed(110)   # the panel draw is local; the model call is not
 #' panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 6)
@@ -51,7 +48,7 @@
 #' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
 #' \dontrun{
 #' resp <- panel_administer(panel, instr, cfg)
-#' resp                       # UNCALIBRATED banner, by design
+#' resp
 #' }
 #'
 #' # The `.runner` seam answers without a provider, for tests or for a
@@ -277,12 +274,11 @@ as_tibble.panel_responses <- function(x, ...) {
 
 #' Token usage for an administered panel
 #'
-#' Returns the token and outcome diagnostics recorded during
-#' [panel_administer()] (or [panel_administer_fetch()]). The figures are attached
-#' to a `panel_responses` object as a `usage` attribute, which a thin wrapper over
-#' [LLMR::llm_usage()] summarizes here so they survive being read off without
-#' digging into attributes. With a `price_table` (the [LLMR::llm_usage()] format),
-#' a cost column is added; the package itself ships no prices.
+#' Summarizes token and outcome diagnostics recorded by [panel_administer()] or
+#' [panel_administer_fetch()]. The diagnostics are stored in the `usage`
+#' attribute of a `panel_responses` object and summarized by [LLMR::llm_usage()].
+#' A supplied `price_table` adds a cost column. The package contains no price
+#' table.
 #'
 #' @param responses A [panel_administer()] result.
 #' @param price_table Optional price table passed to [LLMR::llm_usage()].
