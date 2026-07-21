@@ -253,6 +253,25 @@ test_that("the report leads with calibration status, coverage included", {
   expect_match(rep2[1], "^PARTIALLY CALIBRATED \\(1/2")
 })
 
+test_that("subsetting responses drops panel provenance", {
+  set.seed(110)
+  r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(),
+                        .runner = runner_by_party)
+  bench <- data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
+                      share = c(.5, .5))
+  calibrated <- panel_calibrate(r, bench, "toy")
+  original_report <- panel_report(calibrated)
+
+  one <- calibrated[1, , drop = FALSE]
+  expect_s3_class(one, "tbl_df")
+  expect_false(inherits(one, "panel_responses"))
+  expect_null(attr(one, "panel"))
+  expect_null(attr(one, "instrument"))
+  expect_null(attr(one, "calibration"))
+  expect_error(panel_report(one), "panel_responses")
+  expect_identical(panel_report(calibrated), original_report)
+})
+
 test_that("shared generics dispatch for panel responses", {
   set.seed(110)
   r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(),
@@ -262,11 +281,12 @@ test_that("shared generics dispatch for panel responses", {
   expect_s3_class(dg, "tbl_df")
   expect_equal(names(dg),
                c("item_id", "n", "parse_failures", "order_effect_p",
-                 "calibration_state", "items_covered", "items_total", "mad"))
+                 "calibration_state", "items_covered", "items_total",
+                 "mean_abs_dev"))
   expect_true(all(dg$calibration_state == "UNCALIBRATED"))
   expect_equal(unique(dg$items_covered), 0L)
   expect_equal(unique(dg$items_total), 2L)
-  expect_true(all(is.na(dg$mad)))
+  expect_true(all(is.na(dg$mean_abs_dev)))
 
   gen_rep <- LLMR::report(r)
   expect_s3_class(gen_rep, "panel_report")
@@ -289,7 +309,12 @@ test_that("shared generics dispatch for panel responses", {
   expect_true(all(dgc$calibration_state == "CALIBRATED"))
   expect_equal(unique(dgc$items_covered), 2L)
   expect_equal(unique(dgc$items_total), 2L)
-  expect_equal(unique(dgc$mad), attr(rc, "calibration")$mad)
+  cal <- attr(rc, "calibration")
+  expect_true("mean_abs_dev" %in% names(cal))
+  expect_false("mad" %in% names(cal))
+  expect_equal(cal$mean_abs_dev, mean(abs(cal$table$deviation)))
+  expect_equal(unique(dgc$mean_abs_dev), cal$mean_abs_dev)
+  expect_false("mad" %in% names(dgc))
 })
 
 test_that("the ecosystem hash convention is pinned (drift guard vs LLMR)", {

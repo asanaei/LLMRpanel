@@ -111,12 +111,38 @@ vignette_design <- function(template, factors) {
   tibble::add_column(out, vignette_id = seq_len(nrow(out)), .before = 1)
 }
 
+.draw_conjoint_task <- function(attributes, task, profiles) {
+  draw_profile <- function() {
+    # index-based draw: sample(lv, 1L) on a single numeric level would trigger
+    # R's scalar-sampling rule and fabricate levels 1..lv.
+    vapply(attributes,
+           function(lv) as.character(lv[[sample.int(length(lv), 1L)]]),
+           character(1))
+  }
+
+  rows <- list()
+  seen <- character(0)
+  for (pf in profiles) {
+    prof <- draw_profile()
+    tries <- 0L
+    while (paste(prof, collapse = "\r") %in% seen && tries < 25L) {
+      prof <- draw_profile()
+      tries <- tries + 1L
+    }
+    seen <- c(seen, paste(prof, collapse = "\r"))
+    rows[[length(rows) + 1L]] <- tibble::as_tibble(
+      c(list(task = task, profile = pf), as.list(prof)))
+  }
+  do.call(rbind, rows)
+}
+
 #' Conjoint tasks
 #'
 #' Random profile pairs (or k-tuples) over the supplied attributes, the
 #' design for a forced-choice conjoint. Profiles are sampled uniformly and
 #' independently per attribute; set a seed beforehand for a reproducible
-#' design (the function never sets one).
+#' design (the function never sets one). At administration, fresh profiles are
+#' drawn independently for every respondent from the same attribute levels.
 #'
 #' @param attributes Named list of level vectors.
 #' @param n_tasks Tasks per respondent.
@@ -139,30 +165,12 @@ conjoint_design <- function(attributes, n_tasks = 5L, profiles_per_task = 2L) {
   if (is.null(names(attributes)) || any(!nzchar(names(attributes)))) {
     abort("`attributes` must be a named list of level vectors.")
   }
-  draw_profile <- function() {
-    # index-based draw: sample(lv, 1L) on a single numeric level would trigger
-    # R's scalar-sampling rule and fabricate levels 1..lv.
-    vapply(attributes,
-           function(lv) as.character(lv[[sample.int(length(lv), 1L)]]),
-           character(1))
-  }
-  rows <- list()
-  cramped <- FALSE
-  for (tk in seq_len(n_tasks)) {
-    seen <- character(0)
-    for (pf in seq_len(profiles_per_task)) {
-      prof <- draw_profile()
-      tries <- 0L
-      while (paste(prof, collapse = "\r") %in% seen && tries < 25L) {
-        prof <- draw_profile()
-        tries <- tries + 1L
-      }
-      if (paste(prof, collapse = "\r") %in% seen) cramped <- TRUE
-      seen <- c(seen, paste(prof, collapse = "\r"))
-      rows[[length(rows) + 1L]] <- tibble::as_tibble(
-        c(list(task = tk, profile = pf), as.list(prof)))
-    }
-  }
+  rows <- lapply(seq_len(n_tasks), function(tk) {
+    .draw_conjoint_task(attributes, tk, seq_len(profiles_per_task))
+  })
+  cramped <- any(vapply(rows, function(task) {
+    anyDuplicated(task[, names(attributes), drop = FALSE]) > 0L
+  }, logical(1)))
   if (cramped) {
     cli::cli_warn(paste(
       "The attribute space is too small for distinct profiles in every",
@@ -176,8 +184,8 @@ conjoint_design <- function(attributes, n_tasks = 5L, profiles_per_task = 2L) {
 #' Build a conjoint instrument
 #'
 #' Converts a [conjoint_design()] into one forced-choice item per task:
-#' the profiles are rendered as labeled descriptions, and the respondent
-#' is asked to pick one by label.
+#' each respondent receives a fresh independent profile draw at administration
+#' and is asked to pick one by label.
 #'
 #' @param design A [conjoint_design()] tibble (columns `task`, `profile`,
 #'   one column per attribute, and the attribute list in
@@ -185,10 +193,13 @@ conjoint_design <- function(attributes, n_tasks = 5L, profiles_per_task = 2L) {
 #' @param question Question text shown above each task's profiles.
 #' @return A `panel_instrument` whose items are task-level choice items
 #'   (ids `task_1`, `task_2`, ...; options `"Profile 1"`, `"Profile 2"`,
-#'   ...) and whose `$conjoint` field carries the design for [amce()].
+#'   ...). Each item carries the attribute levels used for its respondent-level
+#'   draws, and the instrument's `$conjoint` field carries the design metadata
+#'   for [amce()].
 #' @details Only option order is randomized; item order stays fixed so the
 #'   task ids remain interpretable. Attribute order inside each profile
-#'   description follows the design's column order.
+#'   description follows the design's column order. The profiles recorded in
+#'   the design are not reused across respondents.
 #' @examples
 #' set.seed(110)
 #' panel <- panel_from_margins(list(group = c(A = .5, B = .5)), n = 4)
@@ -221,15 +232,11 @@ conjoint_instrument <- function(design,
     dk <- design[design$task == k, , drop = FALSE]
     dk <- dk[order(dk$profile), , drop = FALSE]
     profiles <- dk$profile
-    lines <- vapply(seq_len(nrow(dk)), function(i) {
-      vals <- vapply(attr_cols, function(a) as.character(dk[[a]][i]),
-                     character(1))
-      sprintf("Profile %s: %s.", profiles[i],
-              paste(sprintf("%s: %s", attr_cols, vals), collapse = "; "))
-    }, character(1))
-    item_choice(paste0("task_", k),
-                paste0(question, "\n\n", paste(lines, collapse = "\n")),
-                paste("Profile", profiles))
+    item <- item_choice(paste0("task_", k), question,
+                        paste("Profile", profiles))
+    item$conjoint <- list(
+      attributes = attrs[attr_cols], task = k, profiles = profiles)
+    item
   })
   out <- panel_instrument(items, randomize = "option_order")
   out$conjoint <- design

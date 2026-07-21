@@ -17,7 +17,7 @@
 #' @return `responses` with the calibration attribute set:
 #'   `$table` (per covered item and response: `share_silicon`,
 #'   `share_human`, `deviation`), `$nonresponse` (per item),
-#'   `$items_covered` / `$items_total`, `$mad`, `$max_dev`.
+#'   `$items_covered` / `$items_total`, `$mean_abs_dev`, `$max_dev`.
 #' @examples
 #' \dontrun{
 #' set.seed(110)
@@ -112,7 +112,7 @@ panel_calibrate <- function(responses, benchmark, benchmark_name = "benchmark") 
     nonresponse = tibble::as_tibble(nonresp),
     items_covered = length(items_covered),
     items_total = length(items_total),
-    mad = mean(abs(cmp$deviation)),
+    mean_abs_dev = mean(abs(cmp$deviation)),
     max_dev = max(abs(cmp$deviation)),
     ts = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"))
   responses
@@ -243,7 +243,8 @@ plot.panel_responses <- function(x, ...) {
       subtitle = paste(
         benchmark_line,
         sprintf("%d/%d item(s) covered; mean absolute deviation %.3f, max %.3f",
-                cal$items_covered, cal$items_total, cal$mad, cal$max_dev),
+                cal$items_covered, cal$items_total,
+                cal$mean_abs_dev, cal$max_dev),
         sep = "\n")) +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(
@@ -304,17 +305,17 @@ diagnostics.panel_responses <- function(x, ...) {
     state <- "UNCALIBRATED"
     items_covered <- 0L
     items_total <- length(unique(x$item_id[x$type != "open"]))
-    mad <- NA_real_
+    mean_abs_dev <- NA_real_
   } else {
     state <- if (cal$items_covered < cal$items_total) "PARTIAL" else "CALIBRATED"
     items_covered <- cal$items_covered
     items_total <- cal$items_total
-    mad <- cal$mad %||% NA_real_
+    mean_abs_dev <- cal$mean_abs_dev %||% NA_real_
   }
   out$calibration_state <- state
   out$items_covered <- items_covered
   out$items_total <- items_total
-  out$mad <- mad
+  out$mean_abs_dev <- mean_abs_dev
   out
 }
 
@@ -507,7 +508,8 @@ panel_power <- function(responses, effect, items = NULL, focal = NULL,
 #' cluster-robust standard errors clustered by persona and 95% intervals
 #' on the t distribution with G - 1 degrees of freedom (G personas).
 #' Under uniform, independent profile randomization this is the standard
-#' AMCE estimator.
+#' AMCE estimator. The regression uses the respondent-level profiles recorded
+#' during administration, not the profiles in the initial design table.
 #'
 #' @param responses A [panel_administer()] result whose instrument came from
 #'   [conjoint_instrument()].
@@ -549,10 +551,12 @@ amce <- function(responses) {
   }
   attr_names <- names(attrs)[names(attrs) %in% names(design)]
   if (!length(attr_names)) abort("The conjoint design has no attribute columns.")
+  if (!("profiles" %in% names(responses))) {
+    abort("The conjoint responses do not contain recorded profile draws.")
+  }
 
   tasks <- sort(unique(design$task))
   task_ids <- paste0("task_", tasks)
-  task_map <- stats::setNames(tasks, task_ids)
   r_all <- responses[responses$item_id %in% task_ids, , drop = FALSE]
   n_dropped_na <- sum(is.na(r_all$response))
   r <- r_all[!is.na(r_all$response), , drop = FALSE]
@@ -560,9 +564,7 @@ amce <- function(responses) {
 
   rows <- list()
   for (i in seq_len(nrow(r))) {
-    tk <- unname(task_map[as.character(r$item_id[i])])
-    dk <- design[design$task == tk, c("task", "profile", attr_names),
-                 drop = FALSE]
+    dk <- r$profiles[[i]][, c("task", "profile", attr_names), drop = FALSE]
     dk$persona_id <- r$persona_id[i]
     dk$chosen <- as.integer(as.character(r$response[i]) ==
                               paste("Profile", dk$profile))
@@ -658,11 +660,12 @@ panel_report <- function(responses, ...) {
       "UNCALIBRATED. No benchmark comparison was run; readings below describe the model under these personas, not any human population."
     else if (cal$items_covered < cal$items_total)
       sprintf("PARTIALLY CALIBRATED (%d/%d items). Against '%s': mean absolute deviation %.3f on covered items; uncovered items remain design-stage readings. Nonresponse rates in attr(x,'calibration')$nonresponse.",
-              cal$items_covered, cal$items_total, cal$benchmark_name, cal$mad)
+              cal$items_covered, cal$items_total, cal$benchmark_name,
+              cal$mean_abs_dev)
     else
       sprintf("CALIBRATION (%d/%d items). Against '%s': mean absolute deviation %.3f, max %.3f (full table in attr(x,'calibration')$table; nonresponse in $nonresponse).",
               cal$items_covered, cal$items_total, cal$benchmark_name,
-              cal$mad, cal$max_dev),
+              cal$mean_abs_dev, cal$max_dev),
     sprintf("PANEL. %d persona(s) drawn from margins over: %s.",
             nrow(panel), paste(names(attr(panel, "margins")), collapse = ", ")),
     sprintf("RESPONSES. %d total; %d parse failure(s).",

@@ -57,6 +57,9 @@ test_that("conjoint_instrument builds task items and stores the design", {
   expect_equal(length(instr$items), length(unique(design$task)))
   expect_equal(instr$items[[1]]$id, "task_1")
   expect_equal(instr$items[[1]]$options, c("Profile 1", "Profile 2"))
+  expect_identical(instr$items[[1]]$text, "Choose one.")
+  expect_identical(instr$items[[1]]$conjoint$attributes,
+                   attr(design, "attributes"))
   expect_identical(instr$conjoint, design)
 })
 
@@ -70,6 +73,7 @@ test_that("amce recovers a known positive effect and includes baselines", {
   panel <- test_panel(6)
   instr <- conjoint_instrument(known_design())
   cfg <- LLMR::llm_config("groq", "any-model")
+  set.seed(110)
   responses <- panel_administer(panel, instr, cfg, .runner = prefer_red_runner)
   out <- amce(responses)
   expect_s3_class(out, "tbl_df")
@@ -88,6 +92,7 @@ test_that("amce clustered standard errors are finite and positive", {
   panel <- test_panel(8)
   instr <- conjoint_instrument(known_design())
   cfg <- LLMR::llm_config("groq", "any-model")
+  set.seed(110)
   responses <- panel_administer(panel, instr, cfg, .runner = mixed_runner)
   out <- amce(responses)
   nb <- out[!is.na(out$std_error), ]
@@ -104,10 +109,87 @@ test_that("amce drops NA task responses and counts them", {
     out$response_text[1] <- NA_character_
     out
   }
+  set.seed(110)
   responses <- panel_administer(panel, instr, cfg, .runner = fake)
   out <- amce(responses)
   expect_equal(attr(out, "n_dropped_na"), 1L)
   expect_equal(attr(out, "n_profiles"), (nrow(responses) - 1L) * 2L)
+})
+
+test_that("conjoint administration records independent respondent profile draws", {
+  panel <- test_panel(6)
+  instr <- conjoint_instrument(known_design(), "Choose one.")
+  cfg <- LLMR::llm_config("groq", "any-model")
+  grid <- NULL
+  scripted <- function(experiments, ...) {
+    grid <<- experiments
+    prefer_red_runner(experiments, ...)
+  }
+
+  set.seed(110)
+  responses <- panel_administer(panel, instr, cfg, .runner = scripted)
+  expect_true("profiles" %in% names(responses))
+  expect_identical(responses$profiles, grid$profiles)
+  expect_true(all(vapply(responses$profiles, function(x) {
+    identical(names(x), c("task", "profile", "color", "cost"))
+  }, logical(1))))
+
+  respondent_profiles <- lapply(split(responses$profiles,
+                                      responses$persona_id), function(x) {
+    paste(vapply(x, function(task) {
+      paste(unlist(task[c("color", "cost")], use.names = FALSE),
+            collapse = "|")
+    }, character(1)), collapse = "\n")
+  })
+  expect_false(identical(respondent_profiles[[1]], respondent_profiles[[2]]))
+
+  prompt_matches_record <- vapply(seq_len(nrow(grid)), function(i) {
+    task <- grid$profiles[[i]]
+    lines <- vapply(seq_len(nrow(task)), function(j) {
+      sprintf("Profile %s: color: %s; cost: %s.", task$profile[j],
+              task$color[j], task$cost[j])
+    }, character(1))
+    grepl(paste(lines, collapse = "\n"), grid$messages[[i]][["user"]],
+          fixed = TRUE)
+  }, logical(1))
+  expect_true(all(prompt_matches_record))
+
+  set.seed(110)
+  replay <- LLMRpanel:::.panel_build_grid(panel, instr, cfg)
+  expect_identical(replay$profiles, responses$profiles)
+
+  estimates <- amce(responses)
+  expect_true(all(is.finite(estimates$estimate)))
+  expect_true(all(is.finite(stats::na.omit(estimates$std_error))))
+})
+
+test_that("the batch builder uses the synchronous conjoint profile structure", {
+  panel <- test_panel(3)
+  instr <- conjoint_instrument(known_design(), "Choose one.")
+  cfg <- LLMR::llm_config("groq", "any-model")
+  submitted <- NULL
+  fake_submit <- function(config, messages, state_path = NULL) {
+    submitted <<- messages
+    structure(
+      list(provider = "groq",
+           custom_ids = sprintf("llmr-%06d", seq_along(messages))),
+      class = "llmr_batch_job")
+  }
+
+  set.seed(110)
+  synchronous <- LLMRpanel:::.panel_build_grid(panel, instr, cfg)
+  set.seed(110)
+  testthat::with_mocked_bindings(
+    llm_batch_submit = fake_submit,
+    .package = "LLMR",
+    {
+      job <- panel_administer_batch(panel, instr, cfg)
+      expect_identical(submitted, synchronous$messages)
+      expect_identical(job$meta$profiles, synchronous$profiles)
+      expect_true(all(vapply(job$meta$profiles, function(x) {
+        identical(names(x), c("task", "profile", "color", "cost"))
+      }, logical(1))))
+    })
 })
 
 test_that("amce aborts for non-conjoint administrations", {

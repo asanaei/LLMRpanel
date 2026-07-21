@@ -26,7 +26,8 @@ profiles, duplicates remain and a warning says so.
 Random profile pairs (or k-tuples) over the supplied attributes, the
 design for a forced-choice conjoint. Profiles are sampled uniformly and
 independently per attribute; set a seed beforehand for a reproducible
-design (the function never sets one).
+design (the function never sets one). At administration, fresh profiles are
+drawn independently for every respondent from the same attribute levels.
 }
 \examples{
 set.seed(110)

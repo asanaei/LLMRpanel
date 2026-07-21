@@ -57,8 +57,10 @@ panel_administer_batch <- function(panel, instr, config, state_path = NULL) {
 
   # Grid metadata for the id-keyed join at fetch time. The request_id matches the
   # LLMR custom_id ('llmr-%06d' in submit order); we never rely on row order.
-  meta <- exps[, c("request_id", "persona_id", "item_id", "type",
-                   "item_position", "option_order")]
+  meta_cols <- c("request_id", "persona_id", "item_id", "type",
+                 "item_position", "option_order",
+                 intersect("profiles", names(exps)))
+  meta <- exps[, meta_cols]
   job <- .panel_batch_job(llmr_job, meta, panel, instr)
   if (!is.null(state_path)) saveRDS(job, state_path)
   job

@@ -37,8 +37,10 @@
 #'   chosen response in the item's canonical scale, the order in which the levels
 #'   were defined, not the position in the shuffled order this respondent saw
 #'   (`option_order`); randomizing the display therefore does not change the
-#'   score. The panel and instrument are attached as attributes. The calibration
-#'   attribute is `NULL` until [panel_calibrate()] is called.
+#'   score. Conjoint administrations also include a `profiles` list-column;
+#'   each element is the task profile table that respondent saw. The panel and
+#'   instrument are attached as attributes. The calibration attribute is `NULL`
+#'   until [panel_calibrate()] is called.
 #' @examples
 #' set.seed(110)   # the panel draw is local; the model call is not
 #' panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 6)
@@ -88,11 +90,30 @@ panel_administer <- function(panel, instr, config, .runner = NULL,
 # `request_id` used to realign asynchronous (batch) results by id, never by order.
 .panel_build_grid <- function(panel, instr, config) {
   rows <- list()
+  has_conjoint <- any(vapply(instr$items, function(item) {
+    !is.null(item$conjoint)
+  }, logical(1)))
   for (p in seq_len(nrow(panel))) {
     items <- instr$items
     if ("item_order" %in% instr$randomize) items <- sample(items)
     for (j in seq_along(items)) {
       it <- items[[j]]
+      profiles <- NULL
+      item_text <- it$text
+      if (!is.null(it$conjoint)) {
+        spec <- it$conjoint
+        profiles <- .draw_conjoint_task(
+          spec$attributes, spec$task, spec$profiles)
+        attr_cols <- names(spec$attributes)
+        lines <- vapply(seq_len(nrow(profiles)), function(i) {
+          vals <- vapply(attr_cols, function(a) {
+            as.character(profiles[[a]][i])
+          }, character(1))
+          sprintf("Profile %s: %s.", profiles$profile[i],
+                  paste(sprintf("%s: %s", attr_cols, vals), collapse = "; "))
+        }, character(1))
+        item_text <- paste0(item_text, "\n\n", paste(lines, collapse = "\n"))
+      }
       opts <- it$options
       if (!is.null(opts) && "option_order" %in% instr$randomize) {
         opts <- sample(opts)
@@ -105,9 +126,9 @@ panel_administer <- function(panel, instr, config, .runner = NULL,
           "Reply with exactly one of the listed options, nothing else."
         else "Answer briefly, in character.",
         sep = "\n")
-      usr <- if (is.null(opts)) it$text else
-        paste0(it$text, "\nOptions: ", paste(opts, collapse = " | "))
-      rows[[length(rows) + 1L]] <- tibble::tibble(
+      usr <- if (is.null(opts)) item_text else
+        paste0(item_text, "\nOptions: ", paste(opts, collapse = " | "))
+      row <- tibble::tibble(
         persona_id = panel$persona_id[p],
         item_id = it$id, type = it$type,
         item_position = j,
@@ -115,6 +136,8 @@ panel_administer <- function(panel, instr, config, .runner = NULL,
                        else paste(opts, collapse = "|"),
         config = list(config),
         messages = list(c(system = sys, user = usr)))
+      if (has_conjoint) row$profiles <- list(profiles)
+      rows[[length(rows) + 1L]] <- row
     }
   }
   exps <- do.call(rbind, rows)
@@ -142,8 +165,10 @@ panel_administer <- function(panel, instr, config, .runner = NULL,
     as.numeric(match(res$response[i], it$options))
   }, numeric(1))
 
-  out <- res[, c("persona_id", "item_id", "type", "item_position",
-                 "option_order", "response", "score")]
+  keep <- c("persona_id", "item_id", "type", "item_position",
+            "option_order", intersect("profiles", names(res)),
+            "response", "score")
+  out <- res[, keep]
   out <- tibble::as_tibble(out)
 
   # Keep the token/diagnostic columns (if the runner returned them) as a usage
@@ -253,14 +278,25 @@ print.panel_responses <- function(x, ...) {
     cat(cli::format_inline(paste0(
       "  {.strong PARTIALLY CALIBRATED} (", cal$items_covered, "/",
       cal$items_total, " items, vs '", cal$benchmark_name,
-      "'): mean abs. deviation ", sprintf("%.3f", cal$mad),
+      "'): mean abs. deviation ", sprintf("%.3f", cal$mean_abs_dev),
       " on covered items; the rest remain design-stage readings.")), "\n")
   } else {
     cat(sprintf("  calibrated against '%s' (%d/%d items): mean abs. deviation %.3f (max %.3f)\n",
                 cal$benchmark_name, cal$items_covered, cal$items_total,
-                cal$mad, cal$max_dev))
+                cal$mean_abs_dev, cal$max_dev))
   }
   invisible(x)
+}
+
+#' @export
+`[.panel_responses` <- function(x, i, j, drop = FALSE, ...) {
+  out <- NextMethod("[")
+  attr(out, "panel") <- NULL
+  attr(out, "instrument") <- NULL
+  attr(out, "calibration") <- NULL
+  attr(out, "usage") <- NULL
+  class(out) <- setdiff(class(out), "panel_responses")
+  out
 }
 
 #' @exportS3Method tibble::as_tibble

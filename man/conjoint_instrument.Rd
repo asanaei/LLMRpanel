@@ -16,17 +16,20 @@ one column per attribute, and the attribute list in
 \value{
 A \code{panel_instrument} whose items are task-level choice items
 (ids \code{task_1}, \code{task_2}, ...; options \code{"Profile 1"}, \code{"Profile 2"},
-...) and whose \verb{$conjoint} field carries the design for \code{\link[=amce]{amce()}}.
+...). Each item carries the attribute levels used for its respondent-level
+draws, and the instrument's \verb{$conjoint} field carries the design metadata
+for \code{\link[=amce]{amce()}}.
 }
 \description{
 Converts a \code{\link[=conjoint_design]{conjoint_design()}} into one forced-choice item per task:
-the profiles are rendered as labeled descriptions, and the respondent
-is asked to pick one by label.
+each respondent receives a fresh independent profile draw at administration
+and is asked to pick one by label.
 }
 \details{
 Only option order is randomized; item order stays fixed so the
 task ids remain interpretable. Attribute order inside each profile
-description follows the design's column order.
+description follows the design's column order. The profiles recorded in
+the design are not reused across respondents.
 }
 \examples{
 set.seed(110)

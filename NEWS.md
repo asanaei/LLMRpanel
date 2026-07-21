@@ -16,9 +16,9 @@ Initial CRAN release.
   benchmarks and records benchmark coverage. `plot()` displays the
   compared shares.
 - `panel_bias_audit()` reports parse failures and first-option sensitivity.
-- `conjoint_instrument()` creates conjoint choice tasks, and `amce()`
-  estimates average marginal component effects with standard errors
-  clustered by respondent.
+- `conjoint_instrument()` creates conjoint choice tasks with profiles randomized
+  independently for each respondent. `amce()` estimates from the recorded
+  respondent-level profiles with standard errors clustered by respondent.
 - `panel_power()` calculates two-arm sample sizes from pilot dispersion.
 - `run_panel_studio()` provides the panel workflow in an optional Shiny
   application and can download responses, reports, and calibration tables.

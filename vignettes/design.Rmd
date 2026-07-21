@@ -169,8 +169,9 @@ vignette_design(
 )
 ```
 
-`conjoint_design()` uses R's random-number generator. Set a seed before the
-call to reproduce the task profiles.
+`conjoint_design()` uses R's random-number generator to construct the design
+specification. `panel_administer()` draws the profiles each respondent sees.
+Set a seed before administration to reproduce those respondent-level draws.
 
 ```{r conjoint_design}
 set.seed(110)
@@ -186,9 +187,10 @@ design
 
 `conjoint_design()` attempts to use distinct profiles within each task and
 warns when the attribute space cannot supply them. `conjoint_instrument()`
-renders one forced-choice item per task. `amce()` estimates effects relative
-to the first level of each attribute and calculates standard errors clustered
-by persona.
+creates one forced-choice item per task. Administration renders a fresh draw
+for each respondent and records it with the response. `amce()` estimates from
+those recorded profiles relative to the first level of each attribute and
+calculates standard errors clustered by persona.
 
 ```{r amce}
 cj_instr = conjoint_instrument(design, "Which product would you buy?")

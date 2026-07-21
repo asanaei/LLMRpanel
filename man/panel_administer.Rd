@@ -54,8 +54,10 @@ item), \code{option_order} (what this respondent saw, \code{|}-separated), \code
 chosen response in the item's canonical scale, the order in which the levels
 were defined, not the position in the shuffled order this respondent saw
 (\code{option_order}); randomizing the display therefore does not change the
-score. The panel and instrument are attached as attributes. The calibration
-attribute is \code{NULL} until \code{\link[=panel_calibrate]{panel_calibrate()}} is called.
+score. Conjoint administrations also include a \code{profiles} list-column;
+each element is the task profile table that respondent saw. The panel and
+instrument are attached as attributes. The calibration attribute is \code{NULL}
+until \code{\link[=panel_calibrate]{panel_calibrate()}} is called.
 }
 \description{
 Creates one request for each combination of persona and item. Persona text

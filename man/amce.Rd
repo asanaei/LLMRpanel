@@ -26,7 +26,8 @@ treatment-coded dummies for all attributes simultaneously, with CR1
 cluster-robust standard errors clustered by persona and 95\% intervals
 on the t distribution with G - 1 degrees of freedom (G personas).
 Under uniform, independent profile randomization this is the standard
-AMCE estimator.
+AMCE estimator. The regression uses the respondent-level profiles recorded
+during administration, not the profiles in the initial design table.
 }
 \examples{
 \dontrun{

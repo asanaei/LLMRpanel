@@ -20,7 +20,7 @@ to 1; a deviation beyond rounding draws a warning.}
 \code{responses} with the calibration attribute set:
 \verb{$table} (per covered item and response: \code{share_silicon},
 \code{share_human}, \code{deviation}), \verb{$nonresponse} (per item),
-\verb{$items_covered} / \verb{$items_total}, \verb{$mad}, \verb{$max_dev}.
+\verb{$items_covered} / \verb{$items_total}, \verb{$mean_abs_dev}, \verb{$max_dev}.
 }
 \description{
 Compares closed-item response shares with human benchmark shares supplied
