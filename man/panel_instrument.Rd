@@ -20,3 +20,8 @@ An object of class \code{panel_instrument}.
 \description{
 Assemble an instrument
 }
+\examples{
+panel_instrument(list(
+  item_likert("trust", "How much do you trust the city council?"),
+  item_open("reason", "What is the main reason for your answer?")))
+}

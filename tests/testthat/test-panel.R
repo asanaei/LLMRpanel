@@ -70,10 +70,10 @@ test_that("instruments validate and conjoint designs have the right shape", {
   cj <- conjoint_design(list(price = c("low", "high"),
                              origin = c("domestic", "imported")),
                         n_tasks = 3, profiles_per_task = 2)
-  expect_equal(nrow(cj), 6L)
-  expect_setequal(unique(cj$profile), 1:2)
-  for (tk in unique(cj$task)) {
-    prof <- cj[cj$task == tk, c("price", "origin")]
+  expect_equal(nrow(cj$profiles), 6L)
+  expect_setequal(unique(cj$profiles$profile), 1:2)
+  for (tk in unique(cj$profiles$task)) {
+    prof <- cj$profiles[cj$profiles$task == tk, c("price", "origin")]
     expect_false(any(duplicated(prof)))
   }
   expect_warning(
@@ -86,34 +86,81 @@ test_that("administer collects matched responses and Likert scores", {
   r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(),
                         .runner = runner_by_party)
   expect_s3_class(r, "panel_responses")
-  expect_equal(nrow(r), 30L)
-  lik <- r[r$item_id == "wk4", ]
+  expect_named(r, c("data", "panel", "instrument", "benchmark", "usage"))
+  expect_s3_class(r$data, "tbl_df")
+  expect_null(attr(r, "panel"))
+  expect_null(attr(r, "instrument"))
+  expect_null(attr(r, "benchmark"))
+  expect_null(attr(r, "usage"))
+  expect_equal(nrow(r$data), 30L)
+  lik <- r$data[r$data$item_id == "wk4", ]
   expect_setequal(unique(lik$response), c("agree", "disagree"))
   expect_setequal(unique(lik$score), c(1, 3))
-  expect_true(all(is.na(r$score[r$item_id != "wk4"])))
-  expect_true(all(nzchar(r$response[r$item_id == "why"])))
+  expect_true(all(is.na(r$data$score[r$data$item_id != "wk4"])))
+  expect_true(all(nzchar(r$data$response[r$data$item_id == "why"])))
   expect_true(all(grepl("\\|", stats::na.omit(lik$option_order))))
+})
+
+test_that("the synchronous runner is realigned by request_id", {
+  panel <- fix_panel(3)
+  instrument <- panel_instrument(
+    item_choice("q", "Choose.", c("No", "Yes")),
+    randomize = character(0))
+  runner <- function(experiments, ...) {
+    experiments$response_text <- ifelse(
+      as.integer(sub("llmr-", "", experiments$request_id)) %% 2L == 1L,
+      "Yes", "No")
+    experiments[rev(seq_len(nrow(experiments))), , drop = FALSE]
+  }
+
+  responses <- panel_administer(panel, instrument, fix_cfg(), .runner = runner)
+  expect_identical(responses$data$persona_id, 1:3)
+  expect_identical(responses$data$response, c("Yes", "No", "Yes"))
+})
+
+test_that("the synchronous runner requires each submitted request_id once", {
+  panel <- fix_panel(3)
+  instrument <- panel_instrument(
+    item_choice("q", "Choose.", c("No", "Yes")),
+    randomize = character(0))
+  duplicate <- function(experiments, ...) {
+    experiments$response_text <- "Yes"
+    experiments$request_id[2] <- experiments$request_id[1]
+    experiments
+  }
+  missing <- function(experiments, ...) {
+    experiments$response_text <- "Yes"
+    experiments[-1, , drop = FALSE]
+  }
+  id_error <- "exact submitted.*request_id.*each id appearing once"
+
+  expect_error(
+    panel_administer(panel, instrument, fix_cfg(), .runner = duplicate),
+    id_error)
+  expect_error(
+    panel_administer(panel, instrument, fix_cfg(), .runner = missing),
+    id_error)
 })
 
 test_that("item presentation order is recorded per respondent", {
   set.seed(110)
   r <- panel_administer(fix_panel(20), fix_instr(), fix_cfg(),
                         .runner = runner_by_party)
-  expect_true("item_position" %in% names(r))
+  expect_true("item_position" %in% names(r$data))
   # each persona saw every item exactly once, at positions 1..3
-  for (pid in unique(r$persona_id)) {
-    expect_setequal(r$item_position[r$persona_id == pid], 1:3)
+  for (pid in unique(r$data$persona_id)) {
+    expect_setequal(r$data$item_position[r$data$persona_id == pid], 1:3)
   }
   # with item_order randomized, an item's position varies across personas
-  expect_gt(length(unique(r$item_position[r$item_id == "wk4"])), 1L)
+  expect_gt(length(unique(r$data$item_position[r$data$item_id == "wk4"])), 1L)
 
   # with randomization off, positions follow the instrument's canonical order
   set.seed(110)
   r2 <- panel_administer(fix_panel(5), fix_instr(randomize = character(0)),
                          fix_cfg(), .runner = runner_by_party)
-  expect_equal(unique(r2$item_id[r2$item_position == 1]), "wk4")
-  expect_equal(unique(r2$item_id[r2$item_position == 2]), "plan")
-  expect_equal(unique(r2$item_id[r2$item_position == 3]), "why")
+  expect_equal(unique(r2$data$item_id[r2$data$item_position == 1]), "wk4")
+  expect_equal(unique(r2$data$item_id[r2$data$item_position == 2]), "plan")
+  expect_equal(unique(r2$data$item_id[r2$data$item_position == 3]), "why")
 })
 
 test_that("reserved column names abort early in all three constructors", {
@@ -138,8 +185,8 @@ test_that("reserved column names abort early in all three constructors", {
 test_that("conjoint_design keeps a single numeric level literal", {
   set.seed(110)
   d <- conjoint_design(list(price = c(10, 20), rooms = 3), n_tasks = 4)
-  expect_true(all(d$rooms == "3"))
-  expect_setequal(unique(d$price), c("10", "20"))
+  expect_true(all(d$profiles$rooms == "3"))
+  expect_setequal(unique(d$profiles$price), c("10", "20"))
 })
 
 test_that(".match_option strips quotes and trailing punctuation on a second pass", {
@@ -161,8 +208,8 @@ test_that(".match_option strips quotes and trailing punctuation on a second pass
     item_likert("q", "S.", scale = c("disagree", "neutral", "agree")),
     randomize = character(0))
   r <- panel_administer(fix_panel(4), instr, fix_cfg(), .runner = dotted)
-  expect_true(all(r$response == "agree"))
-  expect_true(all(r$score == 3))
+  expect_true(all(r$data$response == "agree"))
+  expect_true(all(r$data$score == 3))
 })
 
 test_that("panel_benchmark warns when benchmark levels mismatch offered options", {
@@ -190,7 +237,7 @@ test_that("the banner walks through benchmark coverage states", {
   rp <- panel_benchmark(r, bench_partial, benchmark_name = "narrow study")
   expect_output(print(rp), "PARTIALLY BENCHMARKED")
   expect_output(print(rp), "PARTIALLY BENCHMARKED \\(1/2\\)")
-  bmp <- attr(rp, "benchmark")
+  bmp <- rp$benchmark
   expect_equal(bmp$items_covered, 1L)
   expect_equal(bmp$items_total, 2L)
   expect_true(all(bmp$table$item_id == "plan"))
@@ -246,7 +293,8 @@ test_that("the generic report leads with benchmark status and coverage", {
                         .runner = runner_by_party)
   rep <- LLMR::report(r)
   expect_match(rep[1], "^NOT BENCHMARKED")
-  expect_output(print(rep), "STANCE")
+  expect_output(print(rep), "RESPONSES")
+  expect_false(any(grepl("^STANCE", rep)))
 
   bench <- data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
                       share = c(.5, .5))
@@ -284,23 +332,44 @@ test_that("the generic report identifies the panel's actual source", {
   expect_true(grepl("supplied personas", reports[3], fixed = TRUE))
 })
 
-test_that("subsetting responses drops panel provenance", {
+test_that("response data can change without losing provenance", {
   set.seed(110)
+  with_usage <- function(experiments, ...) {
+    out <- runner_by_party(experiments, ...)
+    out$sent_tokens <- 5L
+    out$rec_tokens <- 1L
+    out$total_tokens <- 6L
+    out
+  }
   r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(),
-                        .runner = runner_by_party)
+                        .runner = with_usage)
   bench <- data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
                       share = c(.5, .5))
   benchmarked <- panel_benchmark(r, bench, "toy")
-  original_report <- LLMR::report(benchmarked)
+  expect_null(attr(benchmarked, "benchmark"))
+  original_panel <- benchmarked$panel
+  original_instrument <- benchmarked$instrument
+  original_benchmark <- benchmarked$benchmark
+  original_usage <- benchmarked$usage
+  priced <- panel_usage(
+    benchmarked,
+    price_table = data.frame(model = "fake-model", input = 1, output = 2))
 
-  one <- benchmarked[1, , drop = FALSE]
-  expect_s3_class(one, "tbl_df")
-  expect_false(inherits(one, "panel_responses"))
-  expect_null(attr(one, "panel"))
-  expect_null(attr(one, "instrument"))
-  expect_null(attr(one, "benchmark"))
-  expect_error(LLMR::report(one), "No report\\(\\) method")
-  expect_identical(LLMR::report(benchmarked), original_report)
+  benchmarked$data <- benchmarked$data[
+    benchmarked$data$item_id == "plan", , drop = FALSE]
+  benchmarked$data$response_text[1] <- "edited raw response"
+
+  expect_s3_class(benchmarked, "panel_responses")
+  expect_identical(benchmarked$panel, original_panel)
+  expect_identical(benchmarked$instrument, original_instrument)
+  expect_identical(benchmarked$benchmark, original_benchmark)
+  expect_identical(benchmarked$usage, original_usage)
+  expect_s3_class(LLMR::report(benchmarked), "panel_report")
+  expect_identical(
+    panel_usage(
+      benchmarked,
+      price_table = data.frame(model = "fake-model", input = 1, output = 2)),
+    priced)
 })
 
 test_that("shared generics dispatch for panel responses", {
@@ -326,9 +395,7 @@ test_that("shared generics dispatch for panel responses", {
   rt <- tibble::as_tibble(r)
   expect_s3_class(rt, "tbl_df")
   expect_false(inherits(rt, "panel_responses"))
-  expect_null(attr(rt, "panel"))
-  expect_null(attr(rt, "instrument"))
-  expect_null(attr(rt, "benchmark"))
+  expect_identical(rt, r$data)
 
   bench <- rbind(
     data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
@@ -340,7 +407,7 @@ test_that("shared generics dispatch for panel responses", {
   expect_true(all(dgb$benchmark_state == "BENCHMARKED"))
   expect_equal(unique(dgb$items_covered), 2L)
   expect_equal(unique(dgb$items_total), 2L)
-  bm <- attr(rb, "benchmark")
+  bm <- rb$benchmark
   expect_true("mean_abs_dev" %in% names(bm))
   expect_false("mad" %in% names(bm))
   expect_equal(bm$mean_abs_dev, mean(abs(bm$table$deviation)))
@@ -365,7 +432,7 @@ test_that("benchmarking an all-parse-failure item does not crash", {
   bench <- data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
                       share = c(.5, .5))
   expect_no_error(rb <- panel_benchmark(r, bench, "all-NA study"))
-  bm <- attr(rb, "benchmark")
+  bm <- rb$benchmark
   # The benchmark artifact still exists; the covered item is full nonresponse.
   expect_true(!is.null(bm))
   nr <- bm$nonresponse
@@ -432,7 +499,7 @@ test_that("panel_power counts offered options, not just observed ones", {
   expect_warning(panel_power(r, effect = 0.2), "well-defined estimand")
   # stripping the instrument removes the offered-count signal: it then falls
   # back to the observed two options and prices them without the warning.
-  r2 <- r; attr(r2, "instrument") <- NULL
+  r2 <- r; r2$instrument <- NULL
   expect_no_warning(panel_power(r2, effect = 0.2))
 
   # "blue" is a real option the pilot never elicited. Naming it as the focal is
@@ -499,7 +566,7 @@ test_that("panel_from_personas builds a silicon_panel that administers", {
   }
   r <- panel_administer(p, fix_instr(), fix_cfg(), .runner = runner_echo)
   expect_s3_class(r, "panel_responses")
-  expect_equal(length(unique(r$persona_id)), 6L)
+  expect_equal(length(unique(r$data$persona_id)), 6L)
 })
 
 test_that("panel_from_personas respects a rows predicate", {

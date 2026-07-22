@@ -24,9 +24,6 @@ batch API.
 \code{\link[=conjoint_amce]{conjoint_amce()}} estimates conjoint effects. \code{\link[=panel_power]{panel_power()}} calculates
 two-arm sample sizes from pilot dispersion. \code{\link[LLMR:report]{LLMR::report()}} summarizes an
 administration.
-
-Without a benchmark, response shares describe the configured model under the
-supplied personas. They do not estimate a human population.
 }
 \seealso{
 Useful links:

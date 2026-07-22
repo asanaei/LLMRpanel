@@ -8,7 +8,7 @@
 }
 \arguments{
 \item{x}{A \code{\link[=panel_administer]{panel_administer()}} result that \code{\link[=panel_benchmark]{panel_benchmark()}} has been run
-on (the comparison travels in \code{attr(x, "benchmark")}).}
+on (the comparison is stored in \code{x$benchmark}).}
 
 \item{...}{Ignored; reserved for generic dispatch.}
 }

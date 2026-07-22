@@ -85,11 +85,11 @@ test_that("plot() preserves response order within each item", {
 test_that("plot() wraps a long benchmark citation outside the legend", {
   skip_if_not_installed("ggplot2")
   responses <- plot_fixture()
-  bm <- attr(responses, "benchmark")
+  bm <- responses$benchmark
   bm$benchmark_name <- paste(
     paste(rep("long benchmark citation", 8), collapse = " "),
     paste0("https://example.org/", strrep("a", 100)))
-  attr(responses, "benchmark") <- bm
+  responses$benchmark <- bm
 
   p <- plot(responses)
   subtitle_lines <- strsplit(p$labels$subtitle, "\n", fixed = TRUE)[[1]]

@@ -26,24 +26,23 @@
 #'   prices and estimates no token counts.
 #' @param .runner Optional runner for offline or deterministic testing: a
 #'   `function(experiments, ...)` that receives a data frame with `config` and
-#'   `messages` list-columns and returns those rows with at least a
-#'   `response_text` column. Defaults to a live LLM call via
+#'   `messages` list-columns and returns those rows with `request_id` and
+#'   `response_text` columns. Each submitted `request_id` must appear once;
+#'   returned rows may be in any order. Defaults to a live LLM call via
 #'   `LLMR::call_llm_par()`.
 #' @param ... Passed to the runner (e.g. `tries`, `progress`).
-#' @return A `panel_responses` tibble: `persona_id`, `item_id`, `type`,
-#'   `item_position` (the 1-based position at which this respondent saw the
-#'   item), `option_order` (what this respondent saw, `|`-separated), `response`
-#'   (matched option or `NA`; verbatim text for open items), `score`
-#'   (1-based scale position for Likert items). `score` is the position of the
-#'   chosen response in the item's canonical scale, the order in which the levels
-#'   were defined, not the position in the shuffled order this respondent saw
-#'   (`option_order`); randomizing the display therefore does not change the
-#'   score. `response_text`, `response_id`, `success`, `error_message`,
-#'   `finish_reason`, `model`, and `provider` retain execution provenance as
-#'   ordinary columns. Conjoint administrations also include a `profiles`
-#'   list-column; each element is the task profile table that respondent saw.
-#'   The panel and instrument are attached as attributes. The benchmark
-#'   attribute is `NULL` until [panel_benchmark()] is called.
+#' @return A `panel_responses` object with fields `data`, `panel`, `instrument`,
+#'   `benchmark`, and `usage`. `data` is a tibble with `persona_id`, `item_id`,
+#'   `type`, `item_position` (the 1-based position at which this respondent saw
+#'   the item), `option_order` (what this respondent saw, `|`-separated),
+#'   `response` (matched option or `NA`; verbatim text for open items), and
+#'   `score` (1-based scale position for Likert items). `score` uses the item's
+#'   canonical scale rather than its displayed order. `response_text`,
+#'   `response_id`, `success`, `error_message`, `finish_reason`, `model`, and
+#'   `provider` retain execution provenance as ordinary columns. Conjoint
+#'   administrations also include a `profiles` list-column. `benchmark` is
+#'   `NULL` until [panel_benchmark()] is called. `usage` is a token tibble, or
+#'   `NULL` when the runner returned no token columns.
 #' @examples
 #' set.seed(110)   # the panel draw is local; the model call is not
 #' panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 6)
@@ -82,8 +81,20 @@ panel_administer <- function(panel, instrument, config, max_calls = 5000L,
 
   res <- runner(exps, ...)
   stopifnot(is.data.frame(res), "response_text" %in% names(res))
-  # The parallel runner returns the input columns alongside response_text, so the
-  # grid metadata is already aligned by row; parse directly.
+  returned_ids <- if ("request_id" %in% names(res)) {
+    as.character(res$request_id)
+  } else {
+    character(0)
+  }
+  valid_ids <- length(returned_ids) == nrow(exps) &&
+    !anyNA(returned_ids) && !anyDuplicated(returned_ids) &&
+    setequal(returned_ids, exps$request_id)
+  if (!valid_ids) {
+    abort(paste(
+      "The runner must return the exact submitted `request_id` set,",
+      "with each id appearing once."))
+  }
+  res <- res[match(exps$request_id, returned_ids), , drop = FALSE]
   .panel_parse_responses(res, instrument, panel)
 }
 
@@ -153,7 +164,7 @@ panel_administer <- function(panel, instrument, config, max_calls = 5000L,
 # Parse a results frame (`res`, carrying the grid metadata columns + a
 # `response_text` column) into a `panel_responses`. Shared by the parallel and
 # batch paths so they produce byte-identical output. Token columns present on
-# `res` are retained as a usage attribute.
+# `res` are retained in the usage field.
 .panel_parse_responses <- function(res, instrument, panel) {
   stopifnot(is.data.frame(res), "response_text" %in% names(res))
   res$response_text <- as.character(res$response_text)
@@ -196,20 +207,20 @@ panel_administer <- function(panel, instrument, config, max_calls = 5000L,
   token_cols <- intersect(
     c("sent_tokens", "rec_tokens", "total_tokens", "reasoning_tokens",
       "cached_tokens"), names(res))
+  usage <- NULL
   if (length(token_cols)) {
     keep <- intersect(
       c("persona_id", "item_id", "response_text", "response_id", "success",
         "error_message", "finish_reason", "model", "provider", token_cols),
       names(res))
     u <- res[, keep, drop = FALSE]
-    attr(out, "usage") <- tibble::as_tibble(u)
+    usage <- tibble::as_tibble(u)
   }
 
-  attr(out, "panel") <- panel
-  attr(out, "instrument") <- instrument
-  attr(out, "benchmark") <- NULL
-  class(out) <- c("panel_responses", class(out))
-  out
+  structure(
+    list(data = out, panel = panel, instrument = instrument,
+         benchmark = NULL, usage = usage),
+    class = "panel_responses")
 }
 
 # Report the call count and, optionally, gate a large run. Returns invisibly.
@@ -281,27 +292,27 @@ panel_administer <- function(panel, instrument, config, max_calls = 5000L,
 
 #' @export
 print.panel_responses <- function(x, ...) {
-  benchmark <- attr(x, "benchmark")
-  execution_failures <- sum(x$success %in% FALSE)
-  parse_failures <- sum(is.na(x$response) & x$type != "open" &
-                          !(x$success %in% FALSE))
+  data <- x$data
+  benchmark <- x$benchmark
+  execution_failures <- sum(data$success %in% FALSE)
+  parse_failures <- sum(is.na(data$response) & data$type != "open" &
+                          !(data$success %in% FALSE))
   cat(sprintf(paste0(
     "<panel_responses | %d persona(s) x %d item(s) | ",
     "%d execution failure(s), %d parse failure(s)>\n"),
-              length(unique(x$persona_id)), length(unique(x$item_id)),
+              length(unique(data$persona_id)), length(unique(data$item_id)),
               execution_failures, parse_failures))
   if (is.null(benchmark)) {
-    cat(cli::format_inline(paste(
-      "  {.strong NOT BENCHMARKED}: no benchmark comparison has been run.",
-      "Read these as design-stage measurements of the model under these",
-      "personas, not as estimates of any human population. See panel_benchmark().")),
+    cat(cli::format_inline(
+      paste("  {.strong NOT BENCHMARKED}: no benchmark comparison has been",
+            "run; see panel_benchmark().")),
       "\n")
   } else if (benchmark$items_covered < benchmark$items_total) {
     cat(cli::format_inline(paste0(
       "  {.strong PARTIALLY BENCHMARKED} (", benchmark$items_covered, "/",
       benchmark$items_total, "): vs '", benchmark$benchmark_name,
       "', mean abs. deviation ", sprintf("%.3f", benchmark$mean_abs_dev),
-      " on covered items; the rest remain design-stage readings.")), "\n")
+      " on covered items.")), "\n")
   } else {
     cat(sprintf("  BENCHMARKED against '%s' (%d/%d items): mean abs. deviation %.3f (max %.3f)\n",
                 benchmark$benchmark_name, benchmark$items_covered,
@@ -311,31 +322,16 @@ print.panel_responses <- function(x, ...) {
   invisible(x)
 }
 
-#' @export
-`[.panel_responses` <- function(x, i, j, drop = FALSE, ...) {
-  out <- NextMethod("[")
-  attr(out, "panel") <- NULL
-  attr(out, "instrument") <- NULL
-  attr(out, "benchmark") <- NULL
-  attr(out, "usage") <- NULL
-  class(out) <- setdiff(class(out), "panel_responses")
-  out
-}
-
 #' @exportS3Method tibble::as_tibble
 as_tibble.panel_responses <- function(x, ...) {
-  attr(x, "panel") <- NULL
-  attr(x, "instrument") <- NULL
-  attr(x, "benchmark") <- NULL
-  class(x) <- setdiff(class(x), "panel_responses")
-  tibble::as_tibble(x, ...)
+  tibble::as_tibble(x$data, ...)
 }
 
 #' Token usage for an administered panel
 #'
 #' Summarizes token and outcome diagnostics recorded by [panel_administer()] or
 #' [panel_batch_fetch()]. The diagnostics are stored in the `usage`
-#' attribute of a `panel_responses` object and summarized by [LLMR::llm_usage()].
+#' field of a `panel_responses` object and summarized by [LLMR::llm_usage()].
 #' Model and provider remain in the returned frame. A supplied `price_table`
 #' adds a cost column. The package contains no price table.
 #'
@@ -344,10 +340,26 @@ as_tibble.panel_responses <- function(x, ...) {
 #' @return A one-row usage tibble, or a typed empty tibble when the runner
 #'   returned no token columns.
 #' @seealso [panel_administer()], [LLMR::llm_usage()].
+#' @examples
+#' panel <- panel_from_margins(list(group = c(A = 1)), n = 2)
+#' instrument <- panel_instrument(
+#'   item_choice("pick", "Choose one.", c("A", "B")),
+#'   randomize = character(0))
+#' config <- LLMR::llm_config("groq", "example-model")
+#' runner <- function(experiments, ...) {
+#'   experiments$response_text <- "A"
+#'   experiments$sent_tokens <- 4L
+#'   experiments$rec_tokens <- 1L
+#'   experiments$total_tokens <- 5L
+#'   experiments$success <- TRUE
+#'   experiments
+#' }
+#' responses <- panel_administer(panel, instrument, config, .runner = runner)
+#' panel_usage(responses)
 #' @export
 panel_usage <- function(responses, price_table = NULL) {
   stopifnot(inherits(responses, "panel_responses"))
-  u <- attr(responses, "usage")
+  u <- responses$usage
   if (is.null(u) || !nrow(u)) {
     out <- tibble::tibble(
       model = character(), provider = character(), n = integer(),

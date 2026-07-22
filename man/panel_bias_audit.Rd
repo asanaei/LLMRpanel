@@ -20,3 +20,17 @@ with randomized option order, it also applies a chi-squared test to the
 chosen response and the option shown first. The test does not use the full
 option permutation.
 }
+\examples{
+panel <- panel_from_margins(list(group = c(A = 1)), n = 4)
+instrument <- panel_instrument(
+  item_choice("pick", "Choose one.", c("A", "B")),
+  randomize = character(0))
+config <- LLMR::llm_config("groq", "example-model")
+runner <- function(experiments, ...) {
+  experiments$response_text <- "A"
+  experiments$success <- TRUE
+  experiments
+}
+responses <- panel_administer(panel, instrument, config, .runner = runner)
+panel_bias_audit(responses)
+}

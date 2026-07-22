@@ -40,27 +40,26 @@ prices and estimates no token counts.}
 
 \item{.runner}{Optional runner for offline or deterministic testing: a
 \verb{function(experiments, ...)} that receives a data frame with \code{config} and
-\code{messages} list-columns and returns those rows with at least a
-\code{response_text} column. Defaults to a live LLM call via
+\code{messages} list-columns and returns those rows with \code{request_id} and
+\code{response_text} columns. Each submitted \code{request_id} must appear once;
+returned rows may be in any order. Defaults to a live LLM call via
 \code{LLMR::call_llm_par()}.}
 
 \item{...}{Passed to the runner (e.g. \code{tries}, \code{progress}).}
 }
 \value{
-A \code{panel_responses} tibble: \code{persona_id}, \code{item_id}, \code{type},
-\code{item_position} (the 1-based position at which this respondent saw the
-item), \code{option_order} (what this respondent saw, \code{|}-separated), \code{response}
-(matched option or \code{NA}; verbatim text for open items), \code{score}
-(1-based scale position for Likert items). \code{score} is the position of the
-chosen response in the item's canonical scale, the order in which the levels
-were defined, not the position in the shuffled order this respondent saw
-(\code{option_order}); randomizing the display therefore does not change the
-score. \code{response_text}, \code{response_id}, \code{success}, \code{error_message},
-\code{finish_reason}, \code{model}, and \code{provider} retain execution provenance as
-ordinary columns. Conjoint administrations also include a \code{profiles}
-list-column; each element is the task profile table that respondent saw.
-The panel and instrument are attached as attributes. The benchmark
-attribute is \code{NULL} until \code{\link[=panel_benchmark]{panel_benchmark()}} is called.
+A \code{panel_responses} object with fields \code{data}, \code{panel}, \code{instrument},
+\code{benchmark}, and \code{usage}. \code{data} is a tibble with \code{persona_id}, \code{item_id},
+\code{type}, \code{item_position} (the 1-based position at which this respondent saw
+the item), \code{option_order} (what this respondent saw, \code{|}-separated),
+\code{response} (matched option or \code{NA}; verbatim text for open items), and
+\code{score} (1-based scale position for Likert items). \code{score} uses the item's
+canonical scale rather than its displayed order. \code{response_text},
+\code{response_id}, \code{success}, \code{error_message}, \code{finish_reason}, \code{model}, and
+\code{provider} retain execution provenance as ordinary columns. Conjoint
+administrations also include a \code{profiles} list-column. \code{benchmark} is
+\code{NULL} until \code{\link[=panel_benchmark]{panel_benchmark()}} is called. \code{usage} is a token tibble, or
+\code{NULL} when the runner returned no token columns.
 }
 \description{
 Creates one request for each combination of persona and item. Persona text

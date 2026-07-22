@@ -215,6 +215,7 @@ test_that("the batch path joins responses by id even when rows are shuffled", {
                           sent_tokens = 5L, rec_tokens = 1L, total_tokens = 6L,
                           success = TRUE, model = "provider-returned-model",
                           provider = "provider-returned-provider")
+    set.seed(110)
     out[sample(nrow(out)), ]                       # SHUFFLE the rows
   }
   synchronous_runner <- function(experiments, ...) {
@@ -238,26 +239,27 @@ test_that("the batch path joins responses by id even when rows are shuffled", {
       expect_output(print(job), "panel_batch_fetch")
       resp <- panel_batch_fetch(job)
       expect_s3_class(resp, "panel_responses")
-      expect_equal(nrow(resp), 8L)                 # 4 personas x 2 items
+      expect_equal(nrow(resp$data), 8L)            # 4 personas x 2 items
       # the id-keyed join must map each request's known answer to the right row:
       # build the expected mapping from request order and compare.
       expected <- ifelse(seq_len(8) %% 2 == 1, "Yes", "No")
-      ord <- order(resp$persona_id, resp$item_id)
+      ord <- order(resp$data$persona_id, resp$data$item_id)
       grid_ord <- order(grid$persona_id, grid$item_id)
-      expect_equal(resp$response[ord], expected[grid_ord])
+      expect_equal(resp$data$response[ord], expected[grid_ord])
       # and the fetched rows come back re-sorted to grid (submission) order,
       # so the batch result is row-identical to a synchronous run of the grid
-      expect_equal(resp$persona_id, grid$persona_id)
-      expect_equal(resp$item_id, grid$item_id)
-      expect_equal(resp$item_position, grid$item_position)
-      expect_equal(resp$response, expected)
-      expect_true(all(resp$model == "fake"))
-      expect_true(all(resp$provider == "groq"))
+      expect_equal(resp$data$persona_id, grid$persona_id)
+      expect_equal(resp$data$item_id, grid$item_id)
+      expect_equal(resp$data$item_position, grid$item_position)
+      expect_equal(resp$data$response, expected)
+      expect_true(all(resp$data$model == "fake"))
+      expect_true(all(resp$data$provider == "groq"))
 
       sync <- panel_administer(panel, instr, cfg,
                                .runner = synchronous_runner)
-      expect_identical(names(resp), names(sync))
-      expect_identical(vapply(resp, typeof, ""), vapply(sync, typeof, ""))
+      expect_identical(names(resp$data), names(sync$data))
+      expect_identical(vapply(resp$data, typeof, ""),
+                       vapply(sync$data, typeof, ""))
       expect_identical(tibble::as_tibble(resp), tibble::as_tibble(sync))
   })
 })
@@ -338,7 +340,70 @@ test_that("panel and provider batch state do not share one state file", {
       expect_true(file.exists(panel_state_path))
       expect_s3_class(readRDS(panel_state_path), "panel_batch_job")
       expect_false(identical(provider_state_path, panel_state_path))
+  })
+})
+
+test_that("panel batch state refuses a literal API key before submission", {
+  panel <- panel_from_margins(list(g = c(a = .5, b = .5)), n = 2)
+  instrument <- panel_instrument(item_likert("q", "S."),
+                                 randomize = character(0))
+  sentinel <- "sk-llmrpanel-literal-sentinel"
+  config <- suppressWarnings(
+    LLMR::llm_config("groq", "fake", api_key = sentinel))
+  expect_s3_class(config$api_key, "llmr_secret_literal")
+  submissions <- 0L
+  fake_submit <- function(config, messages, state_path = NULL) {
+    submissions <<- submissions + 1L
+    structure(list(provider = "groq", config = config,
+                   custom_ids = sprintf("llmr-%06d", seq_along(messages))),
+              class = "llmr_batch_job")
+  }
+
+  testthat::with_mocked_bindings(
+    llm_batch_submit = fake_submit,
+    .package = "LLMR",
+    {
+      expect_error(
+        panel_batch_submit(panel, instrument, config,
+                           state_path = tempfile(fileext = ".rds")),
+        "environment variable")
+      expect_identical(submissions, 0L)
     })
+})
+
+test_that("panel batch state stores an environment handle without its value", {
+  panel <- panel_from_margins(list(g = c(a = .5, b = .5)), n = 2)
+  instrument <- panel_instrument(item_likert("q", "S."),
+                                 randomize = character(0))
+  sentinel <- "sk-llmrpanel-env-sentinel"
+  Sys.setenv(LLMRPANEL_BATCH_STATE_TEST_KEY_7CB663 = sentinel)
+  on.exit(Sys.unsetenv("LLMRPANEL_BATCH_STATE_TEST_KEY_7CB663"), add = TRUE)
+  config <- LLMR::llm_config(
+    "groq", "fake",
+    api_key = LLMR::llm_api_key_env(
+      "LLMRPANEL_BATCH_STATE_TEST_KEY_7CB663"))
+  state_path <- tempfile(fileext = ".rds")
+  fake_submit <- function(config, messages, state_path = NULL) {
+    structure(list(provider = "groq", config = config,
+                   custom_ids = sprintf("llmr-%06d", seq_along(messages))),
+              class = "llmr_batch_job")
+  }
+
+  testthat::with_mocked_bindings(
+    llm_batch_submit = fake_submit,
+    .package = "LLMR",
+    panel_batch_submit(panel, instrument, config, state_path = state_path))
+
+  saved <- readRDS(state_path)
+  expect_s3_class(saved$job$config$api_key, "llmr_secret_env")
+  compressed <- readBin(state_path, "raw", n = file.info(state_path)$size)
+  saved_bytes <- memDecompress(compressed, type = "gzip")
+  sentinel_bytes <- charToRaw(sentinel)
+  starts <- seq_len(length(saved_bytes) - length(sentinel_bytes) + 1L)
+  contains_sentinel <- any(vapply(starts, function(i) {
+    identical(saved_bytes[i + seq_along(sentinel_bytes) - 1L], sentinel_bytes)
+  }, logical(1)))
+  expect_false(contains_sentinel)
 })
 
 # --- B3: response provenance + panel_usage -----------------------------------
@@ -360,26 +425,27 @@ test_that("responses retain raw replies, execution state, and model identity", {
   }
 
   responses <- panel_administer(panel, instrument, config, .runner = mixed)
+  data <- responses$data
   expect_true(all(c("response_text", "response_id", "success",
                     "error_message", "finish_reason", "model", "provider") %in%
-                  names(responses)))
-  expect_type(responses$response_text, "character")
-  expect_type(responses$response_id, "character")
-  expect_type(responses$success, "logical")
-  expect_type(responses$error_message, "character")
-  expect_type(responses$finish_reason, "character")
-  expect_type(responses$model, "character")
-  expect_type(responses$provider, "character")
-  expect_true(all(responses$model == "fake-model"))
-  expect_true(all(responses$provider == "groq"))
-  expect_identical(responses$response_text[2], "unmatched raw reply")
-  expect_true(is.na(responses$response[2]))
-  expect_false(responses$success[3])
-  expect_identical(responses$response_text[3], "Yes")
-  expect_identical(responses$error_message[3], "provider unavailable")
-  expect_true(is.na(responses$response[3]))
-  expect_true(is.na(responses$score[3]))
-  expect_false(any(c("config", "messages") %in% names(responses)))
+                  names(data)))
+  expect_type(data$response_text, "character")
+  expect_type(data$response_id, "character")
+  expect_type(data$success, "logical")
+  expect_type(data$error_message, "character")
+  expect_type(data$finish_reason, "character")
+  expect_type(data$model, "character")
+  expect_type(data$provider, "character")
+  expect_true(all(data$model == "fake-model"))
+  expect_true(all(data$provider == "groq"))
+  expect_identical(data$response_text[2], "unmatched raw reply")
+  expect_true(is.na(data$response[2]))
+  expect_false(data$success[3])
+  expect_identical(data$response_text[3], "Yes")
+  expect_identical(data$error_message[3], "provider unavailable")
+  expect_true(is.na(data$response[3]))
+  expect_true(is.na(data$score[3]))
+  expect_false(any(c("config", "messages") %in% names(data)))
   audit <- panel_bias_audit(responses)
   expect_identical(audit$parse_failures, 1L)
   expect_identical(audit$execution_failures, 1L)
@@ -398,16 +464,16 @@ test_that("bare runners still produce typed provenance columns", {
   responses <- panel_administer(panel, instrument, config, .runner = bare)
 
   expect_named(
-    responses,
+    responses$data,
     c("persona_id", "item_id", "type", "item_position", "option_order",
       "response_text", "response_id", "success", "error_message",
       "finish_reason", "model", "provider", "response", "score"))
-  expect_true(all(is.na(responses$response_id)))
-  expect_true(all(is.na(responses$success)))
-  expect_true(all(is.na(responses$error_message)))
-  expect_true(all(is.na(responses$finish_reason)))
-  expect_true(all(responses$model == "fake-model"))
-  expect_true(all(responses$provider == "groq"))
+  expect_true(all(is.na(responses$data$response_id)))
+  expect_true(all(is.na(responses$data$success)))
+  expect_true(all(is.na(responses$data$error_message)))
+  expect_true(all(is.na(responses$data$finish_reason)))
+  expect_true(all(responses$data$model == "fake-model"))
+  expect_true(all(responses$data$provider == "groq"))
 })
 
 test_that("panel_usage reports retained tokens and has a typed empty state", {
@@ -423,7 +489,7 @@ test_that("panel_usage reports retained tokens and has a typed empty state", {
     experiments
   }
   r1 <- panel_administer(panel, instr, cfg, .runner = with_tokens)
-  expect_false(is.null(attr(r1, "usage")))
+  expect_false(is.null(r1$usage))
   u <- panel_usage(r1)
   expect_false(is.null(u))
   expect_true(all(c("model", "provider") %in% names(u)))

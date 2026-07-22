@@ -20,9 +20,10 @@
 #' [panel_batch_fetch()] to retrieve completed results. Provider services
 #' determine prices and completion times.
 #'
-#' All personas are administered under one `config` (one model). The handle and
-#' its optional `state_path` file carry the survey prompts and the rendered
-#' persona text, but no API key value.
+#' All personas are administered under one `config` (one model). The handle
+#' carries the survey prompts and rendered persona text. When `state_path` is
+#' supplied, the API key must be referenced through an environment variable so
+#' its value is not written to the saved state.
 #'
 #' @param panel A [panel_from_margins()] / [panel_from_data()] /
 #'   [panel_from_personas()] result.
@@ -54,6 +55,13 @@ panel_batch_submit <- function(panel, instrument, config, state_path = NULL,
   if (!inherits(config, "llm_config")) {
     abort("`config` must be an LLMR::llm_config().")
   }
+  if (!is.null(state_path) &&
+      inherits(config$api_key, "llmr_secret_literal")) {
+    abort(paste(
+      "`state_path` cannot be used with a literal API key.",
+      "Build `config` from an environment variable with",
+      "`api_key = LLMR::llm_api_key_env(\"VARNAME\")`."))
+  }
   exps <- .panel_build_grid(panel, instrument, config)
   .panel_preflight(nrow(exps), max_calls, confirm)
   cli::cli_inform("Submitting {nrow(exps)} call(s) to the batch API.")
@@ -76,6 +84,11 @@ panel_batch_submit <- function(panel, instrument, config, state_path = NULL,
 #' @param job A [panel_batch_submit()] handle (or a `state_path` to one).
 #' @return The LLMR batch status (a one-row tibble).
 #' @seealso [panel_batch_submit()], [panel_batch_fetch()].
+#' @examples
+#' \dontrun{
+#' job <- readRDS("panel_job.rds")
+#' panel_batch_status(job)
+#' }
 #' @export
 panel_batch_status <- function(job) {
   if (is.character(job) && length(job) == 1L) job <- readRDS(job)
@@ -91,8 +104,13 @@ panel_batch_status <- function(job) {
 #' does not matter.
 #'
 #' @param job A [panel_batch_submit()] handle (or a `state_path` to one).
-#' @return A `panel_responses` tibble.
+#' @return A `panel_responses` object.
 #' @seealso [panel_batch_submit()], [panel_batch_status()].
+#' @examples
+#' \dontrun{
+#' job <- readRDS("panel_job.rds")
+#' responses <- panel_batch_fetch(job)
+#' }
 #' @export
 panel_batch_fetch <- function(job) {
   if (is.character(job) && length(job) == 1L) job <- readRDS(job)

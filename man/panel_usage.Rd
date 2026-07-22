@@ -18,9 +18,26 @@ returned no token columns.
 \description{
 Summarizes token and outcome diagnostics recorded by \code{\link[=panel_administer]{panel_administer()}} or
 \code{\link[=panel_batch_fetch]{panel_batch_fetch()}}. The diagnostics are stored in the \code{usage}
-attribute of a \code{panel_responses} object and summarized by \code{\link[LLMR:llm_usage]{LLMR::llm_usage()}}.
+field of a \code{panel_responses} object and summarized by \code{\link[LLMR:llm_usage]{LLMR::llm_usage()}}.
 Model and provider remain in the returned frame. A supplied \code{price_table}
 adds a cost column. The package contains no price table.
+}
+\examples{
+panel <- panel_from_margins(list(group = c(A = 1)), n = 2)
+instrument <- panel_instrument(
+  item_choice("pick", "Choose one.", c("A", "B")),
+  randomize = character(0))
+config <- LLMR::llm_config("groq", "example-model")
+runner <- function(experiments, ...) {
+  experiments$response_text <- "A"
+  experiments$sent_tokens <- 4L
+  experiments$rec_tokens <- 1L
+  experiments$total_tokens <- 5L
+  experiments$success <- TRUE
+  experiments
+}
+responses <- panel_administer(panel, instrument, config, .runner = runner)
+panel_usage(responses)
 }
 \seealso{
 \code{\link[=panel_administer]{panel_administer()}}, \code{\link[LLMR:llm_usage]{LLMR::llm_usage()}}.

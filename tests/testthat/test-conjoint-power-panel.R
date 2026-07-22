@@ -10,17 +10,19 @@ test_panel <- function(n = 6) {
 }
 
 known_design <- function() {
-  out <- tibble::tibble(
+  profiles <- tibble::tibble(
     task = rep(1:8, each = 2),
     profile = rep(1:2, times = 8),
     color = c("red", "blue", "blue", "red", "red", "blue", "blue", "red",
               "red", "red", "blue", "blue", "red", "blue", "blue", "red"),
     cost  = c("low", "high", "low", "high", "high", "low", "high", "low",
               "low", "high", "low", "high", "low", "low", "high", "high"))
-  attr(out, "attributes") <- list(color = c("blue", "red"),
-                                  cost = c("low", "high"))
-  class(out) <- c("conjoint_design", class(out))
-  out
+  structure(
+    list(
+      profiles = profiles,
+      attributes = list(color = c("blue", "red"),
+                        cost = c("low", "high"))),
+    class = "conjoint_design")
 }
 
 prefer_red_runner <- function(experiments, ...) {
@@ -55,20 +57,25 @@ test_that("conjoint_instrument builds task items and stores the design", {
   instr <- conjoint_instrument(design, "Choose one.")
   expect_s3_class(instr, "panel_instrument")
   expect_equal(instr$randomize, "option_order")
-  expect_equal(length(instr$items), length(unique(design$task)))
+  expect_equal(length(instr$items), length(unique(design$profiles$task)))
   expect_equal(instr$items[[1]]$id, "task_1")
   expect_equal(instr$items[[1]]$options, c("Profile 1", "Profile 2"))
   expect_identical(instr$items[[1]]$text, "Choose one.")
   expect_identical(instr$items[[1]]$conjoint$attributes,
-                   attr(design, "attributes"))
+                   design$attributes)
   expect_identical(instr$conjoint, design)
 })
 
-test_that("conjoint_design is classed, printable, and stores its attribute list", {
+test_that("conjoint_design keeps profiles and attributes in ordinary fields", {
   set.seed(110)
   d <- conjoint_design(list(a = c("x", "y"), b = c("p", "q")), n_tasks = 3)
   expect_s3_class(d, "conjoint_design")
-  expect_identical(attr(d, "attributes"), list(a = c("x", "y"), b = c("p", "q")))
+  expect_named(d, c("profiles", "attributes"))
+  expect_s3_class(d$profiles, "tbl_df")
+  expect_named(d$profiles, c("task", "profile", "a", "b"))
+  expect_identical(d$attributes,
+                   list(a = c("x", "y"), b = c("p", "q")))
+  expect_null(attr(d, "attributes"))
   printed <- utils::capture.output(print(d))
   expect_match(printed[1], "conjoint_design")
   expect_true(any(grepl("3 task", printed, fixed = TRUE)))
@@ -77,7 +84,7 @@ test_that("conjoint_design is classed, printable, and stores its attribute list"
 
 test_that("conjoint metadata loss is detected before use", {
   design <- known_design()
-  attr(design, "attributes") <- NULL
+  design$attributes <- NULL
   expect_error(conjoint_instrument(design), "metadata|conjoint_design")
 
   design <- known_design()
@@ -137,7 +144,7 @@ test_that("conjoint_amce drops NA task responses and counts them", {
   responses <- panel_administer(panel, instr, cfg, .runner = fake)
   out <- conjoint_amce(responses)
   expect_true(all(out$n_dropped_na == 1L))
-  expect_true(all(out$n_profiles == (nrow(responses) - 1L) * 2L))
+  expect_true(all(out$n_profiles == (nrow(responses$data) - 1L) * 2L))
 })
 
 test_that("conjoint_amce reports and excludes execution failures", {
@@ -155,7 +162,7 @@ test_that("conjoint_amce reports and excludes execution failures", {
                                 .runner = failed_one)
   expect_warning(out <- conjoint_amce(responses), "execution failure")
   expect_true(all(out$n_execution_failures == 1L))
-  expect_true(all(out$n_profiles == (nrow(responses) - 1L) * 2L))
+  expect_true(all(out$n_profiles == (nrow(responses$data) - 1L) * 2L))
 })
 
 test_that("conjoint administration records independent respondent profile draws", {
@@ -170,14 +177,14 @@ test_that("conjoint administration records independent respondent profile draws"
 
   set.seed(110)
   responses <- panel_administer(panel, instr, cfg, .runner = scripted)
-  expect_true("profiles" %in% names(responses))
-  expect_identical(responses$profiles, grid$profiles)
-  expect_true(all(vapply(responses$profiles, function(x) {
+  expect_true("profiles" %in% names(responses$data))
+  expect_identical(responses$data$profiles, grid$profiles)
+  expect_true(all(vapply(responses$data$profiles, function(x) {
     identical(names(x), c("task", "profile", "color", "cost"))
   }, logical(1))))
 
-  respondent_profiles <- lapply(split(responses$profiles,
-                                      responses$persona_id), function(x) {
+  respondent_profiles <- lapply(split(responses$data$profiles,
+                                      responses$data$persona_id), function(x) {
     paste(vapply(x, function(task) {
       paste(unlist(task[c("color", "cost")], use.names = FALSE),
             collapse = "|")
@@ -198,7 +205,7 @@ test_that("conjoint administration records independent respondent profile draws"
 
   set.seed(110)
   replay <- LLMRpanel:::.panel_build_grid(panel, instr, cfg)
-  expect_identical(replay$profiles, responses$profiles)
+  expect_identical(replay$profiles, responses$data$profiles)
 
   estimates <- conjoint_amce(responses)
   expect_true(all(is.finite(estimates$estimate)))
@@ -290,8 +297,9 @@ test_that("panel_power is monotone in effect and accepts named effects", {
 
 test_that("panel_power warns on a zero-variance prior", {
   responses <- power_responses()
-  responses$response[responses$item_id == "lik"] <- "high"
-  responses$score[responses$item_id == "lik"] <- 3
+  is_likert <- responses$data$item_id == "lik"
+  responses$data$response[is_likert] <- "high"
+  responses$data$score[is_likert] <- 3
   expect_warning(out <- panel_power(responses, effect = c(lik = 0.5),
                                     items = "lik"),
                  "no variance in the pilot")
@@ -300,8 +308,8 @@ test_that("panel_power warns on a zero-variance prior", {
 
 test_that("panel_power reports and excludes execution failures", {
   responses <- power_responses()
-  pick <- which(responses$item_id == "pick")
-  responses$success[pick[1]] <- FALSE
+  pick <- which(responses$data$item_id == "pick")
+  responses$data$success[pick[1]] <- FALSE
   expect_warning(
     out <- panel_power(responses, effect = 0.2, items = "pick"),
     "execution failure")

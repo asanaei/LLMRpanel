@@ -20,9 +20,6 @@
 #' two-arm sample sizes from pilot dispersion. [LLMR::report()] summarizes an
 #' administration.
 #'
-#' Without a benchmark, response shares describe the configured model under the
-#' supplied personas. They do not estimate a human population.
-#'
 #' @keywords internal
 #' @importFrom rlang %||% abort
 "_PACKAGE"

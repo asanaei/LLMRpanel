@@ -10,13 +10,19 @@ panel_batch_fetch(job)
 \item{job}{A \code{\link[=panel_batch_submit]{panel_batch_submit()}} handle (or a \code{state_path} to one).}
 }
 \value{
-A \code{panel_responses} tibble.
+A \code{panel_responses} object.
 }
 \description{
 Retrieves the batch results and parses them into a \code{panel_responses},
 identical in shape to a synchronous \code{\link[=panel_administer]{panel_administer()}} run. Responses are
 joined to the grid by request id, so the order the provider returns them in
 does not matter.
+}
+\examples{
+\dontrun{
+job <- readRDS("panel_job.rds")
+responses <- panel_batch_fetch(job)
+}
 }
 \seealso{
 \code{\link[=panel_batch_submit]{panel_batch_submit()}}, \code{\link[=panel_batch_status]{panel_batch_status()}}.

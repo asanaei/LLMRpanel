@@ -14,22 +14,23 @@ built on [LLMR](https://asanaei.github.io/LLMR/).
 `panel_from_margins()` draws persona attributes independently from supplied
 population margins. `panel_from_data()` samples complete microdata rows, and
 `panel_from_personas()` uses a prepared persona data frame such as
-`LLMR::anes_2024_personas`. The package contains no population data.
-Instruments may contain Likert, choice, and open items.
-`conjoint_design()` creates randomized conjoint designs.
+`LLMR::anes_2024_personas`. Instruments may contain Likert, choice, and open
+items. `conjoint_design()` creates randomized conjoint designs with the profile
+table in `$profiles` and the attribute universe in `$attributes`.
 
 `panel_administer()` sends every item to every persona. It can randomize item
-and option order for each persona and records both orders.
+and option order for each persona and records both orders in the response
+object's `$data` field.
 `panel_bias_audit()` counts parse failures and tests whether responses are
 associated with the first option shown.
 
 `panel_benchmark()` compares closed-item response shares with a supplied human
-benchmark. It records benchmark coverage, deviations, and nonresponse.
+benchmark. It records benchmark coverage, deviations, and nonresponse in the
+response object's `$benchmark` field.
 `plot()` displays the compared shares, and `LLMR::report()` summarizes the
 administration. Without a benchmark, response shares describe the configured
-model under the supplied personas. Printed results state `NOT BENCHMARKED`,
-`PARTIALLY BENCHMARKED (n/m)`, or `BENCHMARKED`. They do not estimate a human
-population.
+model under the supplied personas, not a human population. Printed results
+state `NOT BENCHMARKED`, `PARTIALLY BENCHMARKED (n/m)`, or `BENCHMARKED`.
 The report identifies whether the panel came from supplied margins, sampled
 microdata rows, or supplied personas.
 
@@ -46,12 +47,14 @@ require an explicit `LLMR::llm_config()` and stop above `max_calls` unless
 `confirm = TRUE`. A `state_path` saves the panel batch job for later status or
 fetch calls.
 
-Every administration retains `response_text`, `response_id`, `success`,
-`model`, and `provider` as response columns. `finish_reason` is retained when
-the runner supplies it. This keeps an unmatched reply inspectable.
-`panel_usage()` retains model and provider in its summary so a supplied price
-table can be joined to the model that incurred the usage. Synchronous and batch
-administration return the same response schema.
+A `panel_responses` object stores response rows in `$data` and administration
+context in `$panel`, `$instrument`, `$benchmark`, and `$usage`.
+`response_text`, `response_id`, `success`, `model`, and `provider` are response
+columns; `finish_reason` is present when the runner supplies it. This keeps an
+unmatched reply inspectable. `panel_usage()` summarizes `$usage` and retains
+model and provider so a supplied price table can be joined to the model that
+incurred the usage. Synchronous and batch administration return the same
+response schema.
 
 ## Installation
 
@@ -97,6 +100,7 @@ cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b", temperature = 0.8)
 
 resp <- panel_administer(panel, instrument, cfg)
 resp
+resp$data
 panel_bias_audit(resp)
 LLMR::diagnostics(resp)
 
@@ -105,6 +109,7 @@ bench <- data.frame(item_id = "fund",
                     share = c(.41, .59))
 resp <- panel_benchmark(resp, bench, "city survey, 2025")
 LLMR::report(resp)
+resp$benchmark$nonresponse
 
 panel_power(resp, effect = 0.3)
 ```

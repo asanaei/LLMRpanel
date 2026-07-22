@@ -40,9 +40,10 @@ a job handle. Use \code{\link[=panel_batch_status]{panel_batch_status()}} to ins
 determine prices and completion times.
 }
 \details{
-All personas are administered under one \code{config} (one model). The handle and
-its optional \code{state_path} file carry the survey prompts and the rendered
-persona text, but no API key value.
+All personas are administered under one \code{config} (one model). The handle
+carries the survey prompts and rendered persona text. When \code{state_path} is
+supplied, the API key must be referenced through an environment variable so
+its value is not written to the saved state.
 }
 \examples{
 \dontrun{

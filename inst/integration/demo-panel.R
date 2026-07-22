@@ -70,7 +70,7 @@ run_panel_demo <- function(provider = Sys.getenv("LLMR_DEMO_PROVIDER", "groq"),
 if (sys.nframe() == 0L) {
   res <- run_panel_demo()
   cat("\n==== LLMRpanel responses ====\n")
-  print(as.data.frame(res$responses)[, c("persona_id", "item_id", "response", "score")])
+  print(res$responses$data[, c("persona_id", "item_id", "response", "score")])
   cat("\n==== LLMR report ====\n")
   print(res$report)
 }

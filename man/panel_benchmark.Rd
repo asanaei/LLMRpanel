@@ -17,7 +17,7 @@ to 1; a deviation beyond rounding draws a warning.}
 \code{"ANES 2024 pilot"}).}
 }
 \value{
-\code{responses} with the benchmark attribute set:
+\code{responses} with its \code{benchmark} field set:
 \verb{$table} (per covered item and response: \code{share_silicon},
 \code{share_human}, \code{deviation}), \verb{$nonresponse} (nonresponse and execution
 failure rates per item),
@@ -28,6 +28,8 @@ Compares closed-item response shares with human benchmark shares supplied
 by the user. The result contains deviations for covered item-response
 pairs, the number of closed items covered, and nonresponse rates by item.
 The function does not alter responses or adjust response shares.
+Without a benchmark, response shares describe the configured model under the
+supplied personas, not a human population.
 }
 \examples{
 \dontrun{

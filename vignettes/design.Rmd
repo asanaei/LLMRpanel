@@ -36,10 +36,6 @@ dispersion before planning human data collection.
 3. **Model measurement.** Compare response distributions across personas,
 item orders, option orders, or model configurations.
 
-These computations describe the configured model and supplied personas. A
-human benchmark provides a separate comparison; it does not turn model
-responses into observations from a human population.
-
 ## Panels and instruments
 
 ```{r setup}
@@ -49,7 +45,7 @@ library(LLMRpanel)
 `panel_from_margins()` samples attribute values from the supplied marginal
 distributions. `set.seed()` makes this draw reproducible.
 
-```{r panel}
+```{r panel, purl=FALSE}
 set.seed(110)
 panel = panel_from_margins(
   list(
@@ -80,17 +76,20 @@ among attributes rather than sampling each margin independently.
 `LLMR::report()` identifies whether a panel came from supplied margins,
 microdata rows, or supplied personas.
 
-`panel_administer()` sends each item to each persona. It randomizes item and
-option order by default and records `item_position` and `option_order`. The
-example repeats the administration with a second model configuration so
-response patterns can be compared across models.
+`panel_administer()` sends each item to each persona. It returns a
+`panel_responses` object with response rows in `$data` and the panel,
+instrument, benchmark record, and token usage in ordinary fields. It randomizes
+item and option order by default and records `item_position` and `option_order`
+in `$data`. The example repeats the administration with a second model
+configuration so response patterns can be compared across models.
 
-```{r administer}
+```{r administer, purl=FALSE}
 cfg = LLMR::llm_config("groq", "openai/gpt-oss-20b", temperature = 0.8)
 cfg_qwen = LLMR::llm_config("groq", "qwen/qwen3-32b", temperature = 0.8)
 
 resp = panel_administer(panel, instrument, cfg)
 resp
+resp$data
 panel_bias_audit(resp)
 LLMR::diagnostics(resp)
 
@@ -98,16 +97,15 @@ resp_qwen = panel_administer(panel, instrument, cfg_qwen)
 panel_bias_audit(resp_qwen)
 ```
 
-`resp` has no benchmark attached. `resp_qwen` is a second model run, not a
-human benchmark.
-
 ## Compare responses with a benchmark
 
 `panel_benchmark()` compares valid model response shares with benchmark
 shares for matching item-response pairs. It also records benchmark coverage
-and item-level nonresponse. `bench_fund` supplies shares for one closed item.
+and item-level nonresponse in `$benchmark`. Before a benchmark is attached,
+response shares describe the configured model under the supplied personas,
+not a human population. `bench_fund` supplies shares for one closed item.
 
-```{r benchmark_partial}
+```{r benchmark_partial, purl=FALSE}
 bench_fund = data.frame(
   item_id = rep("fund", 2),
   response = c("public transit", "road repair"),
@@ -125,7 +123,7 @@ resp_partial
 `bench_fund` covers one of the instrument's two closed items. `bench_all`
 adds shares for `wk4` and covers both.
 
-```{r benchmark_full}
+```{r benchmark_full, purl=FALSE}
 bench_all = rbind(
   bench_fund,
   data.frame(
@@ -148,20 +146,22 @@ resp = panel_benchmark(
 )
 resp
 LLMR::report(resp)
-attr(resp, "benchmark")$nonresponse
+resp$benchmark$nonresponse
 ```
 
-`attr(resp, "benchmark")$nonresponse` gives the missing response proportion
-for each closed item. The comparison shares use nonmissing responses as their
+`resp$benchmark$nonresponse` gives the missing response proportion for each
+closed item. The comparison shares use nonmissing responses as their
 denominator.
 
 ## Conjoint designs
 
-`conjoint_design()` uses R's random-number generator to construct the design
-specification. `panel_administer()` draws the profiles each respondent sees.
-Set a seed before administration to reproduce those respondent-level draws.
+`conjoint_design()` uses R's random-number generator to construct a classed
+design list. Its `$profiles` field contains the initial profile table, and its
+`$attributes` field contains the attribute universe. `panel_administer()` draws
+the profiles each respondent sees. Set a seed before administration to
+reproduce those respondent-level draws.
 
-```{r conjoint_design}
+```{r conjoint_design, purl=FALSE}
 set.seed(110)
 design = conjoint_design(
   list(
@@ -171,16 +171,18 @@ design = conjoint_design(
   n_tasks = 4
 )
 design
+design$profiles
+design$attributes
 ```
 
-`conjoint_design()` attempts to use distinct profiles within each task and
-warns when the attribute space cannot supply them. `conjoint_instrument()`
-creates one forced-choice item per task. Administration renders a fresh draw
-for each respondent and records it with the response. `conjoint_amce()`
-estimates from those recorded profiles relative to the first level of each
-attribute and calculates standard errors clustered by persona.
+`conjoint_design()` attempts to use distinct profiles within each task in
+`$profiles` and warns when the attribute space cannot supply them.
+`conjoint_instrument()` creates one forced-choice item per task. Administration
+renders a fresh draw for each respondent and records it with the response.
+`conjoint_amce()` estimates from those recorded profiles relative to the first
+level of each attribute and calculates standard errors clustered by persona.
 
-```{r conjoint_amce}
+```{r conjoint_amce, purl=FALSE}
 cj_instr = conjoint_instrument(design, "Which product would you buy?")
 cj = panel_administer(panel, cj_instr, cfg)
 conjoint_amce(cj)
@@ -198,7 +200,7 @@ and pilot dispersion. It uses the standard deviation of Likert scores. For
 choice items, it uses a named focal response or the modal response share. The
 result has one row per analyzed closed item.
 
-```{r power}
+```{r power, purl=FALSE}
 panel_power(resp, effect = c(wk4 = 0.4, fund = 0.15))
 ```
 
@@ -207,9 +209,10 @@ panel_power(resp, effect = c(wk4 = 0.4, fund = 0.15))
 `panel_administer()` makes one request per persona-item pair. Item and option
 randomization do not add requests. Provider prices and prompt and response
 lengths determine cost. A versioned local model can support later reruns when
-hosted endpoints change. Each response retains `response_text`, `response_id`,
-`success`, `model`, and `provider`, including when a reply cannot be matched to
-a closed-item option. `finish_reason` is retained when the runner supplies it.
+hosted endpoints change. The `$data` field retains `response_text`,
+`response_id`, `success`, `model`, and `provider`, including when a reply cannot
+be matched to a closed-item option. `finish_reason` is retained when the runner
+supplies it.
 
 ## Relations
 

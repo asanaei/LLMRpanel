@@ -58,6 +58,10 @@ item_open <- function(id, text) {
 #'   `"item_order"`, `"option_order"`, both (default), or `character(0)`
 #'   for none. What each respondent saw is recorded in the responses.
 #' @return An object of class `panel_instrument`.
+#' @examples
+#' panel_instrument(list(
+#'   item_likert("trust", "How much do you trust the city council?"),
+#'   item_open("reason", "What is the main reason for your answer?")))
 #' @export
 panel_instrument <- function(items, randomize = c("item_order", "option_order")) {
   if (inherits(items, "panel_item")) items <- list(items)
@@ -121,14 +125,13 @@ print.panel_instrument <- function(x, ...) {
 #' @param attributes Named list of level vectors.
 #' @param n_tasks Tasks per respondent.
 #' @param profiles_per_task Profiles shown per task (default 2).
-#' @return A `conjoint_design` tibble: `task`, `profile`, one column per
-#'   attribute, carrying
-#'   the original attribute list in `attr(x, "attributes")`. Render it into
-#'   forced-choice items with [conjoint_instrument()] and estimate with
-#'   [conjoint_amce()] after administration. Profiles within a task are guaranteed
-#'   distinct (a forced choice between identical profiles measures
-#'   nothing); when the attribute space is too small to allow distinct
-#'   profiles, duplicates remain and a warning says so.
+#' @return A `conjoint_design` list with fields `profiles`, a tibble containing
+#'   `task`, `profile`, and one column per attribute, and `attributes`, the
+#'   named list of attribute levels. Render it into forced-choice items with
+#'   [conjoint_instrument()] and estimate with [conjoint_amce()] after
+#'   administration. Profiles within a task are distinct when the attribute
+#'   space permits them. When it does not, duplicates remain and a warning is
+#'   issued.
 #' @examples
 #' set.seed(110)
 #' conjoint_design(
@@ -151,17 +154,17 @@ conjoint_design <- function(attributes, n_tasks = 5L, profiles_per_task = 2L) {
       "The attribute space is too small for distinct profiles in every",
       "task; some tasks contain duplicates."))
   }
-  out <- do.call(rbind, rows)
-  attr(out, "attributes") <- attributes
-  class(out) <- c("conjoint_design", class(out))
-  out
+  profiles <- tibble::as_tibble(do.call(rbind, rows))
+  structure(list(profiles = profiles, attributes = attributes),
+            class = "conjoint_design")
 }
 
 #' @export
 print.conjoint_design <- function(x, ...) {
+  profiles <- x$profiles
   cat(sprintf("<conjoint_design | %d task(s) x %d profile(s) | %d attribute(s)>\n",
-              length(unique(x$task)), length(unique(x$profile)),
-              length(attr(x, "attributes"))))
+              length(unique(profiles$task)), length(unique(profiles$profile)),
+              length(x$attributes)))
   invisible(x)
 }
 
@@ -171,9 +174,7 @@ print.conjoint_design <- function(x, ...) {
 #' each respondent receives a fresh independent profile draw at administration
 #' and is asked to pick one by label.
 #'
-#' @param design A [conjoint_design()] tibble (columns `task`, `profile`,
-#'   one column per attribute, and the attribute list in
-#'   `attr(design, "attributes")`).
+#' @param design A [conjoint_design()] object.
 #' @param question Question text shown above each task's profiles.
 #' @return A `panel_instrument` whose items are task-level choice items
 #'   (ids `task_1`, `task_2`, ...; options `"Profile 1"`, `"Profile 2"`,
@@ -202,27 +203,30 @@ conjoint_instrument <- function(design,
   if (!inherits(design, "conjoint_design")) {
     abort("`design` must be a conjoint_design built with conjoint_design().")
   }
-  stopifnot(is.data.frame(design), is.character(question),
-            length(question) == 1L, nzchar(question))
-  if (!all(c("task", "profile") %in% names(design))) {
+  stopifnot(is.character(question), length(question) == 1L, nzchar(question))
+  profiles <- design$profiles
+  if (!is.data.frame(profiles) ||
+      !all(c("task", "profile") %in% names(profiles))) {
     abort("`design` must have columns task and profile.")
   }
-  attrs <- attr(design, "attributes")
+  attrs <- design$attributes
   if (is.null(attrs) || !is.list(attrs)) {
-    abort("`design` must carry attr(design, 'attributes'); rebuild it with conjoint_design().")
+    abort("`design` is missing its attribute metadata; rebuild it with conjoint_design().")
   }
-  attr_cols <- setdiff(names(design), c("task", "profile"))
-  if (!length(attr_cols)) abort("`design` has no attribute columns.")
+  attr_cols <- names(attrs)
+  if (!length(attr_cols) || !all(attr_cols %in% names(profiles))) {
+    abort("`design` has no attribute columns.")
+  }
 
-  tasks <- sort(unique(design$task))
+  tasks <- sort(unique(profiles$task))
   items <- lapply(tasks, function(k) {
-    dk <- design[design$task == k, , drop = FALSE]
+    dk <- profiles[profiles$task == k, , drop = FALSE]
     dk <- dk[order(dk$profile), , drop = FALSE]
-    profiles <- dk$profile
+    profile_ids <- dk$profile
     item <- item_choice(paste0("task_", k), question,
-                        paste("Profile", profiles))
+                        paste("Profile", profile_ids))
     item$conjoint <- list(
-      attributes = attrs[attr_cols], task = k, profiles = profiles)
+      attributes = attrs[attr_cols], task = k, profiles = profile_ids)
     item
   })
   out <- panel_instrument(items, randomize = "option_order")

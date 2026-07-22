@@ -87,7 +87,7 @@ run_panel_studio <- function(...) {
   writeLines(report_text, file.path(out_dir, "report.txt"))
 
   files <- c("responses.csv", "report.txt")
-  benchmark <- attr(responses, "benchmark")
+  benchmark <- responses$benchmark
   if (!is.null(benchmark)) {
     benchmark_df <- as.data.frame(benchmark$table)
     if (!is.null(notice)) benchmark_df$demo_notice <- notice
@@ -298,7 +298,8 @@ run_panel_studio <- function(...) {
 
     output$responses_tbl <- DT::renderDT({
       shiny::req(responses())
-      DT::datatable(LLMR.shiny::as_display_table(responses()),
+      DT::datatable(LLMR.shiny::as_display_table(
+        tibble::as_tibble(responses())),
                     options = list(scrollX = TRUE, pageLength = 5))
     })
 

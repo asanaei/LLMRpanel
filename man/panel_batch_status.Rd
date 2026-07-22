@@ -15,6 +15,12 @@ The LLMR batch status (a one-row tibble).
 \description{
 Check the status of a panel batch job
 }
+\examples{
+\dontrun{
+job <- readRDS("panel_job.rds")
+panel_batch_status(job)
+}
+}
 \seealso{
 \code{\link[=panel_batch_submit]{panel_batch_submit()}}, \code{\link[=panel_batch_fetch]{panel_batch_fetch()}}.
 }

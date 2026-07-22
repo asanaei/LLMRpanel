@@ -7,9 +7,7 @@
 conjoint_instrument(design, question = "Which profile do you prefer?")
 }
 \arguments{
-\item{design}{A \code{\link[=conjoint_design]{conjoint_design()}} tibble (columns \code{task}, \code{profile},
-one column per attribute, and the attribute list in
-\code{attr(design, "attributes")}).}
+\item{design}{A \code{\link[=conjoint_design]{conjoint_design()}} object.}
 
 \item{question}{Question text shown above each task's profiles.}
 }

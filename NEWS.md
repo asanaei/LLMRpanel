@@ -8,8 +8,10 @@ Initial CRAN release.
   field metadata to a data frame. Reports identify which panel source was used.
 - `panel_administer()` administers every item to every persona. It can
   randomize item and option order and records `item_position` and
-  `option_order`. Responses also retain `response_text`, `response_id`,
-  `success`, `model`, and `provider` as columns.
+  `option_order`. Its classed result stores response rows in `$data` and the
+  panel, instrument, benchmark, and token usage in separate fields. Response
+  rows retain `response_text`, `response_id`, `success`, `model`, and
+  `provider` as columns.
 - `panel_batch_submit()` submits an administration to a provider's
   asynchronous batch API. `panel_batch_status()` and `panel_batch_fetch()`
   inspect and retrieve the job. Synchronous and batch submission share the
@@ -19,10 +21,10 @@ Initial CRAN release.
   compared shares.
 - `panel_bias_audit()` reports parse failures and first-option sensitivity.
 - `conjoint_instrument()` creates conjoint choice tasks with profiles randomized
-  independently for each respondent. `conjoint_design()` returns a classed
-  design, and `conjoint_amce()` estimates from the recorded respondent-level
-  profiles with standard errors clustered by respondent in a classed result
-  that retains run counts as columns.
+  independently for each respondent. `conjoint_design()` returns a classed list
+  with profile and attribute fields, and `conjoint_amce()` estimates from the
+  recorded respondent-level profiles with standard errors clustered by
+  respondent in a classed result that retains run counts as columns.
 - `panel_power()` calculates two-arm sample sizes from pilot dispersion.
 - `run_panel_studio()` provides the panel workflow in an optional Shiny
   application and can download responses, reports, and benchmark tables.

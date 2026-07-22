@@ -99,11 +99,12 @@ panel_power(resp, effect = c(fund = 0.15))
 
 `panel_administer()` takes a `.runner` argument after its ordinary arguments.
 The runner is a `function(experiments, ...)` that receives a data frame with
-`config` and `messages` list-columns and returns those rows with at least a
-`response_text` column. Pass one to run offline or deterministically in tests;
-the default is a live `LLMR::call_llm_par()` call. In the experiments frame the
-persona is in `messages[["system"]]` and the item and options are in
-`messages[["user"]]`.
+`config` and `messages` list-columns and returns those rows with `request_id`
+and `response_text` columns. Each submitted `request_id` must appear once;
+returned rows may be in any order. Pass a runner to run offline or
+deterministically in tests. The default is a live `LLMR::call_llm_par()` call.
+In the experiments frame the persona is in `messages[["system"]]` and the item
+and options are in `messages[["user"]]`.
 
 ## Rules
 
@@ -113,6 +114,8 @@ persona is in `messages[["system"]]` and the item and options are in
   default.
 - `panel_batch_submit(..., state_path = path)` saves the panel batch job at
   `path` for later `panel_batch_status(path)` or `panel_batch_fetch(path)` calls.
+  A saved job requires an API key handle built with
+  `LLMR::llm_api_key_env()`, not a literal key.
 - `panel_from_margins()` samples attributes independently.
   `panel_from_data()` samples complete microdata rows and retains relationships
   among the selected columns. `LLMR::report()` identifies margins, microdata
@@ -124,17 +127,19 @@ persona is in `messages[["system"]]` and the item and options are in
   `panel_bias_audit()` tests whether responses are associated with the first
   option shown.
 - Likert `score` is the 1-based position in the scale supplied to
-  `item_likert()`.
+  `item_likert()` and is stored in `responses$data`.
 - Unmatched closed-item replies remain `NA` and are counted as nonresponse.
-  Their raw `response_text` remains available. Responses also retain
-  `response_id`, `success`, `model`, and `provider` as columns, plus
+  Their raw `response_text` remains available in `responses$data`. That tibble
+  also retains `response_id`, `success`, `model`, and `provider`, plus
   `finish_reason` when the runner supplies it.
 - `panel_administer()` and `panel_batch_fetch()` return the same response
-  schema.
-- `panel_usage()` keeps model and provider in its frame so a supplied price
-  table attaches to the model that incurred the usage.
-- `conjoint_design()` returns a classed design whose attribute metadata is
-  checked by `conjoint_instrument()` and `conjoint_amce()`.
+  schema: a classed list with `data`, `panel`, `instrument`, `benchmark`, and
+  `usage` fields.
+- `panel_usage()` summarizes `responses$usage` and keeps model and provider in
+  its result so a supplied price table attaches to the model that incurred the
+  usage.
+- `conjoint_design()` returns a classed list with a profile tibble in
+  `$profiles` and the attribute universe in `$attributes`.
 - `conjoint_amce()` requires responses from `conjoint_instrument()` and clusters
   standard errors by persona. Its classed result retains run counts as ordinary
   columns. Baseline rows have estimate 0 and missing standard errors.
@@ -142,8 +147,9 @@ persona is in `messages[["system"]]` and the item and options are in
   validate the specified effect.
 - `LLMR::diagnostics()` returns the bias audit and benchmark fields.
   `LLMR::report()` returns the classed report.
-- `tibble::as_tibble()` removes the panel class. For response objects it also
-  removes the panel, instrument, and benchmark attributes.
+- `tibble::as_tibble(responses)` returns the plain `responses$data` tibble.
+- Subset or transform `responses$data`; the response object's panel,
+  instrument, benchmark, and usage fields remain separate.
 - Set a seed before reproducible panel or design draws. Package functions do
   not set one.
 
