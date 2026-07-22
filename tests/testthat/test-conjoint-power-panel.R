@@ -66,7 +66,7 @@ test_that("conjoint_instrument builds task items and stores the design", {
   expect_identical(instr$conjoint, design)
 })
 
-test_that("conjoint_design keeps profiles and attributes in ordinary fields", {
+test_that("conjoint_design keeps profiles and attributes in separate components", {
   set.seed(110)
   d <- conjoint_design(list(a = c("x", "y"), b = c("p", "q")), n_tasks = 3)
   expect_s3_class(d, "conjoint_design")

@@ -6,38 +6,42 @@ template:
     primary: "#2C3E50"
 
 reference:
-- title: Panels
+- title: Build persona panels
   contents:
   - panel_from_margins
   - panel_from_data
   - panel_from_personas
   - as_persona_frame
-- title: Instruments and stimuli
+- title: Survey and experimental instruments
   contents:
   - panel_items
   - panel_instrument
-  - conjoint_design
-  - conjoint_instrument
-- title: Administration
+- title: Administer and randomize
   contents:
   - panel_administer
-  - panel_batch_submit
-  - panel_batch_fetch
-  - panel_batch_status
-  - panel_usage
-- title: Benchmarking and audits
+- title: Compare with human benchmarks and audit order effects
   contents:
   - panel_benchmark
   - plot.panel_responses
   - panel_bias_audit
-- title: Design-stage estimation
+- title: Conjoint designs and AMCEs
   contents:
+  - conjoint_design
+  - conjoint_instrument
   - conjoint_amce
+- title: Plan human studies from pilot dispersion
+  contents:
   - panel_power
 - title: Graphical interface
   contents:
   - run_panel_studio
-- title: Generic surface
+- title: Batch administration and usage
+  contents:
+  - panel_batch_submit
+  - panel_batch_status
+  - panel_batch_fetch
+  - panel_usage
+- title: Diagnostics and reports
   contents:
   - panel_generics
 - title: Package

@@ -78,10 +78,10 @@ microdata rows, or supplied personas.
 
 `panel_administer()` sends each item to each persona. It returns a
 `panel_responses` object with response rows in `$data` and the panel,
-instrument, benchmark record, and token usage in ordinary fields. It randomizes
-item and option order by default and records `item_position` and `option_order`
-in `$data`. The example repeats the administration with a second model
-configuration so response patterns can be compared across models.
+instrument, benchmark record, and token usage in separate components. It
+randomizes item and option order by default and records `item_position` and
+`option_order` in `$data`. The example repeats the administration with a second
+model configuration so response patterns can be compared across models.
 
 ```{r administer, purl=FALSE}
 cfg = LLMR::llm_config("groq", "openai/gpt-oss-20b", temperature = 0.8)
@@ -191,7 +191,7 @@ conjoint_amce(cj)
 `conjoint_amce()` returns a classed result with one row for each observed
 attribute level. Baseline levels have estimate 0 and missing standard errors.
 Other rows contain the estimated contrast and 95 percent interval. Run counts
-remain in ordinary columns.
+remain in separate columns.
 
 ## Two-arm sample sizes
 

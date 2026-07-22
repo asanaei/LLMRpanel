@@ -95,17 +95,6 @@ conjoint_amce(cj)
 panel_power(resp, effect = c(fund = 0.15))
 ```
 
-## Offline runner
-
-`panel_administer()` takes a `.runner` argument after its ordinary arguments.
-The runner is a `function(experiments, ...)` that receives a data frame with
-`config` and `messages` list-columns and returns those rows with `request_id`
-and `response_text` columns. Each submitted `request_id` must appear once;
-returned rows may be in any order. Pass a runner to run offline or
-deterministically in tests. The default is a live `LLMR::call_llm_par()` call.
-In the experiments frame the persona is in `messages[["system"]]` and the item
-and options are in `messages[["user"]]`.
-
 ## Rules
 
 - The package contains no population data. Supply the margins or source rows
@@ -132,9 +121,9 @@ and options are in `messages[["user"]]`.
   Their raw `response_text` remains available in `responses$data`. That tibble
   also retains `response_id`, `success`, `model`, and `provider`, plus
   `finish_reason` when the runner supplies it.
-- `panel_administer()` and `panel_batch_fetch()` return the same response
-  schema: a classed list with `data`, `panel`, `instrument`, `benchmark`, and
-  `usage` fields.
+- `panel_administer()` and `panel_batch_fetch()` return the same response fields
+  and attached study information: a classed list with `data`, `panel`,
+  `instrument`, `benchmark`, and `usage` fields.
 - `panel_usage()` summarizes `responses$usage` and keeps model and provider in
   its result so a supplied price table attaches to the model that incurred the
   usage.
@@ -152,6 +141,17 @@ and options are in `messages[["user"]]`.
   instrument, benchmark, and usage fields remain separate.
 - Set a seed before reproducible panel or design draws. Package functions do
   not set one.
+
+## Offline tests and recorded-response runs
+
+`panel_administer()` takes a `.runner` argument after its ordinary arguments.
+The runner is a `function(experiments, ...)` that receives a data frame with
+`config` and `messages` list-columns and returns those rows with `request_id`
+and `response_text` columns. Each submitted `request_id` must appear once;
+returned rows may be in any order. Pass a runner to run offline or
+deterministically in tests. The default is a live `LLMR::call_llm_par()` call.
+In the request data frame the persona is in `messages[["system"]]` and the item
+and options are in `messages[["user"]]`.
 
 ## Error meanings
 
