@@ -2,8 +2,7 @@
 
 Initial CRAN submission of LLMRpanel 0.6.0.
 
-The package Imports LLMR (>= 0.8.9), which is on CRAN. It Suggests LLMR.shiny,
-which is being submitted in sequence; every use of LLMR.shiny (and of the other
+The package Imports LLMR (>= 0.8.9), which is on CRAN. It Suggests LLMR.shiny (on CRAN); every use of LLMR.shiny (and of the other
 GUI dependencies shiny, bslib, DT) is guarded with requireNamespace(), and the
 package's core has no Shiny dependency. The test suite and the vignette run
 fully offline through the package's `.runner` seam; no example, test, or
@@ -16,7 +15,7 @@ vignette makes a network call.
 
 ## R CMD check results
 
-0 errors | 0 warnings | 2 notes
+0 errors | 0 warnings | 3 notes
 
 - "checking CRAN incoming feasibility ... NOTE": New submission; and
   "Suggests or Enhances not in mainstream repositories: LLMR.shiny"
@@ -25,3 +24,6 @@ vignette makes a network call.
 - "checking for future file timestamps ... NOTE: unable to verify current
   time": environmental (no network during the check); it does not reproduce
   on CRAN's machines.
+- "checking HTML version of manual ... NOTE": emitted by an older
+  system `tidy` that does not recognize the HTML5 elements R generates;
+  it does not reproduce on CRAN.
