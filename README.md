@@ -259,3 +259,13 @@ runs moderated group discussions.
 [LLMRagent](https://asanaei.github.io/LLMRagent/) provides tools for agent
 experiments. The [ecosystem page](https://asanaei.github.io/LLMR-ecosystem/)
 describes the package boundaries.
+
+## Contributing
+
+Report bugs and feature requests in the
+[GitHub repository](https://github.com/asanaei/LLMRpanel). Pull requests may be
+submitted there.
+
+## License
+
+This project uses the MIT License; see `LICENSE`.
