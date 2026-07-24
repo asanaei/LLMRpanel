@@ -45,6 +45,9 @@ run_panel_studio <- function(...) {
   invisible(TRUE)
 }
 
+# Live runs above this request count require explicit confirmation in the GUI.
+.panel_gui_large_run_threshold <- 100L
+
 # A demo responder for offline mode: parse the "Options: a | b | ..." line out of
 # the rendered question and pick deterministically, so the panel has variation
 # without a model.
@@ -106,7 +109,7 @@ run_panel_studio <- function(...) {
     title = "LLMRpanel",
     id = "main_nav",
     fillable = TRUE,
-    theme = bslib::bs_theme(version = 5, bootswatch = "minty"),
+    theme = LLMR.shiny::llmr_theme("panel"),
     sidebar = LLMR.shiny::shell_sidebar(),
     bslib::nav_panel("Silicon panel", .panel_gui_module_ui("panel"))
   )
@@ -166,11 +169,12 @@ run_panel_studio <- function(...) {
           shiny::tags$hr(),
           shiny::tags$strong("3. Administer"),
           if (identical(shared$mode(), "demo")) LLMR.shiny::demo_banner_ui(),
+          shiny::uiOutput(ns("administer_plan")),
           shiny::actionButton(ns("administer"), "Administer to panel", class = "btn-primary"),
           shiny::tags$hr(),
           shiny::tags$strong("4. Benchmark comparison (optional)"),
           shiny::tags$p(class = "text-muted",
-            "Benchmark as 'level=share, level=share' for the item; leave blank to see the NOT BENCHMARKED result."),
+            "Enter benchmark shares as 'level=share, level=share'. Leave blank to report results without a benchmark comparison."),
           shiny::textInput(ns("benchmark"), NULL, value = "yes=0.5, no=0.4, unsure=0.1"),
           shiny::actionButton(ns("compare_benchmark"), "Compare with benchmark",
                               class = "btn-primary"),
@@ -207,6 +211,18 @@ run_panel_studio <- function(...) {
       x <- trimws(unlist(strsplit(txt %||% "", ",", fixed = TRUE))); x[nzchar(x)]
     }
     warn_card <- function(msg) bslib::card(class = "border-warning", bslib::card_body(msg))
+    administer_warning <- function(message, ui = NULL) {
+      if (is.null(ui)) ui <- warn_card(message)
+      run_error(ui)
+      shiny::showNotification(message, type = "warning", session = session)
+      invisible(NULL)
+    }
+    plan_label <- function(n_calls) {
+      sprintf(
+        "Administer panel (%d expected response rows; retries excluded)",
+        n_calls
+      )
+    }
 
     # The ANES persona picker (shared module); returns the chosen row indices.
     persona_rows <- LLMR.shiny::persona_selector_server("personas",
@@ -240,25 +256,193 @@ run_panel_studio <- function(...) {
       shiny::tags$p(class = "text-success", paste0("Panel of ", nrow(panel()), " personas built."))
     })
 
-    shiny::observeEvent(input$administer, {
-      run_error(NULL)
-      if (is.null(panel())) { run_error(warn_card("Build a panel first.")); return() }
-      opts <- parse_opts(input$item_opts)
-      if (length(opts) < 2) { run_error(warn_card("Enter at least two options.")); return() }
-      if (identical(shared$mode(), "live") && !shared$can_run()) {
-        run_error(LLMR.shiny::live_run_blocker_ui(shared$key())); return()
+    output$administer_plan <- shiny::renderUI({
+      if (is.null(panel())) {
+        return(shiny::tags$p(
+          class = "text-muted",
+          "Build a panel to preview the administration scale."
+        ))
       }
-      res <- LLMR.shiny::safe_llmr_call({
-        instrument <- panel_instrument(item_choice("q1", input$item_text, opts))
-        cfg <- LLMR.shiny::build_llm_config(shared$provider(), shared$model(), temperature = 0)
-        runner <- LLMR.shiny::build_runner(shared$mode(), .panel_gui_demo_responder())
+      n_calls <- nrow(panel())
+      if (identical(shared$mode(), "demo")) {
+        return(shiny::tags$p(
+          class = "text-muted",
+          sprintf(
+            "Demo administration produces %d deterministic response rows and makes no API calls.",
+            n_calls
+          )
+        ))
+      }
+      shiny::tags$p(
+        class = "text-muted",
+        sprintf(
+          paste0(
+            "%d planned API calls, producing %d expected response rows; ",
+            "retries are excluded. Live runs above %d calls require confirmation."
+          ),
+          n_calls, n_calls, .panel_gui_large_run_threshold
+        )
+      )
+    })
+
+    shiny::observe({
+      if (is.null(panel()) || !identical(shared$mode(), "live")) {
+        shared$set_plan(0L)
+        return()
+      }
+      n_calls <- nrow(panel())
+      shared$set_plan(n_calls, plan_label(n_calls))
+    })
+
+    administer_inputs <- function() {
+      if (is.null(panel())) {
+        administer_warning("Build a panel before administering the instrument.")
+        return(NULL)
+      }
+      item_text <- trimws(input$item_text %||% "")
+      if (!nzchar(item_text)) {
+        administer_warning("Enter a question before administering the instrument.")
+        return(NULL)
+      }
+      opts <- parse_opts(input$item_opts)
+      if (length(opts) < 2L) {
+        administer_warning(
+          "Enter at least two response options before administering the instrument."
+        )
+        return(NULL)
+      }
+      mode <- shared$mode()
+      if (identical(mode, "live") && !nzchar(trimws(shared$model() %||% ""))) {
+        administer_warning("Enter a model before starting a live run.")
+        return(NULL)
+      }
+      if (identical(mode, "live") && !shared$can_run()) {
+        administer_warning(
+          "Set the provider API key in the environment before starting a live run.",
+          LLMR.shiny::live_run_blocker_ui(shared$key())
+        )
+        return(NULL)
+      }
+      list(
+        panel = panel(),
+        item_text = item_text,
+        opts = opts,
+        mode = mode,
+        provider = shared$provider(),
+        model = shared$model(),
+        n_calls = nrow(panel())
+      )
+    }
+
+    administer_panel <- function(job) {
+      run_error(NULL)
+      run_call <- function(show_progress = FALSE) {
+        instrument <- panel_instrument(
+          item_choice("q1", job$item_text, job$opts)
+        )
+        cfg <- LLMR.shiny::build_llm_config(
+          job$provider, job$model, temperature = 0
+        )
+        runner <- LLMR.shiny::build_runner(
+          job$mode, .panel_gui_demo_responder()
+        )
+        if (isTRUE(show_progress)) {
+          base_runner <- runner
+          completed <- 0L
+          runner <- function(experiments, ...) {
+            total_calls <- nrow(experiments)
+            pieces <- vector("list", total_calls)
+            for (i in seq_len(total_calls)) {
+              pieces[[i]] <- base_runner(
+                experiments[i, , drop = FALSE], ...
+              )
+              completed <<- completed + 1L
+              shiny::incProgress(
+                1 / total_calls,
+                detail = sprintf(
+                  "%d of %d calls complete", completed, total_calls
+                )
+              )
+            }
+            do.call(rbind, pieces)
+          }
+        }
         set.seed(110)
-        panel_administer(panel(), instrument, cfg, .runner = runner)
-      }, shared$provider())
+        panel_administer(job$panel, instrument, cfg, .runner = runner)
+      }
+
+      if (identical(job$mode, "live")) {
+        shared$set_plan(job$n_calls, plan_label(job$n_calls))
+        res <- LLMR.shiny::safe_llmr_call(
+          shiny::withProgress(
+            message = "Administering panel",
+            detail = sprintf("0 of %d calls complete", job$n_calls),
+            value = 0,
+            run_call(show_progress = TRUE)
+          ),
+          job$provider
+        )
+      } else {
+        res <- LLMR.shiny::safe_llmr_call(
+          run_call(show_progress = FALSE),
+          job$provider
+        )
+      }
       if (!res$ok) { run_error(res$ui); return() }
       responses(res$value); benchmark_result(NULL)
-      run_is_demo(identical(shared$mode(), "demo"))
-      shared$add_usage(list(calls = nrow(panel())))
+      run_is_demo(identical(job$mode, "demo"))
+      usage <- if (identical(job$mode, "demo")) {
+        list(result_rows = nrow(res$value$data))
+      } else {
+        out <- LLMR.shiny::extract_token_counts(
+          res$value$usage, fallback_calls = job$n_calls
+        )
+        out$calls <- job$n_calls
+        out$result_rows <- nrow(res$value$data)
+        out
+      }
+      shared$add_usage(usage)
+    }
+
+    shiny::observeEvent(input$administer, {
+      run_error(NULL)
+      job <- administer_inputs()
+      if (is.null(job)) return()
+      if (identical(job$mode, "live") &&
+          job$n_calls > .panel_gui_large_run_threshold) {
+        shiny::showModal(shiny::modalDialog(
+          title = "Confirm Large Live Run",
+          shiny::tags$p(sprintf(
+            paste0(
+              "This administration will make %d planned API calls and produce ",
+              "%d expected response rows."
+            ),
+            job$n_calls, job$n_calls
+          )),
+          shiny::tags$p(
+            "Retries are excluded from these counts and may add API requests."
+          ),
+          easyClose = TRUE,
+          footer = shiny::tagList(
+            shiny::modalButton("Cancel"),
+            shiny::actionButton(
+              ns("confirm_administer"),
+              sprintf("Administer %d Calls", job$n_calls),
+              class = "btn-primary"
+            )
+          )
+        ))
+        return()
+      }
+      administer_panel(job)
+    })
+
+    shiny::observeEvent(input$confirm_administer, {
+      shiny::removeModal()
+      run_error(NULL)
+      job <- administer_inputs()
+      if (is.null(job)) return()
+      administer_panel(job)
     })
 
     shiny::observeEvent(input$compare_benchmark, {
@@ -276,7 +460,10 @@ run_panel_studio <- function(...) {
     })
 
     output$results <- shiny::renderUI({
-      if (is.null(responses())) return(NULL)
+      shiny::validate(shiny::need(
+        !is.null(responses()),
+        "Administer the instrument to view responses and the report."
+      ))
       shiny::tagList(
         shiny::tags$h5("Responses"),
         DT::DTOutput(ns("responses_tbl")),

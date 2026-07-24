@@ -28,6 +28,48 @@ test_that("the GUI assembles when its suggested packages are present", {
   expect_s3_class(LLMRpanel:::.panel_gui_ui(), "bslib_page")
 })
 
+test_that("demo administration records rows without API calls", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("LLMR.shiny")
+  usage_seen <- new.env(parent = emptyenv())
+  usage_seen$value <- NULL
+  shared <- list(
+    mode = shiny::reactive("demo"),
+    provider = shiny::reactive("groq"),
+    model = shiny::reactive(""),
+    can_run = shiny::reactive(TRUE),
+    key = shiny::reactive(list()),
+    set_plan = function(calls, label = "Next run") NULL,
+    add_usage = function(tokens) usage_seen$value <- tokens
+  )
+
+  shiny::testServer(
+    LLMRpanel:::.panel_gui_module_server,
+    args = list(shared = shared),
+    {
+      session$setInputs(
+        source = "margins",
+        margins = "party: left=0.5, right=0.5",
+        persona_tmpl = "A {party} voter.",
+        n = 2,
+        item_text = "Increase spending?",
+        item_opts = "yes, no",
+        build_panel = 1
+      )
+      session$flushReact()
+      session$setInputs(administer = 1)
+      session$flushReact()
+      expect_s3_class(responses(), "panel_responses")
+      expect_true(isTRUE(run_is_demo()))
+    }
+  )
+
+  expect_identical(usage_seen$value$result_rows, 2L)
+  expect_null(usage_seen$value$calls)
+  expect_null(usage_seen$value$sent)
+  expect_null(usage_seen$value$received)
+})
+
 # An offline fixture for the artifact bundle: one item, deterministic runner.
 gui_fixture_responses <- function(benchmarked = FALSE) {
   set.seed(110)
