@@ -63,10 +63,78 @@ test_that("the module UI renders labeled controls and scrollable text", {
       html <- paste(as.character(output$module_ui), collapse = "\n")
       expect_match(html, "Persona source", fixed = TRUE)
       expect_match(html, "Instrument type", fixed = TRUE)
+      expect_match(html, "1. Build the persona panel", fixed = TRUE)
+      expect_match(html, "2. Define the instrument", fixed = TRUE)
+      expect_match(html, "3. Set administration", fixed = TRUE)
+      expect_match(html, "4. Compare with a benchmark", fixed = TRUE)
+      expect_match(html, "Question wording", fixed = TRUE)
+      expect_match(
+        html, "Should the government increase public spending?", fixed = TRUE
+      )
+      expect_match(
+        html, "A {cohort} voter who leans {party}.", fixed = TRUE
+      )
+      expect_match(html, "personas-selection_count", fixed = TRUE)
       expect_match(html, "llmr-text-block", fixed = TRUE)
       expect_false(grepl("<label[^>]*>[[:space:]]*</label>", html))
     }
   )
+})
+
+test_that("panel tables wrap text, round doubles, and retain hidden identifiers", {
+  skip_if_not_installed("DT")
+  skip_if_not_installed("LLMR.shiny")
+  skip_if_not(
+    "digits" %in% names(formals(LLMR.shiny::as_display_table)),
+    "installed LLMR.shiny predates display rounding"
+  )
+
+  tab <- data.frame(
+    persona_id = 1:2,
+    response_text = c(
+      "A response with enough words to exercise wrapping.",
+      "Another response with enough words to exercise wrapping."
+    ),
+    share = c(1 / 3, 2 / 3),
+    response_id = c("r1", "r2"),
+    stringsAsFactors = FALSE
+  )
+  widget <- LLMRpanel:::.panel_gui_datatable(
+    tab,
+    wide_column = "response_text",
+    identifier_columns = c("persona_id", "response_id"),
+    hide_identifiers = TRUE,
+    digits = 3L
+  )
+
+  expect_s3_class(widget, "datatables")
+  expect_identical(
+    names(widget$x$data),
+    c("response_text", "share", "persona_id", "response_id")
+  )
+  expect_equal(widget$x$data$share, c(0.333, 0.667))
+  expect_true(isTRUE(widget$x$options$autoWidth))
+  expect_identical(widget$x$options$buttons[[1]]$extend, "colvis")
+  defs <- widget$x$options$columnDefs
+  expect_true(any(vapply(
+    defs,
+    function(def) identical(def$width, "55%"),
+    logical(1)
+  )))
+  renderers <- Filter(function(def) !is.null(def$render), defs)
+  expect_true(any(vapply(
+    renderers,
+    function(def) grepl("textContent", as.character(def$render),
+                        fixed = TRUE),
+    logical(1)
+  )))
+  cell_styles <- Filter(function(def) !is.null(def$createdCell), defs)
+  expect_true(any(vapply(
+    cell_styles,
+    function(def) grepl("whiteSpace", as.character(def$createdCell),
+                        fixed = TRUE),
+    logical(1)
+  )))
 })
 
 test_that("demo administration records rows without API calls", {
@@ -90,9 +158,14 @@ test_that("demo administration records rows without API calls", {
         build_panel = 1
       )
       session$flushReact()
+      expect_true(all(grepl("^A (left|right) voter[.]$", panel()$persona)))
       session$setInputs(administer = 1)
       session$flushReact()
       expect_s3_class(responses(), "panel_responses")
+      expect_identical(
+        responses()$instrument$items[[1]]$text,
+        "Increase spending?"
+      )
       expect_true(isTRUE(run_is_demo()))
       expect_false("run" %in% names(responses()$data))
       if ("text_block_output" %in% getNamespaceExports("LLMR.shiny")) {
@@ -218,6 +291,11 @@ test_that("demo repeated runs and conjoint instruments use the held panel", {
       session$flushReact()
       expect_s3_class(responses(), "panel_responses")
       expect_s3_class(responses()$instrument$conjoint, "conjoint_design")
+      expect_true(all(vapply(
+        responses()$instrument$items,
+        function(item) identical(item$text, "Which package do you prefer?"),
+        logical(1)
+      )))
       expect_equal(nrow(responses()$data), 48L)
       expect_setequal(unique(responses()$data$run), 1:2)
       session$setInputs(calculate_amce = 1)

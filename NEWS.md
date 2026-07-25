@@ -33,4 +33,10 @@ Initial CRAN release.
   benchmarking and analysis, supports repeated administrations and conjoint
   instruments, exposes power and AMCE calculations, permits full ANES persona
   inspection and field selection, honors shared generation settings, and shows
-  recorded call timing when it is available.
+  recorded call timing when it is available. Numbered configuration sections
+  can be collapsed while the administration action and run plan remain in
+  view. Persona templates and item wording have editable working defaults.
+  Response text and response labels receive most of the width in display
+  tables, internal identifiers remain available through a column control, and
+  shares, benchmark deviations, and other double columns use concise
+  display-only rounding.

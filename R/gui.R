@@ -204,6 +204,87 @@ run_panel_studio <- function(...) {
   )
 }
 
+.panel_gui_datatable <- function(data, wide_column = NULL,
+                                 wrap_columns = character(),
+                                 identifier_columns = character(),
+                                 hide_identifiers = FALSE,
+                                 page_length = 10L, dom = "t",
+                                 digits = 3L) {
+  data <- as.data.frame(data)
+  identifiers <- intersect(identifier_columns, names(data))
+  if (length(identifiers)) {
+    data <- data[c(setdiff(names(data), identifiers), identifiers)]
+  }
+  data <- LLMR.shiny::as_display_table(data, digits = digits)
+
+  safe_render <- DT::JS(paste0(
+    "function(data, type, row, meta) {",
+    "if (type !== 'display') return data;",
+    "var span = document.createElement('span');",
+    "span.textContent = data === null ? '' : String(data);",
+    "return span.innerHTML;",
+    "}"
+  ))
+  wrap_cell <- DT::JS(paste0(
+    "function(td, cellData, rowData, row, col) {",
+    "td.style.whiteSpace = 'normal';",
+    "td.style.wordBreak = 'normal';",
+    "td.style.overflowWrap = 'break-word';",
+    "td.style.lineHeight = '1.35';",
+    "}"
+  ))
+  column_defs <- list()
+  wide_target <- match(wide_column, names(data), nomatch = 0L) - 1L
+  wide_target <- wide_target[wide_target >= 0L]
+  if (length(wide_target)) {
+    column_defs[[length(column_defs) + 1L]] <- list(
+      targets = wide_target, width = "55%", render = safe_render,
+      createdCell = wrap_cell
+    )
+  }
+  wrap_targets <- match(
+    setdiff(intersect(wrap_columns, names(data)), wide_column),
+    names(data), nomatch = 0L
+  ) - 1L
+  wrap_targets <- wrap_targets[wrap_targets >= 0L]
+  if (length(wrap_targets)) {
+    column_defs[[length(column_defs) + 1L]] <- list(
+      targets = wrap_targets, width = "18%", render = safe_render,
+      createdCell = wrap_cell
+    )
+  }
+  identifier_targets <- match(identifiers, names(data), nomatch = 0L) - 1L
+  identifier_targets <- identifier_targets[identifier_targets >= 0L]
+  if (length(identifier_targets)) {
+    column_defs[[length(column_defs) + 1L]] <- list(
+      targets = identifier_targets,
+      width = "7%",
+      visible = !isTRUE(hide_identifiers)
+    )
+  }
+  column_defs[[length(column_defs) + 1L]] <- list(
+    targets = "_all", render = safe_render
+  )
+
+  options <- list(
+    dom = if (isTRUE(hide_identifiers)) "Bfrtip" else dom,
+    scrollX = TRUE,
+    autoWidth = TRUE,
+    pageLength = page_length,
+    columnDefs = column_defs
+  )
+  if (isTRUE(hide_identifiers)) {
+    options$buttons <- list(list(extend = "colvis", text = "Columns"))
+  }
+  DT::datatable(
+    data,
+    rownames = FALSE,
+    escape = FALSE,
+    extensions = if (isTRUE(hide_identifiers)) "Buttons" else character(),
+    options = options
+  )
+}
+
 .panel_gui_encode_profiles <- function(profiles) {
   vapply(profiles, function(profile) {
     if (is.null(profile) || !nrow(profile)) return("")
@@ -301,178 +382,234 @@ run_panel_studio <- function(...) {
         bslib::card_header("Silicon survey panel"),
         bslib::card_body(
           shiny::uiOutput(ns("run_error")),
-          shiny::tags$strong("1. Where the personas come from"),
-          shiny::radioButtons(ns("source"), "Persona source",
-            choices = c("Population margins" = "margins",
-                        "ANES 2024 personas" = "anes"),
-            selected = "margins", inline = TRUE),
-          shiny::conditionalPanel(
-            condition = sprintf("input['%s'] == 'margins'", ns("source")),
-            shiny::textAreaInput(
-              ns("margins"),
-              shiny::tagList(
-                "Population margins ",
-                LLMR.shiny::help_tip(
-                  "Enter one attribute per line as name: level=probability, level=probability."
-                )
-              ),
-              rows = 4,
-              value = paste("cohort: young=0.3, middle=0.45, older=0.25",
-                            "party: left=0.45, right=0.45, independent=0.10",
-                            sep = "\n")
-            ),
-            shiny::textInput(
-              ns("persona_tmpl"),
-              shiny::tagList(
-                "Persona template ",
-                LLMR.shiny::help_tip(
-                  "Use braces around a margin name where its sampled level should appear."
-                )
-              ),
-              value = "A {cohort} voter who leans {party}."
-            )
-          ),
-          shiny::conditionalPanel(
-            condition = sprintf("input['%s'] == 'anes'", ns("source")),
-            shiny::tags$p(class = "text-muted",
-              "Pick respondents (the list runs from most liberal at the top to most conservative at the bottom). Select none to draw a sample of the panel size."),
-            LLMR.shiny::persona_selector_ui(ns("personas")),
-            bslib::accordion(
-              bslib::accordion_panel(
-                "Persona fields and full text",
-                shiny::tags$p(
-                  class = "text-muted",
-                  "All fields are included by default. The first selected row is shown below."
+          bslib::accordion(
+            id = ns("configuration_steps"),
+            open = "panel_source",
+            multiple = FALSE,
+            bslib::accordion_panel(
+              "1. Build the persona panel",
+              value = "panel_source",
+              shiny::radioButtons(
+                ns("source"), "Persona source",
+                choices = c(
+                  "Population margins" = "margins",
+                  "ANES 2024 personas" = "anes"
                 ),
-                shiny::tags$div(
-                  style = "max-height: 16rem; overflow-y: auto;",
-                  shiny::checkboxGroupInput(
-                    ns("persona_columns"),
-                    shiny::tagList(
-                      "Fields rendered into each persona ",
-                      LLMR.shiny::help_tip(
-                        "Clear a field to omit it from the persona text sent with each request."
-                      )
-                    ),
-                    choices = names(persona_source),
-                    selected = names(persona_source)
+                selected = "margins", inline = TRUE
+              ),
+              shiny::conditionalPanel(
+                condition = sprintf("input['%s'] == 'margins'", ns("source")),
+                shiny::textAreaInput(
+                  ns("margins"),
+                  shiny::tagList(
+                    "Population margins ",
+                    LLMR.shiny::help_tip(
+                      "Enter one attribute per line as name: level=probability, level=probability."
+                    )
+                  ),
+                  rows = 4,
+                  value = paste(
+                    "cohort: young=0.3, middle=0.45, older=0.25",
+                    "party: left=0.45, right=0.45, independent=0.10",
+                    sep = "\n"
                   )
                 ),
-                shiny::tags$h6("Full selected persona"),
-                LLMR.shiny::text_block_output(ns("persona_text"), height = "12rem")
-              ),
-              open = FALSE
-            )
-          ),
-          shiny::numericInput(
-            ns("n"),
-            shiny::tagList(
-              "Panel size ",
-              LLMR.shiny::help_tip(
-                "This is the number of personas administered each instrument item."
-              )
-            ),
-            value = 30, min = 2, max = 500, step = 1
-          ),
-          shiny::actionButton(ns("build_panel"), "Build panel", class = "btn-primary"),
-          shiny::uiOutput(ns("panel_status")),
-          shiny::tags$hr(),
-          shiny::tags$strong("2. Instrument"),
-          shiny::radioButtons(
-            ns("instrument_type"), "Instrument type",
-            choices = c("Choice item" = "choice", "Conjoint tasks" = "conjoint"),
-            selected = "choice", inline = TRUE
-          ),
-          shiny::conditionalPanel(
-            condition = sprintf("input['%s'] == 'choice'", ns("instrument_type")),
-            shiny::textInput(
-              ns("item_text"), "Question",
-              value = "Should the government increase public spending?"
-            ),
-            shiny::textInput(
-              ns("item_opts"), "Options (comma-separated)",
-              value = "yes, no, unsure"
-            )
-          ),
-          shiny::conditionalPanel(
-            condition = sprintf("input['%s'] == 'conjoint'", ns("instrument_type")),
-            shiny::textAreaInput(
-              ns("conjoint_attributes"),
-              shiny::tagList(
-                "Conjoint attributes ",
-                LLMR.shiny::help_tip(
-                  "Enter one attribute per line as name: level, level."
+                shiny::textAreaInput(
+                  ns("persona_tmpl"),
+                  shiny::tagList(
+                    "Persona template ",
+                    LLMR.shiny::help_tip(
+                      "Use braces around a margin name where its sampled level should appear."
+                    )
+                  ),
+                  rows = 2,
+                  value = "A {cohort} voter who leans {party}."
                 )
               ),
-              rows = 4,
-              value = paste(
-                "tax rate: lower, unchanged, higher",
-                "public services: fewer, unchanged, more",
-                sep = "\n"
+              shiny::conditionalPanel(
+                condition = sprintf("input['%s'] == 'anes'", ns("source")),
+                shiny::tags$p(
+                  class = "text-muted",
+                  paste(
+                    "Pick respondents. The list runs from most liberal at the",
+                    "top to most conservative at the bottom. Select none to",
+                    "draw a sample of the panel size."
+                  )
+                ),
+                LLMR.shiny::persona_selector_ui(ns("personas")),
+                bslib::accordion(
+                  bslib::accordion_panel(
+                    "Persona fields and full text",
+                    shiny::tags$p(
+                      class = "text-muted",
+                      paste(
+                        "All fields are included by default. The first",
+                        "selected row is shown below."
+                      )
+                    ),
+                    shiny::tags$div(
+                      style = "max-height: 16rem; overflow-y: auto;",
+                      shiny::checkboxGroupInput(
+                        ns("persona_columns"),
+                        shiny::tagList(
+                          "Fields rendered into each persona ",
+                          LLMR.shiny::help_tip(
+                            "Clear a field to omit it from the persona text sent with each request."
+                          )
+                        ),
+                        choices = names(persona_source),
+                        selected = names(persona_source)
+                      )
+                    ),
+                    shiny::tags$h6("Full selected persona"),
+                    LLMR.shiny::text_block_output(
+                      ns("persona_text"), height = "12rem"
+                    )
+                  )
+                ),
+                open = FALSE
+              ),
+              shiny::numericInput(
+                ns("n"),
+                shiny::tagList(
+                  "Panel size ",
+                  LLMR.shiny::help_tip(
+                    "This is the number of personas administered each instrument item."
+                  )
+                ),
+                value = 30, min = 2, max = 500, step = 1
+              ),
+              shiny::actionButton(
+                ns("build_panel"), "Build panel", class = "btn-primary"
+              ),
+              shiny::uiOutput(ns("panel_status"))
+            ),
+            bslib::accordion_panel(
+              "2. Define the instrument",
+              value = "instrument",
+              shiny::radioButtons(
+                ns("instrument_type"), "Instrument type",
+                choices = c(
+                  "Choice item" = "choice",
+                  "Conjoint tasks" = "conjoint"
+                ),
+                selected = "choice", inline = TRUE
+              ),
+              shiny::conditionalPanel(
+                condition = sprintf(
+                  "input['%s'] == 'choice'", ns("instrument_type")
+                ),
+                shiny::textAreaInput(
+                  ns("item_text"), "Question wording",
+                  rows = 3,
+                  value = "Should the government increase public spending?"
+                ),
+                shiny::textInput(
+                  ns("item_opts"), "Options (comma-separated)",
+                  value = "yes, no, unsure"
+                )
+              ),
+              shiny::conditionalPanel(
+                condition = sprintf(
+                  "input['%s'] == 'conjoint'", ns("instrument_type")
+                ),
+                shiny::textAreaInput(
+                  ns("conjoint_attributes"),
+                  shiny::tagList(
+                    "Conjoint attributes ",
+                    LLMR.shiny::help_tip(
+                      "Enter one attribute per line as name: level, level."
+                    )
+                  ),
+                  rows = 4,
+                  value = paste(
+                    "tax rate: lower, unchanged, higher",
+                    "public services: fewer, unchanged, more",
+                    sep = "\n"
+                  )
+                ),
+                shiny::numericInput(
+                  ns("conjoint_tasks"),
+                  shiny::tagList(
+                    "Tasks per persona ",
+                    LLMR.shiny::help_tip(
+                      "Each task presents a new randomized set of profiles to each persona."
+                    )
+                  ),
+                  value = 6, min = 2, max = 20, step = 1
+                ),
+                shiny::numericInput(
+                  ns("conjoint_profiles"),
+                  shiny::tagList(
+                    "Profiles per task ",
+                    LLMR.shiny::help_tip(
+                      "Each persona chooses one of this many profiles in every task."
+                    )
+                  ),
+                  value = 2, min = 2, max = 5, step = 1
+                ),
+                shiny::textAreaInput(
+                  ns("conjoint_question"), "Question wording",
+                  rows = 3,
+                  value = "Which policy package do you prefer?"
+                )
               )
             ),
-            shiny::numericInput(
-              ns("conjoint_tasks"),
-              shiny::tagList(
-                "Tasks per persona ",
-                LLMR.shiny::help_tip(
-                  "Each task presents a new randomized set of profiles to each persona."
+            bslib::accordion_panel(
+              "3. Set administration",
+              value = "administration",
+              shiny::numericInput(
+                ns("runs"),
+                shiny::tagList(
+                  "Runs ",
+                  LLMR.shiny::help_tip(
+                    "Repeat the same persona-item requests to assess response consistency."
+                  )
+                ),
+                value = 1, min = 1, max = 20, step = 1
+              )
+            ),
+            bslib::accordion_panel(
+              "4. Compare with a benchmark (optional)",
+              value = "benchmark",
+              shiny::conditionalPanel(
+                condition = sprintf(
+                  "input['%s'] == 'choice'", ns("instrument_type")
+                ),
+                shiny::textInput(
+                  ns("benchmark"),
+                  shiny::tagList(
+                    "Benchmark shares ",
+                    LLMR.shiny::help_tip(
+                      "Enter the human response distribution as level=share pairs separated by commas."
+                    )
+                  ),
+                  value = "yes=0.5, no=0.4, unsure=0.1"
+                ),
+                shiny::textInput(
+                  ns("benchmark_name"), "Benchmark name",
+                  value = "user benchmark"
+                ),
+                shiny::actionButton(
+                  ns("compare_benchmark"), "Compare with benchmark",
+                  class = "btn-primary"
                 )
               ),
-              value = 6, min = 2, max = 20, step = 1
-            ),
-            shiny::numericInput(
-              ns("conjoint_profiles"),
-              shiny::tagList(
-                "Profiles per task ",
-                LLMR.shiny::help_tip(
-                  "Each persona chooses one of this many profiles in every task."
+              shiny::conditionalPanel(
+                condition = sprintf(
+                  "input['%s'] == 'conjoint'", ns("instrument_type")
+                ),
+                shiny::tags$p(
+                  class = "text-muted",
+                  "Benchmark shares are available for choice items."
                 )
-              ),
-              value = 2, min = 2, max = 5, step = 1
-            ),
-            shiny::textInput(
-              ns("conjoint_question"), "Conjoint question",
-              value = "Which policy package do you prefer?"
+              )
             )
-          ),
-          shiny::tags$hr(),
-          shiny::tags$strong("3. Administer"),
-          shiny::numericInput(
-            ns("runs"),
-            shiny::tagList(
-              "Runs ",
-              LLMR.shiny::help_tip(
-                "Repeat the same persona-item requests to assess response consistency."
-              )
-            ),
-            value = 1, min = 1, max = 20, step = 1
           ),
           if (identical(shared$mode(), "demo")) LLMR.shiny::demo_banner_ui(),
           shiny::uiOutput(ns("administer_plan")),
-          shiny::actionButton(ns("administer"), "Administer to panel", class = "btn-primary"),
-          shiny::tags$hr(),
-          shiny::conditionalPanel(
-            condition = sprintf("input['%s'] == 'choice'", ns("instrument_type")),
-            shiny::tags$strong("4. Benchmark comparison (optional)"),
-            shiny::textInput(
-              ns("benchmark"),
-              shiny::tagList(
-                "Benchmark shares ",
-                LLMR.shiny::help_tip(
-                  "Enter the human response distribution as level=share pairs separated by commas."
-                )
-              ),
-              value = "yes=0.5, no=0.4, unsure=0.1"
-            ),
-            shiny::textInput(
-              ns("benchmark_name"), "Benchmark name",
-              value = "user benchmark"
-            ),
-            shiny::actionButton(
-              ns("compare_benchmark"), "Compare with benchmark",
-              class = "btn-primary"
-            )
+          shiny::actionButton(
+            ns("administer"), "Administer to panel", class = "btn-primary"
           ),
           shiny::tags$hr(),
           shiny::uiOutput(ns("results"))
@@ -611,6 +748,9 @@ run_panel_studio <- function(...) {
       if (!res$ok) { run_error(res$ui); return() }
       panel(res$value)
       reset_results()
+      bslib::accordion_panel_open(
+        "configuration_steps", "instrument", session = session
+      )
     })
 
     output$panel_status <- shiny::renderUI({
@@ -1070,21 +1210,22 @@ run_panel_studio <- function(...) {
     output$response_shares_tbl <- DT::renderDT({
       shiny::req(active_responses())
       tab <- .panel_gui_response_shares(active_responses())
-      tab$share <- round(tab$share, 3)
-      DT::datatable(
-        tab, rownames = FALSE,
-        options = list(dom = "t", scrollX = TRUE, pageLength = 10)
+      .panel_gui_datatable(
+        tab,
+        wide_column = "response",
+        identifier_columns = "item_id",
+        digits = 3L
       )
     })
 
     output$run_summary_tbl <- DT::renderDT({
       shiny::req(active_responses())
       tab <- .panel_gui_run_summary(active_responses())
-      numeric <- vapply(tab, is.numeric, logical(1))
-      tab[numeric] <- lapply(tab[numeric], function(value) round(value, 3))
-      DT::datatable(
-        tab, rownames = FALSE,
-        options = list(dom = "t", scrollX = TRUE, pageLength = 10)
+      .panel_gui_datatable(
+        tab,
+        wide_column = "response",
+        identifier_columns = "item_id",
+        digits = 3L
       )
     })
 
@@ -1154,7 +1295,7 @@ run_panel_studio <- function(...) {
           is.na(timing$count),
           ifelse(
             is.na(timing$seconds), "not recorded",
-            sprintf("%.3f seconds", timing$seconds)
+            sprintf("%.2f seconds", timing$seconds)
           ),
           as.character(timing$count)
         ),
@@ -1190,18 +1331,27 @@ run_panel_studio <- function(...) {
     output$bias_tbl <- DT::renderDT({
       shiny::req(active_responses())
       tab <- panel_bias_audit(active_responses())
-      DT::datatable(
-        tab, rownames = FALSE,
-        options = list(dom = "t", scrollX = TRUE, pageLength = 10)
+      .panel_gui_datatable(
+        tab,
+        identifier_columns = "item_id",
+        digits = 3L
       )
     })
 
     output$diagnostics_tbl <- DT::renderDT({
       shiny::req(active_responses())
       tab <- LLMR.shiny::diagnostics_table(active_responses())
-      DT::datatable(
-        tab, rownames = FALSE,
-        options = list(dom = "t", scrollX = TRUE, pageLength = 10)
+      text_columns <- intersect(
+        c("message", "detail", "diagnostic", "value"), names(tab)
+      )
+      .panel_gui_datatable(
+        tab,
+        wide_column = if (length(text_columns)) text_columns[[1]] else NULL,
+        wrap_columns = text_columns,
+        identifier_columns = intersect(
+          c("request_id", "response_id", "persona_id", "item_id"), names(tab)
+        ),
+        digits = 3L
       )
     })
 
@@ -1263,18 +1413,24 @@ run_panel_studio <- function(...) {
 
     output$power_tbl <- DT::renderDT({
       shiny::req(power_result())
-      DT::datatable(
-        power_result(), rownames = FALSE,
-        options = list(dom = "t", scrollX = TRUE)
+      .panel_gui_datatable(
+        power_result(),
+        wrap_columns = intersect(
+          c("item", "item_id", "response", "focal"), names(power_result())
+        ),
+        identifier_columns = "item_id",
+        digits = 3L
       )
     })
 
     output$amce_tbl <- DT::renderDT({
       shiny::req(amce_result())
       tab <- as.data.frame(amce_result())
-      DT::datatable(
-        tab, rownames = FALSE,
-        options = list(dom = "t", scrollX = TRUE, pageLength = 10)
+      .panel_gui_datatable(
+        tab,
+        wide_column = "level",
+        wrap_columns = "attribute",
+        digits = 3L
       )
     })
 
@@ -1296,9 +1452,11 @@ run_panel_studio <- function(...) {
     output$benchmark_tbl <- DT::renderDT({
       shiny::req(benchmark_result())
       tab <- as.data.frame(benchmark_result()$benchmark$table)
-      DT::datatable(
-        tab, rownames = FALSE,
-        options = list(dom = "t", scrollX = TRUE, pageLength = 10)
+      .panel_gui_datatable(
+        tab,
+        wide_column = "response",
+        identifier_columns = "item_id",
+        digits = 3L
       )
     })
 
@@ -1321,9 +1479,20 @@ run_panel_studio <- function(...) {
 
     output$responses_tbl <- DT::renderDT({
       shiny::req(responses())
-      DT::datatable(LLMR.shiny::as_display_table(
-        tibble::as_tibble(responses())),
-                    options = list(scrollX = TRUE, pageLength = 5))
+      tab <- tibble::as_tibble(responses())
+      .panel_gui_datatable(
+        tab,
+        wide_column = "response_text",
+        wrap_columns = c(
+          "response", "error_message", "option_order", "profiles"
+        ),
+        identifier_columns = c(
+          "run", "persona_id", "item_id", "response_id"
+        ),
+        hide_identifiers = TRUE,
+        page_length = 5L,
+        digits = 3L
+      )
     })
 
     output$report <- shiny::renderText({
