@@ -14,6 +14,11 @@ designs, or measure how a configured model responds under specified personas.
 Without comparison against a supplied human benchmark, its response shares
 describe the configured model and personas, not a human population.
 
+To work without writing code, `run_panel_studio()` opens a point-and-click
+interface that builds a panel, administers an instrument, and compares the
+result with a human benchmark. It has an offline demonstration mode, so it can
+be explored without a provider key. See "Graphical interface" below.
+
 ## Install and configure a model
 
 ```r
