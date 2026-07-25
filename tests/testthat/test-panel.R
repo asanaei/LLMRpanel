@@ -575,3 +575,13 @@ test_that("panel_from_personas respects a rows predicate", {
                            rows = function(d) d$ideology_score > 0.5, n = 4)
   expect_equal(nrow(p), 4L)
 })
+
+test_that("panel_from_personas draws beyond the ANES pool with replacement", {
+  skip_if_not_installed("LLMR")
+  set.seed(110)
+  expect_warning(
+    p <- panel_from_personas(LLMR::anes_2024_personas, n = 250),
+    "Drawing 250 personas from 100 distinct respondent"
+  )
+  expect_equal(nrow(p), 250L)
+})

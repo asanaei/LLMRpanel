@@ -25,18 +25,30 @@ test_that("the GUI assembles when its suggested packages are present", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("bslib")
   skip_if_not_installed("LLMR.shiny")
-  expect_s3_class(LLMRpanel:::.panel_gui_ui(), "bslib_page")
+  ui <- LLMRpanel:::.panel_gui_ui()
+  expect_s3_class(ui, "bslib_page")
   ui_code <- paste(deparse(body(LLMRpanel:::.panel_gui_ui)), collapse = " ")
   expect_match(ui_code, "fillable = FALSE", fixed = TRUE)
+  ui_html <- paste(
+    as.character(LLMRpanel:::.panel_gui_sidebar()), collapse = " "
+  )
+  expect_match(
+    ui_html, "Leave blank to use the LLMRpanel default of 512.", fixed = TRUE
+  )
+  expect_match(ui_html, 'placeholder = "LLMRpanel default: 512"', fixed = TRUE)
+  expect_false(grepl(
+    "Leave blank to use the model default.", ui_html, fixed = TRUE
+  ))
 })
 
-gui_demo_shared <- function(usage_seen = NULL) {
+gui_demo_shared <- function(usage_seen = NULL, max_tokens = NULL) {
+  max_tokens_setting <- max_tokens
   list(
     mode = shiny::reactive("demo"),
     provider = shiny::reactive("groq"),
     model = shiny::reactive(""),
     temperature = shiny::reactive(0.7),
-    max_tokens = shiny::reactive(NULL),
+    max_tokens = shiny::reactive(max_tokens_setting),
     reasoning_effort = shiny::reactive(""),
     can_run = shiny::reactive(TRUE),
     key = shiny::reactive(list()),
@@ -45,6 +57,27 @@ gui_demo_shared <- function(usage_seen = NULL) {
       if (!is.null(usage_seen)) usage_seen$value <- tokens
     }
   )
+}
+
+gui_live_shared <- function(max_tokens = NULL) {
+  shared <- gui_demo_shared(max_tokens = max_tokens)
+  shared$mode <- shiny::reactive("live")
+  shared$model <- shiny::reactive("fake-model")
+  shared$can_run <- shiny::reactive(TRUE)
+  shared$key <- shiny::reactive(list(found = TRUE))
+  shared
+}
+
+gui_action_tag <- function(html, input_id) {
+  pattern <- paste0('<button[^>]*id="', input_id, '"[^>]*>')
+  hit <- regexpr(pattern, html, perl = TRUE)
+  if (hit[[1]] < 0L) return("")
+  regmatches(html, hit)
+}
+
+gui_action_is_disabled <- function(html, input_id) {
+  grepl("[[:space:]]disabled(?:[[:space:]]|=|>)",
+        gui_action_tag(html, input_id), perl = TRUE)
 }
 
 test_that("the module UI renders labeled controls and scrollable text", {
@@ -74,9 +107,193 @@ test_that("the module UI renders labeled controls and scrollable text", {
       expect_match(
         html, "A {cohort} voter who leans {party}.", fixed = TRUE
       )
+      expect_match(html, "Draw a sample of personas", fixed = TRUE)
+      expect_match(html, "Use the respondents I select", fixed = TRUE)
+      expect_match(html, "sampling with replacement", fixed = TRUE)
       expect_match(html, "personas-selection_count", fixed = TRUE)
       expect_match(html, "llmr-text-block", fixed = TRUE)
+      decoded_html <- gsub("&#39;", "'", html, fixed = TRUE)
+      decoded_html <- gsub("&amp;", "&", decoded_html, fixed = TRUE)
+      expect_match(
+        decoded_html,
+        sprintf(
+          "(input['%s'] == 'anes' && input['%s'] == 'draw')",
+          session$ns("source"), session$ns("anes_mode")
+        ),
+        fixed = TRUE
+      )
       expect_false(grepl("<label[^>]*>[[:space:]]*</label>", html))
+    }
+  )
+})
+
+test_that("blank max output tokens use the visible panel default", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("LLMR.shiny")
+
+  build_job <- function(shared, expected, phrase) {
+    shiny::testServer(
+      LLMRpanel:::.panel_gui_module_server,
+      args = list(shared = shared),
+      {
+        session$setInputs(
+          source = "margins",
+          margins = "party: left=0.5, right=0.5",
+          persona_tmpl = "A {party} voter.",
+          n = 2,
+          instrument_type = "choice",
+          item_text = "Increase spending?",
+          item_opts = "yes, no",
+          runs = 1,
+          build_panel = 1
+        )
+        session$flushReact()
+        expect_identical(administer_inputs()$max_tokens, expected)
+        status <- paste(
+          as.character(output$max_tokens_status), collapse = "\n"
+        )
+        expect_match(status, as.character(expected), fixed = TRUE)
+        expect_match(status, phrase, fixed = TRUE)
+      }
+    )
+  }
+
+  build_job(
+    gui_demo_shared(), LLMRpanel:::.panel_gui_default_max_tokens,
+    "sidebar field is blank"
+  )
+  build_job(gui_demo_shared(max_tokens = 768L), 768L, "from the sidebar")
+})
+
+test_that("administration, benchmark, and power actions follow preconditions", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("LLMR.shiny")
+
+  shiny::testServer(
+    LLMRpanel:::.panel_gui_module_server,
+    args = list(shared = gui_demo_shared()),
+    {
+      session$flushReact()
+      administer_id <- session$ns("administer")
+      administer_html <- paste(
+        as.character(output$administer_action), collapse = "\n"
+      )
+      expect_true(gui_action_is_disabled(administer_html, administer_id))
+      expect_match(
+        administer_html,
+        "Build a panel before administering the instrument.",
+        fixed = TRUE
+      )
+      benchmark_id <- session$ns("compare_benchmark")
+      benchmark_html <- paste(
+        as.character(output$benchmark_action), collapse = "\n"
+      )
+      expect_true(gui_action_is_disabled(benchmark_html, benchmark_id))
+      expect_match(
+        benchmark_html,
+        "Administer a choice item before comparing it with a benchmark.",
+        fixed = TRUE
+      )
+
+      session$setInputs(
+        source = "margins",
+        margins = "party: left=0.5, right=0.5",
+        persona_tmpl = "A {party} voter.",
+        n = 6,
+        instrument_type = "choice",
+        item_text = "Increase spending?",
+        item_opts = "yes, no",
+        runs = 1
+      )
+      session$flushReact()
+      build_id <- session$ns("build_panel")
+      build_html <- paste(
+        as.character(output$build_panel_action), collapse = "\n"
+      )
+      expect_false(gui_action_is_disabled(build_html, build_id))
+
+      session$setInputs(margins = "")
+      session$flushReact()
+      build_html <- paste(
+        as.character(output$build_panel_action), collapse = "\n"
+      )
+      expect_true(gui_action_is_disabled(build_html, build_id))
+      expect_match(
+        build_html, "Enter at least one population margin.", fixed = TRUE
+      )
+
+      session$setInputs(
+        margins = "party: left=0.5, right=0.5",
+        build_panel = 1
+      )
+      session$flushReact()
+      administer_html <- paste(
+        as.character(output$administer_action), collapse = "\n"
+      )
+      expect_false(gui_action_is_disabled(administer_html, administer_id))
+
+      session$setInputs(item_opts = "yes")
+      session$flushReact()
+      administer_html <- paste(
+        as.character(output$administer_action), collapse = "\n"
+      )
+      expect_true(gui_action_is_disabled(administer_html, administer_id))
+      expect_match(
+        administer_html, "Enter at least two response options", fixed = TRUE
+      )
+
+      session$setInputs(
+        item_opts = "yes, no",
+        benchmark = "yes=0.5, no=0.5",
+        benchmark_name = "toy benchmark"
+      )
+      session$flushReact()
+      expect_false(gui_action_is_disabled(
+        paste(as.character(output$administer_action), collapse = "\n"),
+        administer_id
+      ))
+      session$setInputs(administer = 1)
+      session$flushReact()
+      expect_s3_class(responses(), "panel_responses")
+
+      benchmark_html <- paste(
+        as.character(output$benchmark_action), collapse = "\n"
+      )
+      expect_false(gui_action_is_disabled(benchmark_html, benchmark_id))
+      session$setInputs(benchmark = "")
+      session$flushReact()
+      benchmark_html <- paste(
+        as.character(output$benchmark_action), collapse = "\n"
+      )
+      expect_true(gui_action_is_disabled(benchmark_html, benchmark_id))
+      expect_match(
+        benchmark_html, "Enter benchmark shares as level=share pairs.",
+        fixed = TRUE
+      )
+
+      session$setInputs(
+        power_effect = 0.10,
+        power_focal = "yes",
+        power_alpha = 0.05,
+        power_target = 0.80
+      )
+      session$flushReact()
+      power_id <- session$ns("calculate_power")
+      analysis_html <- paste(
+        as.character(output$power_action), collapse = "\n"
+      )
+      expect_false(gui_action_is_disabled(analysis_html, power_id))
+
+      session$setInputs(power_effect = 0)
+      session$flushReact()
+      analysis_html <- paste(
+        as.character(output$power_action), collapse = "\n"
+      )
+      expect_true(gui_action_is_disabled(analysis_html, power_id))
+      expect_match(
+        analysis_html, "Enter a positive minimum detectable difference.",
+        fixed = TRUE
+      )
     }
   )
 })
@@ -231,6 +448,40 @@ gui_fixture_conjoint <- function() {
   )
 }
 
+test_that("the AMCE action is disabled when conjoint responses cannot be used", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("LLMR.shiny")
+
+  shiny::testServer(
+    LLMRpanel:::.panel_gui_module_server,
+    args = list(shared = gui_demo_shared()),
+    {
+      usable <- gui_fixture_conjoint()
+      responses(usable)
+      session$flushReact()
+      amce_id <- session$ns("calculate_amce")
+      analysis_html <- paste(
+        as.character(output$amce_action), collapse = "\n"
+      )
+      expect_false(gui_action_is_disabled(analysis_html, amce_id))
+
+      failed <- usable
+      failed$data$success <- FALSE
+      responses(failed)
+      session$flushReact()
+      analysis_html <- paste(
+        as.character(output$amce_action), collapse = "\n"
+      )
+      expect_true(gui_action_is_disabled(analysis_html, amce_id))
+      expect_match(
+        analysis_html,
+        "every conjoint administration failed",
+        fixed = TRUE
+      )
+    }
+  )
+})
+
 test_that("repeated responses retain run identity and summarize shares", {
   one <- gui_fixture_responses()
   expect_identical(
@@ -315,7 +566,9 @@ test_that("ANES field selection preserves the default and restricts on request",
     LLMRpanel:::.panel_gui_module_server,
     args = list(shared = gui_demo_shared()),
     {
-      session$setInputs(source = "anes", n = 2, build_panel = 1)
+      session$setInputs(
+        source = "anes", anes_mode = "draw", n = 2, build_panel = 1
+      )
       session$flushReact()
       set.seed(110)
       expected <- panel_from_personas(LLMR::anes_2024_personas, n = 2)
@@ -328,6 +581,111 @@ test_that("ANES field selection preserves the default and restricts on request",
       session$flushReact()
       expect_setequal(names(panel()), c("persona_id", "demo_age", "persona"))
       expect_false(any(grepl("Party identification", panel()$persona)))
+    }
+  )
+})
+
+test_that("ANES construction modes ignore the inactive row control", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("DT")
+  skip_if_not_installed("LLMR.shiny")
+
+  expect_true(LLMRpanel:::.panel_gui_uses_panel_size("margins", "selected"))
+  expect_true(LLMRpanel:::.panel_gui_uses_panel_size("anes", "draw"))
+  expect_false(LLMRpanel:::.panel_gui_uses_panel_size("anes", "selected"))
+
+  shiny::testServer(
+    LLMRpanel:::.panel_gui_module_server,
+    args = list(shared = gui_demo_shared()),
+    {
+      session$setInputs(source = "anes", anes_mode = "selected", n = 1)
+      session$flushReact()
+      build_id <- session$ns("build_panel")
+      build_html <- paste(
+        as.character(output$build_panel_action), collapse = "\n"
+      )
+      expect_true(gui_action_is_disabled(build_html, build_id))
+      expect_match(
+        build_html, "Select at least one respondent.", fixed = TRUE
+      )
+      expect_identical(
+        output[["personas-selection_count"]], "0 of 100 selected."
+      )
+
+      selected_rows <- c(2L, 7L, 11L)
+      session$setInputs(
+        `personas-table_rows_selected` = selected_rows,
+        build_panel = 1
+      )
+      session$flushReact()
+      expect_identical(
+        output[["personas-selection_count"]], "3 of 100 selected."
+      )
+      expect_equal(nrow(panel()), 3L)
+      expected <- panel_from_personas(
+        LLMR::anes_2024_personas, rows = selected_rows
+      )
+      expect_identical(panel()$persona, expected$persona)
+
+      session$setInputs(anes_mode = "draw", n = 4, build_panel = 2)
+      session$flushReact()
+      set.seed(110)
+      expected <- panel_from_personas(LLMR::anes_2024_personas, n = 4)
+      expect_equal(nrow(panel()), 4L)
+      expect_identical(panel()$persona, expected$persona)
+    }
+  )
+})
+
+test_that("large ANES draws drive the scale preview and confirmation", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("LLMR.shiny")
+
+  modal_seen <- new.env(parent = emptyenv())
+  shiny::testServer(
+    LLMRpanel:::.panel_gui_module_server,
+    args = list(shared = gui_live_shared()),
+    {
+      root_session <- .subset2(session, "parent")
+      root_session$sendModal <- function(type, message) {
+        modal_seen$type <- type
+        modal_seen$message <- message
+        invisible(NULL)
+      }
+      suppressWarnings({
+        session$setInputs(
+          source = "anes",
+          anes_mode = "draw",
+          n = 250,
+          instrument_type = "conjoint",
+          conjoint_attributes = paste(
+            "price: low, high",
+            "service: basic, expanded",
+            sep = "\n"
+          ),
+          conjoint_tasks = 4,
+          conjoint_profiles = 2,
+          conjoint_question = "Which package do you prefer?",
+          runs = 2,
+          build_panel = 1
+        )
+        session$flushReact()
+      })
+      expect_equal(nrow(panel()), 250L)
+      expect_identical(planned_calls(), 2000L)
+      plan_html <- paste(
+        as.character(output$administer_plan), collapse = "\n"
+      )
+      expect_match(plan_html, "2000 planned API calls", fixed = TRUE)
+      expect_identical(administer_inputs()$n_calls, 2000L)
+
+      session$setInputs(administer = 1)
+      session$flushReact()
+      expect_identical(modal_seen$type, "show")
+      modal_html <- as.character(modal_seen$message$html)
+      expect_match(modal_html, "2000 planned API calls", fixed = TRUE)
+      expect_match(modal_html, "Administer 2000 Calls", fixed = TRUE)
+      expect_null(responses())
     }
   )
 })
@@ -452,7 +810,7 @@ test_that("the results card wires its download control to the artifact bundle", 
   expect_true(grepl(
     "output$download_bundle <- shiny::downloadHandler(", code, fixed = TRUE))
   expect_true(grepl(
-    'actionButton(ns("compare_benchmark"), "Compare with benchmark"',
+    '.panel_gui_primary_action(ns("compare_benchmark"), "Compare with benchmark"',
     code, fixed = TRUE))
   expect_true(grepl(
     "panel_bias_audit(active_responses())",

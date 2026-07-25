@@ -36,6 +36,15 @@ Initial CRAN release.
   recorded call timing when it is available. Numbered configuration sections
   can be collapsed while the administration action and run plan remain in
   view. Persona templates and item wording have editable working defaults.
+  Panel construction, administration, benchmark comparison, power, and AMCE
+  actions are disabled when their known inputs are incomplete, with the unmet
+  requirement shown beside the control.
+  ANES construction separates sampled panels from panels made from selected
+  respondents. Sampled panels disclose replacement sampling above the
+  100-respondent source size and no longer impose a 500-person GUI ceiling;
+  selected panels require at least one respondent and ignore panel size.
+  A blank shared maximum-output-token field now uses and displays a
+  512-token package default, while an explicit sidebar value takes precedence.
   Response text and response labels receive most of the width in display
   tables, internal identifiers remain available through a column control, and
   shares, benchmark deviations, and other double columns use concise

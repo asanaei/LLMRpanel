@@ -48,6 +48,57 @@ run_panel_studio <- function(...) {
 
 # Live runs above this request count require explicit confirmation in the GUI.
 .panel_gui_large_run_threshold <- 100L
+.panel_gui_default_max_tokens <- 512L
+
+.panel_gui_max_tokens_is_blank <- function(value) {
+  if (length(value) != 1L || is.na(value)) return(TRUE)
+  is.character(value) && !nzchar(trimws(value))
+}
+
+.panel_gui_effective_max_tokens <- function(value) {
+  if (.panel_gui_max_tokens_is_blank(value)) {
+    return(.panel_gui_default_max_tokens)
+  }
+  value
+}
+
+.panel_gui_uses_panel_size <- function(source, anes_mode) {
+  !identical(source %||% "margins", "anes") ||
+    !identical(anes_mode %||% "draw", "selected")
+}
+
+.panel_gui_sidebar <- function() {
+  LLMR.shiny::shell_sidebar(
+    max_tokens_help = sprintf(
+      "Leave blank to use the LLMRpanel default of %d.",
+      .panel_gui_default_max_tokens
+    ),
+    max_tokens_placeholder = sprintf(
+      "LLMRpanel default: %d", .panel_gui_default_max_tokens
+    )
+  )
+}
+
+.panel_gui_primary_action <- function(input_id, label, enabled, reason = NULL) {
+  disabled <- !isTRUE(enabled)
+  reason_id <- paste0(input_id, "_reason")
+  has_reason <- disabled && length(reason) == 1L && nzchar(reason)
+  button <- shiny::actionButton(
+    input_id, label,
+    class = "btn-primary",
+    disabled = disabled,
+    `aria-describedby` = if (has_reason) reason_id else NULL
+  )
+  if (!has_reason) return(button)
+  shiny::tagList(
+    button,
+    shiny::tags$p(
+      id = reason_id,
+      class = "text-muted mt-1 mb-0 llmr-action-reason",
+      reason
+    )
+  )
+}
 
 # A demo responder for offline mode: parse the "Options: a | b | ..." line out of
 # the rendered question and pick deterministically, so the panel has variation
@@ -348,7 +399,7 @@ run_panel_studio <- function(...) {
     id = "main_nav",
     fillable = FALSE,
     theme = LLMR.shiny::llmr_theme("panel"),
-    sidebar = LLMR.shiny::shell_sidebar(),
+    sidebar = .panel_gui_sidebar(),
     bslib::nav_panel("Silicon panel", .panel_gui_module_ui("panel"))
   )
 }
@@ -428,24 +479,49 @@ run_panel_studio <- function(...) {
               ),
               shiny::conditionalPanel(
                 condition = sprintf("input['%s'] == 'anes'", ns("source")),
-                shiny::tags$p(
-                  class = "text-muted",
-                  paste(
-                    "Pick respondents. The list runs from most liberal at the",
-                    "top to most conservative at the bottom. Select none to",
-                    "draw a sample of the panel size."
+                shiny::radioButtons(
+                  ns("anes_mode"), "Panel construction",
+                  choices = c(
+                    "Draw a sample of personas" = "draw",
+                    "Use the respondents I select" = "selected"
+                  ),
+                  selected = "draw"
+                ),
+                shiny::conditionalPanel(
+                  condition = sprintf(
+                    "input['%s'] == 'draw'", ns("anes_mode")
+                  ),
+                  shiny::tags$p(
+                    class = "text-muted",
+                    sprintf(
+                      paste(
+                        "ANES contains %d respondents. If panel size exceeds",
+                        "%d, respondents are drawn more than once (sampling",
+                        "with replacement)."
+                      ),
+                      nrow(persona_source), nrow(persona_source)
+                    )
                   )
                 ),
-                LLMR.shiny::persona_selector_ui(ns("personas")),
+                shiny::conditionalPanel(
+                  condition = sprintf(
+                    "input['%s'] == 'selected'", ns("anes_mode")
+                  ),
+                  shiny::tags$p(
+                    class = "text-muted",
+                    paste(
+                      "Select one or more respondents. The list runs from most",
+                      "liberal at the top to most conservative at the bottom."
+                    )
+                  ),
+                  LLMR.shiny::persona_selector_ui(ns("personas"))
+                ),
                 bslib::accordion(
                   bslib::accordion_panel(
-                    "Persona fields and full text",
+                    "Persona fields",
                     shiny::tags$p(
                       class = "text-muted",
-                      paste(
-                        "All fields are included by default. The first",
-                        "selected row is shown below."
-                      )
+                      "All fields are included by default."
                     ),
                     shiny::tags$div(
                       style = "max-height: 16rem; overflow-y: auto;",
@@ -461,27 +537,39 @@ run_panel_studio <- function(...) {
                         selected = names(persona_source)
                       )
                     ),
-                    shiny::tags$h6("Full selected persona"),
-                    LLMR.shiny::text_block_output(
-                      ns("persona_text"), height = "12rem"
+                    shiny::conditionalPanel(
+                      condition = sprintf(
+                        "input['%s'] == 'selected'", ns("anes_mode")
+                      ),
+                      shiny::tags$h6("Full selected persona"),
+                      LLMR.shiny::text_block_output(
+                        ns("persona_text"), height = "12rem"
+                      )
                     )
-                  )
+                  ),
+                  open = FALSE
+                )
+              ),
+              shiny::conditionalPanel(
+                condition = sprintf(
+                  paste0(
+                    "input['%s'] == 'margins' || ",
+                    "(input['%s'] == 'anes' && input['%s'] == 'draw')"
+                  ),
+                  ns("source"), ns("source"), ns("anes_mode")
                 ),
-                open = FALSE
+                shiny::numericInput(
+                  ns("n"),
+                  shiny::tagList(
+                    "Panel size ",
+                    LLMR.shiny::help_tip(
+                      "This is the number of personas administered each instrument item."
+                    )
+                  ),
+                  value = 30, min = 2, step = 1
+                )
               ),
-              shiny::numericInput(
-                ns("n"),
-                shiny::tagList(
-                  "Panel size ",
-                  LLMR.shiny::help_tip(
-                    "This is the number of personas administered each instrument item."
-                  )
-                ),
-                value = 30, min = 2, max = 500, step = 1
-              ),
-              shiny::actionButton(
-                ns("build_panel"), "Build panel", class = "btn-primary"
-              ),
+              shiny::uiOutput(ns("build_panel_action")),
               shiny::uiOutput(ns("panel_status"))
             ),
             bslib::accordion_panel(
@@ -567,7 +655,8 @@ run_panel_studio <- function(...) {
                   )
                 ),
                 value = 1, min = 1, max = 20, step = 1
-              )
+              ),
+              shiny::uiOutput(ns("max_tokens_status"))
             ),
             bslib::accordion_panel(
               "4. Compare with a benchmark (optional)",
@@ -590,10 +679,7 @@ run_panel_studio <- function(...) {
                   ns("benchmark_name"), "Benchmark name",
                   value = "user benchmark"
                 ),
-                shiny::actionButton(
-                  ns("compare_benchmark"), "Compare with benchmark",
-                  class = "btn-primary"
-                )
+                shiny::uiOutput(ns("benchmark_action"))
               ),
               shiny::conditionalPanel(
                 condition = sprintf(
@@ -608,9 +694,7 @@ run_panel_studio <- function(...) {
           ),
           if (identical(shared$mode(), "demo")) LLMR.shiny::demo_banner_ui(),
           shiny::uiOutput(ns("administer_plan")),
-          shiny::actionButton(
-            ns("administer"), "Administer to panel", class = "btn-primary"
-          ),
+          shiny::uiOutput(ns("administer_action")),
           shiny::tags$hr(),
           shiny::uiOutput(ns("results"))
         )
@@ -658,6 +742,219 @@ run_panel_studio <- function(...) {
     parse_opts <- function(txt) {
       x <- trimws(unlist(strsplit(txt %||% "", ",", fixed = TRUE))); x[nzchar(x)]
     }
+    build_panel_action_state <- shiny::reactive({
+      source <- input$source %||% "margins"
+      anes_mode <- input$anes_mode %||% "draw"
+      if (.panel_gui_uses_panel_size(source, anes_mode)) {
+        panel_n <- suppressWarnings(as.integer(input$n %||% 30L))
+        if (length(panel_n) != 1L || is.na(panel_n) || panel_n < 2L) {
+          return(list(
+            enabled = FALSE,
+            reason = "Set panel size to an integer of at least 2."
+          ))
+        }
+      }
+      if (identical(source, "anes")) {
+        columns <- input$persona_columns
+        if (is.null(columns)) columns <- names(persona_source)
+        if (!length(columns)) {
+          return(list(
+            enabled = FALSE,
+            reason = "Select at least one persona field."
+          ))
+        }
+        if (identical(anes_mode, "selected") && !length(persona_rows())) {
+          return(list(
+            enabled = FALSE,
+            reason = "Select at least one respondent."
+          ))
+        }
+      } else {
+        if (!length(parse_margins(input$margins))) {
+          return(list(
+            enabled = FALSE,
+            reason = "Enter at least one population margin."
+          ))
+        }
+        if (!nzchar(trimws(input$persona_tmpl %||% ""))) {
+          return(list(
+            enabled = FALSE,
+            reason = "Enter a persona template."
+          ))
+        }
+      }
+      list(enabled = TRUE, reason = NULL)
+    })
+    administer_action_state <- shiny::reactive({
+      if (is.null(panel())) {
+        return(list(
+          enabled = FALSE,
+          reason = "Build a panel before administering the instrument."
+        ))
+      }
+      runs <- suppressWarnings(as.integer(input$runs %||% 1L))
+      if (length(runs) != 1L || is.na(runs) || runs < 1L || runs > 20L) {
+        return(list(
+          enabled = FALSE,
+          reason = "Set runs to an integer from 1 through 20."
+        ))
+      }
+      instrument_type <- input$instrument_type %||% "choice"
+      if (identical(instrument_type, "conjoint")) {
+        attributes <- parse_attributes(input$conjoint_attributes)
+        if (length(attributes) < 2L ||
+            any(vapply(attributes, length, integer(1)) < 2L)) {
+          return(list(
+            enabled = FALSE,
+            reason = paste(
+              "Enter at least two conjoint attributes with at least two",
+              "levels each."
+            )
+          ))
+        }
+        question <- trimws(input$conjoint_question %||% "")
+        if (!nzchar(question)) {
+          return(list(
+            enabled = FALSE,
+            reason = "Enter a conjoint question before administering."
+          ))
+        }
+        tasks <- suppressWarnings(as.integer(input$conjoint_tasks %||% 6L))
+        profiles <- suppressWarnings(
+          as.integer(input$conjoint_profiles %||% 2L)
+        )
+        if (length(tasks) != 1L || is.na(tasks) ||
+            tasks < 2L || tasks > 20L ||
+            length(profiles) != 1L || is.na(profiles) ||
+            profiles < 2L || profiles > 5L) {
+          return(list(
+            enabled = FALSE,
+            reason = paste(
+              "Set conjoint tasks to 2 through 20 and profiles to 2 through 5."
+            )
+          ))
+        }
+      } else {
+        if (!nzchar(trimws(input$item_text %||% ""))) {
+          return(list(
+            enabled = FALSE,
+            reason = "Enter a question before administering the instrument."
+          ))
+        }
+        if (length(parse_opts(input$item_opts)) < 2L) {
+          return(list(
+            enabled = FALSE,
+            reason = paste(
+              "Enter at least two response options before administering the",
+              "instrument."
+            )
+          ))
+        }
+      }
+      if (identical(shared$mode(), "live") &&
+          !nzchar(trimws(shared$model() %||% ""))) {
+        return(list(
+          enabled = FALSE,
+          reason = "Enter a model before starting a live run."
+        ))
+      }
+      if (identical(shared$mode(), "live") && !isTRUE(shared$can_run())) {
+        return(list(
+          enabled = FALSE,
+          reason = paste(
+            "Set the provider API key in the environment before starting a",
+            "live run."
+          )
+        ))
+      }
+      list(enabled = TRUE, reason = NULL)
+    })
+    benchmark_action_state <- shiny::reactive({
+      r <- responses()
+      if (is.null(r)) {
+        return(list(
+          enabled = FALSE,
+          reason = "Administer a choice item before comparing it with a benchmark."
+        ))
+      }
+      if (!is.null(r$instrument$conjoint)) {
+        return(list(
+          enabled = FALSE,
+          reason = "Benchmark shares require choice-item responses."
+        ))
+      }
+      closed <- r$data[r$data$type != "open", , drop = FALSE]
+      if (!nrow(closed)) {
+        return(list(
+          enabled = FALSE,
+          reason = "Benchmark shares require closed-item responses."
+        ))
+      }
+      if (all(closed$success %in% FALSE)) {
+        return(list(
+          enabled = FALSE,
+          reason = paste(
+            "A benchmark cannot be compared because every administration",
+            "failed."
+          )
+        ))
+      }
+      if (!length(parse_named_shares(input$benchmark))) {
+        return(list(
+          enabled = FALSE,
+          reason = "Enter benchmark shares as level=share pairs."
+        ))
+      }
+      if (!nzchar(trimws(input$benchmark_name %||% ""))) {
+        return(list(
+          enabled = FALSE,
+          reason = "Enter a benchmark name."
+        ))
+      }
+      list(enabled = TRUE, reason = NULL)
+    })
+
+    output$administer_action <- shiny::renderUI({
+      state <- administer_action_state()
+      .panel_gui_primary_action(
+        ns("administer"), "Administer to panel",
+        state$enabled, state$reason
+      )
+    })
+    output$benchmark_action <- shiny::renderUI({
+      state <- benchmark_action_state()
+      .panel_gui_primary_action(
+        ns("compare_benchmark"), "Compare with benchmark",
+        state$enabled, state$reason
+      )
+    })
+    output$build_panel_action <- shiny::renderUI({
+      state <- build_panel_action_state()
+      .panel_gui_primary_action(
+        ns("build_panel"), "Build panel",
+        state$enabled, state$reason
+      )
+    })
+    output$max_tokens_status <- shiny::renderUI({
+      value <- shared$max_tokens()
+      effective <- .panel_gui_effective_max_tokens(value)
+      text <- if (.panel_gui_max_tokens_is_blank(value)) {
+        sprintf(
+          paste(
+            "Effective max output tokens per response: %s. The sidebar field",
+            "is blank, so LLMRpanel uses this package default."
+          ),
+          format(effective, scientific = FALSE, trim = TRUE)
+        )
+      } else {
+        sprintf(
+          "Effective max output tokens per response: %s, from the sidebar.",
+          format(effective, scientific = FALSE, trim = TRUE)
+        )
+      }
+      shiny::tags$p(class = "text-muted", text)
+    })
+
     warn_card <- function(msg) bslib::card(class = "border-warning", bslib::card_body(msg))
     administer_warning <- function(message, ui = NULL) {
       if (is.null(ui)) ui <- warn_card(message)
@@ -682,8 +979,9 @@ run_panel_studio <- function(...) {
     }
 
     # The ANES persona picker (shared module); returns the chosen row indices.
-    persona_rows <- LLMR.shiny::persona_selector_server("personas",
-      persona_source)
+    persona_rows <- LLMR.shiny::persona_selector_server(
+      "personas", persona_source, empty_selection_note = NULL
+    )
 
     output$persona_text <- shiny::renderText({
       rows <- persona_rows()
@@ -701,22 +999,34 @@ run_panel_studio <- function(...) {
 
     shiny::observeEvent(input$build_panel, {
       run_error(NULL)
-      panel_n <- suppressWarnings(as.integer(input$n %||% 30L))
-      if (length(panel_n) != 1L || is.na(panel_n) ||
-          panel_n < 2L || panel_n > 500L) {
-        administer_warning("Panel size must be an integer from 2 through 500.")
-        return()
+      source <- input$source %||% "margins"
+      anes_mode <- input$anes_mode %||% "draw"
+      panel_n <- NULL
+      if (.panel_gui_uses_panel_size(source, anes_mode)) {
+        panel_n <- suppressWarnings(as.integer(input$n %||% 30L))
+        if (length(panel_n) != 1L || is.na(panel_n) || panel_n < 2L) {
+          administer_warning("Panel size must be an integer of at least 2.")
+          return()
+        }
       }
-      res <- if (identical(input$source %||% "margins", "anes")) {
+      res <- if (identical(source, "anes")) {
         columns <- input$persona_columns
         if (is.null(columns)) columns <- names(persona_source)
         if (!length(columns)) {
           administer_warning("Select at least one persona field.")
           return()
         }
+        rows <- if (identical(anes_mode, "selected")) {
+          persona_rows()
+        } else {
+          integer(0)
+        }
+        if (identical(anes_mode, "selected") && !length(rows)) {
+          administer_warning("Select at least one respondent.")
+          return()
+        }
         LLMR.shiny::safe_llmr_call({
           set.seed(110)
-          rows <- persona_rows()
           frame <- if (setequal(columns, names(persona_source))) {
             persona_source
           } else {
@@ -724,8 +1034,8 @@ run_panel_studio <- function(...) {
           }
           panel_from_personas(
             frame,
-            rows = if (length(rows)) rows else NULL,
-            n = if (length(rows)) NULL else panel_n
+            rows = if (identical(anes_mode, "selected")) rows else NULL,
+            n = if (identical(anes_mode, "selected")) NULL else panel_n
           )
         }, shared$provider())
       } else {
@@ -898,7 +1208,7 @@ run_panel_studio <- function(...) {
         provider = shared$provider(),
         model = shared$model(),
         temperature = shared$temperature(),
-        max_tokens = shared$max_tokens(),
+        max_tokens = .panel_gui_effective_max_tokens(shared$max_tokens()),
         reasoning_effort = shared$reasoning_effort(),
         n_calls = as.integer(nrow(panel()) * n_items * runs)
       )
@@ -1078,6 +1388,146 @@ run_panel_studio <- function(...) {
 
     active_responses <- shiny::reactive({
       if (!is.null(benchmark_result())) benchmark_result() else responses()
+    })
+
+    power_action_state <- shiny::reactive({
+      r <- active_responses()
+      if (is.null(r) || !is.null(r$instrument$conjoint)) {
+        return(list(
+          enabled = FALSE,
+          reason = "Administer a choice item before calculating power."
+        ))
+      }
+      item <- r$instrument$items[[1]]
+      item_rows <- r$data[r$data$item_id == item$id, , drop = FALSE]
+      if (!nrow(item_rows)) {
+        return(list(
+          enabled = FALSE,
+          reason = "Recorded responses are required before calculating power."
+        ))
+      }
+      if (all(item_rows$success %in% FALSE)) {
+        return(list(
+          enabled = FALSE,
+          reason = paste(
+            "Power cannot be calculated because every administration for this",
+            "item failed."
+          )
+        ))
+      }
+      effect <- suppressWarnings(
+        as.numeric(input$power_effect %||% 0.10)
+      )
+      if (length(effect) != 1L || !is.finite(effect) || effect <= 0) {
+        return(list(
+          enabled = FALSE,
+          reason = "Enter a positive minimum detectable difference."
+        ))
+      }
+      alpha <- suppressWarnings(as.numeric(input$power_alpha %||% 0.05))
+      if (length(alpha) != 1L || !is.finite(alpha) ||
+          alpha <= 0 || alpha >= 1) {
+        return(list(
+          enabled = FALSE,
+          reason = "Enter a two-sided alpha between 0 and 1."
+        ))
+      }
+      target <- suppressWarnings(as.numeric(input$power_target %||% 0.80))
+      if (length(target) != 1L || !is.finite(target) ||
+          target <= 0 || target >= 1) {
+        return(list(
+          enabled = FALSE,
+          reason = "Enter a target power between 0 and 1."
+        ))
+      }
+      focal <- input$power_focal %||% item$options[[1]]
+      if (length(focal) != 1L || is.na(focal) ||
+          !(focal %in% item$options)) {
+        return(list(
+          enabled = FALSE,
+          reason = "Select a focal response offered by this item."
+        ))
+      }
+      list(enabled = TRUE, reason = NULL)
+    })
+
+    amce_action_state <- shiny::reactive({
+      r <- active_responses()
+      if (is.null(r) || is.null(r$instrument$conjoint)) {
+        return(list(
+          enabled = FALSE,
+          reason = "Administer a conjoint instrument before estimating AMCEs."
+        ))
+      }
+      design <- r$instrument$conjoint
+      attributes <- design$attributes
+      profiles <- design$profiles
+      attribute_names <- if (is.list(attributes)) {
+        intersect(names(attributes), names(profiles))
+      } else {
+        character()
+      }
+      if (!is.data.frame(profiles) || !("task" %in% names(profiles)) ||
+          !length(attribute_names) ||
+          !all(c("profiles", "success", "response", "persona_id") %in%
+               names(r$data))) {
+        return(list(
+          enabled = FALSE,
+          reason = "The recorded conjoint design is incomplete."
+        ))
+      }
+      task_ids <- paste0("task_", sort(unique(profiles$task)))
+      task_rows <- r$data[r$data$item_id %in% task_ids, , drop = FALSE]
+      if (!nrow(task_rows)) {
+        return(list(
+          enabled = FALSE,
+          reason = "Recorded conjoint responses are required to estimate AMCEs."
+        ))
+      }
+      failed <- task_rows$success %in% FALSE
+      if (all(failed)) {
+        return(list(
+          enabled = FALSE,
+          reason = paste(
+            "AMCEs cannot be estimated because every conjoint administration",
+            "failed."
+          )
+        ))
+      }
+      usable <- task_rows[!failed & !is.na(task_rows$response), , drop = FALSE]
+      if (!nrow(usable)) {
+        return(list(
+          enabled = FALSE,
+          reason = "Recorded conjoint choices are required to estimate AMCEs."
+        ))
+      }
+      if (length(unique(usable$persona_id)) < 2L) {
+        return(list(
+          enabled = FALSE,
+          reason = "Recorded choices from at least two personas are required."
+        ))
+      }
+      list(enabled = TRUE, reason = NULL)
+    })
+
+    output$power_action <- shiny::renderUI({
+      state <- power_action_state()
+      .panel_gui_primary_action(
+        ns("calculate_power"),
+        "Calculate power",
+        state$enabled,
+        state$reason
+      )
+    })
+
+    output$amce_action <- shiny::renderUI({
+      state <- amce_action_state()
+      .panel_gui_primary_action(
+        ns("calculate_amce"),
+        "Estimate conjoint AMCE",
+        state$enabled,
+        state$reason
+      )
     })
 
     shiny::observeEvent(input$calculate_power, {
@@ -1365,10 +1815,7 @@ run_panel_studio <- function(...) {
             class = "text-muted",
             "Estimate average marginal component effects from the recorded profile assignments."
           ),
-          shiny::actionButton(
-            ns("calculate_amce"), "Estimate conjoint AMCE",
-            class = "btn-primary"
-          ),
+          shiny::uiOutput(ns("amce_action")),
           DT::DTOutput(ns("amce_tbl"))
         ))
       }
@@ -1403,10 +1850,7 @@ run_panel_studio <- function(...) {
           ns("power_target"), "Target power",
           value = 0.80, min = 0.5, max = 0.99, step = 0.01
         ),
-        shiny::actionButton(
-          ns("calculate_power"), "Calculate power",
-          class = "btn-primary"
-        ),
+        shiny::uiOutput(ns("power_action")),
         DT::DTOutput(ns("power_tbl"))
       )
     })
