@@ -41,8 +41,9 @@
 #'   `response_id`, `success`, `error_message`, `finish_reason`, `model`, and
 #'   `provider` retain execution provenance as ordinary columns. Conjoint
 #'   administrations also include a `profiles` list-column. `benchmark` is
-#'   `NULL` until [panel_benchmark()] is called. `usage` is a token tibble, or
-#'   `NULL` when the runner returned no token columns.
+#'   `NULL` until [panel_benchmark()] is called. `usage` retains execution
+#'   diagnostics and any token counts or per-call `duration`; it is `NULL` when
+#'   the runner returned none of those usage fields.
 #' @examples
 #' set.seed(110)   # the panel draw is local; the model call is not
 #' panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 6)
@@ -163,8 +164,8 @@ panel_administer <- function(panel, instrument, config, max_calls = 5000L,
 
 # Parse a results frame (`res`, carrying the grid metadata columns + a
 # `response_text` column) into a `panel_responses`. Shared by the parallel and
-# batch paths so they produce byte-identical output. Token columns present on
-# `res` are retained in the usage field.
+# batch paths so they produce byte-identical output. Token counts and per-call
+# duration present on `res` are retained in the usage field.
 .panel_parse_responses <- function(res, instrument, panel) {
   stopifnot(is.data.frame(res), "response_text" %in% names(res))
   res$response_text <- as.character(res$response_text)
@@ -204,14 +205,14 @@ panel_administer <- function(panel, instrument, config, max_calls = 5000L,
   out <- res[, keep]
   out <- tibble::as_tibble(out)
 
-  token_cols <- intersect(
+  usage_cols <- intersect(
     c("sent_tokens", "rec_tokens", "total_tokens", "reasoning_tokens",
-      "cached_tokens"), names(res))
+      "cached_tokens", "duration"), names(res))
   usage <- NULL
-  if (length(token_cols)) {
+  if (length(usage_cols)) {
     keep <- intersect(
       c("persona_id", "item_id", "response_text", "response_id", "success",
-        "error_message", "finish_reason", "model", "provider", token_cols),
+        "error_message", "finish_reason", "model", "provider", usage_cols),
       names(res))
     u <- res[, keep, drop = FALSE]
     usage <- tibble::as_tibble(u)
@@ -327,18 +328,19 @@ as_tibble.panel_responses <- function(x, ...) {
   tibble::as_tibble(x$data, ...)
 }
 
-#' Token usage for an administered panel
+#' Usage diagnostics for an administered panel
 #'
 #' Summarizes token and outcome diagnostics recorded by [panel_administer()] or
 #' [panel_batch_fetch()]. The diagnostics are stored in the `usage`
 #' field of a `panel_responses` object and summarized by [LLMR::llm_usage()].
 #' Model and provider remain in the returned frame. A supplied `price_table`
-#' adds a cost column. The package contains no price table.
+#' adds a cost column. The package contains no price table. When the runner
+#' records per-call `duration`, its sum is returned as `duration_s`.
 #'
 #' @param responses A [panel_administer()] result.
 #' @param price_table Optional price table passed to [LLMR::llm_usage()].
 #' @return A one-row usage tibble, or a typed empty tibble when the runner
-#'   returned no token columns.
+#'   returned no recorded usage fields.
 #' @seealso [panel_administer()], [LLMR::llm_usage()].
 #' @examples
 #' panel <- panel_from_margins(list(group = c(A = 1)), n = 2)

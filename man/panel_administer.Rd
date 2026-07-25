@@ -58,8 +58,9 @@ canonical scale rather than its displayed order. \code{response_text},
 \code{response_id}, \code{success}, \code{error_message}, \code{finish_reason}, \code{model}, and
 \code{provider} retain execution provenance as ordinary columns. Conjoint
 administrations also include a \code{profiles} list-column. \code{benchmark} is
-\code{NULL} until \code{\link[=panel_benchmark]{panel_benchmark()}} is called. \code{usage} is a token tibble, or
-\code{NULL} when the runner returned no token columns.
+\code{NULL} until \code{\link[=panel_benchmark]{panel_benchmark()}} is called. \code{usage} retains execution
+diagnostics and any token counts or per-call \code{duration}; it is \code{NULL} when
+the runner returned none of those usage fields.
 }
 \description{
 Creates one request for each combination of persona and item. Persona text

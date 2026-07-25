@@ -27,4 +27,10 @@ Initial CRAN release.
   respondent in a classed result that retains run counts as columns.
 - `panel_power()` calculates two-arm sample sizes from pilot dispersion.
 - `run_panel_studio()` provides the panel workflow in an optional Shiny
-  application and can download responses, reports, and benchmark tables.
+  application and can download responses, reports, and benchmark tables. The
+  studio now preserves readable long-form output, presents response shares and
+  diagnostics before technical details, carries administered responses into
+  benchmarking and analysis, supports repeated administrations and conjoint
+  instruments, exposes power and AMCE calculations, permits full ANES persona
+  inspection and field selection, honors shared generation settings, and shows
+  recorded call timing when it is available.

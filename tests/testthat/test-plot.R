@@ -110,6 +110,8 @@ test_that("plot() errors informatively when ggplot2 is absent", {
     requireNamespace = function(package, ...) {
       if (identical(package, "ggplot2")) return(FALSE)
       base::requireNamespace(package, ...)
-    })
+    },
+    .package = "LLMRpanel"
+  )
   expect_error(plot(rc), "ggplot2")
 })

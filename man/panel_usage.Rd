@@ -2,7 +2,7 @@
 % Please edit documentation in R/administer.R
 \name{panel_usage}
 \alias{panel_usage}
-\title{Token usage for an administered panel}
+\title{Usage diagnostics for an administered panel}
 \usage{
 panel_usage(responses, price_table = NULL)
 }
@@ -13,14 +13,15 @@ panel_usage(responses, price_table = NULL)
 }
 \value{
 A one-row usage tibble, or a typed empty tibble when the runner
-returned no token columns.
+returned no recorded usage fields.
 }
 \description{
 Summarizes token and outcome diagnostics recorded by \code{\link[=panel_administer]{panel_administer()}} or
 \code{\link[=panel_batch_fetch]{panel_batch_fetch()}}. The diagnostics are stored in the \code{usage}
 field of a \code{panel_responses} object and summarized by \code{\link[LLMR:llm_usage]{LLMR::llm_usage()}}.
 Model and provider remain in the returned frame. A supplied \code{price_table}
-adds a cost column. The package contains no price table.
+adds a cost column. The package contains no price table. When the runner
+records per-call \code{duration}, its sum is returned as \code{duration_s}.
 }
 \examples{
 panel <- panel_from_margins(list(group = c(A = 1)), n = 2)

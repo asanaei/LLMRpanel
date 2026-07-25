@@ -14,10 +14,11 @@ Invisibly, the value of \code{\link[shiny:runApp]{shiny::runApp()}}; called for 
 of starting the app.
 }
 \description{
-Starts a Shiny application that builds a persona panel, administers one
-choice item, and compares response shares with an optional benchmark. The
-application can download the responses and report in a zip file. It adds
-the benchmark table when one is available.
+Starts a Shiny application that builds a persona panel, administers a choice
+item or conjoint instrument, and presents the package's diagnostics and
+design analyses. Choice-item response shares can be compared with an
+optional benchmark. The application can download the responses and report
+in a zip file, with the benchmark table when one is available.
 }
 \details{
 The GUI is optional. It needs the suggested packages \code{shiny}, \code{bslib}, \code{DT},

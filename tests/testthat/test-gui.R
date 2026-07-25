@@ -26,6 +26,47 @@ test_that("the GUI assembles when its suggested packages are present", {
   skip_if_not_installed("bslib")
   skip_if_not_installed("LLMR.shiny")
   expect_s3_class(LLMRpanel:::.panel_gui_ui(), "bslib_page")
+  ui_code <- paste(deparse(body(LLMRpanel:::.panel_gui_ui)), collapse = " ")
+  expect_match(ui_code, "fillable = FALSE", fixed = TRUE)
+})
+
+gui_demo_shared <- function(usage_seen = NULL) {
+  list(
+    mode = shiny::reactive("demo"),
+    provider = shiny::reactive("groq"),
+    model = shiny::reactive(""),
+    temperature = shiny::reactive(0.7),
+    max_tokens = shiny::reactive(NULL),
+    reasoning_effort = shiny::reactive(""),
+    can_run = shiny::reactive(TRUE),
+    key = shiny::reactive(list()),
+    set_plan = function(calls, label = "Next run") NULL,
+    add_usage = function(tokens) {
+      if (!is.null(usage_seen)) usage_seen$value <- tokens
+    }
+  )
+}
+
+test_that("the module UI renders labeled controls and scrollable text", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("LLMR.shiny")
+  skip_if_not(
+    "help_tip" %in% getNamespaceExports("LLMR.shiny"),
+    "installed LLMR.shiny predates the shared display helpers"
+  )
+
+  shiny::testServer(
+    LLMRpanel:::.panel_gui_module_server,
+    args = list(shared = gui_demo_shared()),
+    {
+      session$flushReact()
+      html <- paste(as.character(output$module_ui), collapse = "\n")
+      expect_match(html, "Persona source", fixed = TRUE)
+      expect_match(html, "Instrument type", fixed = TRUE)
+      expect_match(html, "llmr-text-block", fixed = TRUE)
+      expect_false(grepl("<label[^>]*>[[:space:]]*</label>", html))
+    }
+  )
 })
 
 test_that("demo administration records rows without API calls", {
@@ -33,15 +74,7 @@ test_that("demo administration records rows without API calls", {
   skip_if_not_installed("LLMR.shiny")
   usage_seen <- new.env(parent = emptyenv())
   usage_seen$value <- NULL
-  shared <- list(
-    mode = shiny::reactive("demo"),
-    provider = shiny::reactive("groq"),
-    model = shiny::reactive(""),
-    can_run = shiny::reactive(TRUE),
-    key = shiny::reactive(list()),
-    set_plan = function(calls, label = "Next run") NULL,
-    add_usage = function(tokens) usage_seen$value <- tokens
-  )
+  shared <- gui_demo_shared(usage_seen)
 
   shiny::testServer(
     LLMRpanel:::.panel_gui_module_server,
@@ -51,7 +84,7 @@ test_that("demo administration records rows without API calls", {
         source = "margins",
         margins = "party: left=0.5, right=0.5",
         persona_tmpl = "A {party} voter.",
-        n = 2,
+        n = 6,
         item_text = "Increase spending?",
         item_opts = "yes, no",
         build_panel = 1
@@ -61,10 +94,25 @@ test_that("demo administration records rows without API calls", {
       session$flushReact()
       expect_s3_class(responses(), "panel_responses")
       expect_true(isTRUE(run_is_demo()))
+      expect_false("run" %in% names(responses()$data))
+      if ("text_block_output" %in% getNamespaceExports("LLMR.shiny")) {
+        results_html <- paste(as.character(output$results), collapse = "\n")
+        expect_match(results_html, "Technical details", fixed = TRUE)
+        expect_match(results_html, "llmr-text-block", fixed = TRUE)
+      }
+      session$setInputs(
+        power_effect = 0.1,
+        power_focal = unique(stats::na.omit(responses()$data$response))[[1]],
+        power_alpha = 0.05,
+        power_target = 0.8,
+        calculate_power = 1
+      )
+      session$flushReact()
+      expect_s3_class(power_result(), "data.frame")
     }
   )
 
-  expect_identical(usage_seen$value$result_rows, 2L)
+  expect_identical(usage_seen$value$result_rows, 6L)
   expect_null(usage_seen$value$calls)
   expect_null(usage_seen$value$sent)
   expect_null(usage_seen$value$received)
@@ -91,6 +139,157 @@ gui_fixture_responses <- function(benchmarked = FALSE) {
   panel_benchmark(r, bench, "toy benchmark")
 }
 
+gui_fixture_conjoint <- function() {
+  set.seed(110)
+  panel <- panel_from_margins(list(group = c(A = .5, B = .5)), n = 4)
+  design <- conjoint_design(
+    list(price = c("low", "high"), service = c("basic", "expanded")),
+    n_tasks = 2
+  )
+  instrument <- conjoint_instrument(design, "Choose a package.")
+  runner <- function(experiments, ...) {
+    experiments$response_text <- "Profile 1"
+    experiments
+  }
+  set.seed(110)
+  panel_administer(
+    panel, instrument, LLMR::llm_config("groq", "fake-model"),
+    .runner = runner
+  )
+}
+
+test_that("repeated responses retain run identity and summarize shares", {
+  one <- gui_fixture_responses()
+  expect_identical(
+    LLMRpanel:::.panel_gui_combine_runs(list(one)),
+    one
+  )
+
+  repeated <- LLMRpanel:::.panel_gui_combine_runs(list(one, one, one))
+  expect_s3_class(repeated, "panel_responses")
+  expect_equal(nrow(repeated$data), 18L)
+  expect_setequal(unique(repeated$data$run), 1:3)
+
+  shares <- LLMRpanel:::.panel_gui_run_shares(repeated)
+  expect_setequal(unique(shares$run), 1:3)
+  expect_equal(shares$share, rep(0.5, nrow(shares)))
+  summary <- LLMRpanel:::.panel_gui_run_summary(repeated)
+  expect_equal(summary$mean_share, c(0.5, 0.5))
+  expect_equal(summary$sd_share, c(0, 0))
+})
+
+test_that("demo repeated runs and conjoint instruments use the held panel", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("LLMR.shiny")
+  usage_seen <- new.env(parent = emptyenv())
+  usage_seen$value <- NULL
+
+  shiny::testServer(
+    LLMRpanel:::.panel_gui_module_server,
+    args = list(shared = gui_demo_shared(usage_seen)),
+    {
+      session$setInputs(
+        source = "margins",
+        margins = "group: A=0.5, B=0.5",
+        persona_tmpl = "A respondent in group {group}.",
+        n = 6,
+        instrument_type = "conjoint",
+        conjoint_attributes = paste(
+          "price: low, high",
+          "service: basic, expanded",
+          sep = "\n"
+        ),
+        conjoint_tasks = 4,
+        conjoint_profiles = 2,
+        conjoint_question = "Which package do you prefer?",
+        runs = 2,
+        build_panel = 1
+      )
+      session$flushReact()
+      plan_html <- paste(
+        as.character(output$administer_plan), collapse = "\n"
+      )
+      expect_match(
+        plan_html,
+        "2 run(s) produce 48 deterministic response rows",
+        fixed = TRUE
+      )
+      session$setInputs(administer = 1)
+      session$flushReact()
+      expect_s3_class(responses(), "panel_responses")
+      expect_s3_class(responses()$instrument$conjoint, "conjoint_design")
+      expect_equal(nrow(responses()$data), 48L)
+      expect_setequal(unique(responses()$data$run), 1:2)
+      session$setInputs(calculate_amce = 1)
+      session$flushReact()
+      expect_s3_class(amce_result(), "conjoint_amce")
+    }
+  )
+
+  expect_identical(usage_seen$value$result_rows, 48L)
+})
+
+test_that("ANES field selection preserves the default and restricts on request", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("LLMR.shiny")
+
+  shiny::testServer(
+    LLMRpanel:::.panel_gui_module_server,
+    args = list(shared = gui_demo_shared()),
+    {
+      session$setInputs(source = "anes", n = 2, build_panel = 1)
+      session$flushReact()
+      set.seed(110)
+      expected <- panel_from_personas(LLMR::anes_2024_personas, n = 2)
+      expect_identical(panel()$persona, expected$persona)
+
+      session$setInputs(
+        persona_columns = "demo_age",
+        build_panel = 2
+      )
+      session$flushReact()
+      expect_setequal(names(panel()), c("persona_id", "demo_age", "persona"))
+      expect_false(any(grepl("Party identification", panel()$persona)))
+    }
+  )
+})
+
+test_that("recorded call durations reach usage and timing summaries", {
+  set.seed(110)
+  panel <- panel_from_margins(list(group = c(A = 1)), n = 2)
+  instrument <- panel_instrument(
+    item_choice("q1", "Choose.", c("yes", "no")),
+    randomize = character(0)
+  )
+  runner <- function(experiments, ...) {
+    experiments$response_text <- "yes"
+    experiments$success <- TRUE
+    experiments$duration <- c(0.2, 0.4)
+    experiments
+  }
+  responses <- panel_administer(
+    panel, instrument, LLMR::llm_config("groq", "fake-model"),
+    .runner = runner
+  )
+
+  expect_equal(responses$usage$duration, c(0.2, 0.4))
+  expect_equal(panel_usage(responses)$duration_s, 0.6)
+  timing <- LLMRpanel:::.panel_gui_timing_summary(
+    responses, wall_seconds = 0.5
+  )
+  expect_equal(timing$seconds[c(1, 3, 4, 5)], c(0.5, 0.6, 0.3, 0.3))
+
+  repeated <- LLMRpanel:::.panel_gui_combine_runs(
+    list(responses, responses)
+  )
+  expect_equal(repeated$usage$duration, rep(c(0.2, 0.4), 2))
+  expect_equal(repeated$usage$run, rep(1:2, each = 2))
+  expect_equal(panel_usage(repeated)$duration_s, 1.2)
+
+  without_duration <- gui_fixture_responses()
+  expect_null(LLMRpanel:::.panel_gui_timing_summary(without_duration))
+})
+
 skip_if_no_zip <- function() {
   cmd <- Sys.getenv("R_ZIPCMD", "zip")
   skip_if(!nzchar(Sys.which(cmd)), "no zip binary available")
@@ -111,6 +310,24 @@ test_that("the artifact bundle holds the responses CSV and the report", {
   expect_true(all(c("persona_id", "item_id", "response") %in% names(resp)))
   report <- readLines(file.path(ex_dir, "report.txt"))
   expect_true(any(grepl("NOT BENCHMARKED", report)))
+})
+
+test_that("a conjoint bundle preserves recorded profile assignments", {
+  skip_if_no_zip()
+  zipfile <- tempfile(fileext = ".zip")
+  LLMRpanel:::.panel_gui_bundle_artifacts(
+    gui_fixture_conjoint(), zipfile
+  )
+
+  ex_dir <- tempfile("bundle-")
+  utils::unzip(zipfile, exdir = ex_dir)
+  resp <- utils::read.csv(file.path(ex_dir, "responses.csv"))
+  expect_true("profiles" %in% names(resp))
+  expect_true(all(nzchar(resp$profiles)))
+  expect_true(all(grepl('task="', resp$profiles, fixed = TRUE)))
+  expect_true(all(grepl('profile="', resp$profiles, fixed = TRUE)))
+  expect_true(all(grepl('price="', resp$profiles, fixed = TRUE)))
+  expect_true(all(grepl('service="', resp$profiles, fixed = TRUE)))
 })
 
 test_that("a benchmarked run adds the benchmark table to the bundle", {
@@ -160,10 +377,32 @@ test_that("the results card wires its download control to the artifact bundle", 
     'actionButton(ns("compare_benchmark"), "Compare with benchmark"',
     code, fixed = TRUE))
   expect_true(grepl(
-    paste0("r <- if (!is.null(benchmark_result())) benchmark_result() ",
-           "else responses()"),
+    "panel_bias_audit(active_responses())",
     code, fixed = TRUE))
   expect_true(grepl(
-    ".panel_gui_bundle_artifacts(r, file, demo = isTRUE(run_is_demo()))",
+    "conjoint_amce(r)",
     code, fixed = TRUE))
+  expect_true(grepl(
+    "panel_power(r, effect = effect",
+    code, fixed = TRUE))
+  expect_true(grepl(
+    "temperature = job$temperature, max_tokens = job$max_tokens",
+    code, fixed = TRUE))
+  expect_true(grepl(
+    "reasoning_effort = job$reasoning_effort",
+    code, fixed = TRUE))
+  expect_true(grepl(
+    ".panel_gui_bundle_artifacts(active_responses(), file, demo = isTRUE(run_is_demo()))",
+    code, fixed = TRUE))
+  expect_true(grepl(
+    'text_block_output(ns("report"), height = "20rem")',
+    code, fixed = TRUE))
+  expect_false(grepl("verbatimTextOutput", code, fixed = TRUE))
+  expect_false(grepl(
+    paste0(
+      "(radioButtons|textInput|textAreaInput|numericInput|selectInput|",
+      "checkboxGroupInput)\\(ns\\(\"[^\"]+\"\\), NULL"
+    ),
+    code
+  ))
 })
