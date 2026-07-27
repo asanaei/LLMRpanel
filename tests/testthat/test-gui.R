@@ -3,6 +3,7 @@
 # skipping when the GUI packages are absent.
 
 test_that("run_panel_studio errors helpfully when GUI packages are missing", {
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
   # If everything is installed the guard passes; simulate absence by checking the
   # message path only when something is genuinely missing.
   need <- c("shiny", "bslib", "DT", "LLMR.shiny")
@@ -24,7 +25,7 @@ test_that("the demo responder picks a valid option from the rendered item", {
 test_that("the GUI assembles when its suggested packages are present", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("bslib")
-  skip_if_not_installed("LLMR.shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
   ui <- LLMRpanel:::.panel_gui_ui()
   expect_s3_class(ui, "bslib_page")
   ui_code <- paste(deparse(body(LLMRpanel:::.panel_gui_ui)), collapse = " ")
@@ -82,7 +83,7 @@ gui_action_is_disabled <- function(html, input_id) {
 
 test_that("the module UI renders labeled controls and scrollable text", {
   skip_if_not_installed("shiny")
-  skip_if_not_installed("LLMR.shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
   skip_if_not(
     "help_tip" %in% getNamespaceExports("LLMR.shiny"),
     "installed LLMR.shiny predates the shared display helpers"
@@ -129,7 +130,7 @@ test_that("the module UI renders labeled controls and scrollable text", {
 
 test_that("blank max output tokens use the visible panel default", {
   skip_if_not_installed("shiny")
-  skip_if_not_installed("LLMR.shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
 
   build_job <- function(shared, expected, phrase) {
     shiny::testServer(
@@ -167,7 +168,7 @@ test_that("blank max output tokens use the visible panel default", {
 
 test_that("administration, benchmark, and power actions follow preconditions", {
   skip_if_not_installed("shiny")
-  skip_if_not_installed("LLMR.shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
 
   shiny::testServer(
     LLMRpanel:::.panel_gui_module_server,
@@ -300,7 +301,7 @@ test_that("administration, benchmark, and power actions follow preconditions", {
 
 test_that("panel tables wrap text, round doubles, and retain hidden identifiers", {
   skip_if_not_installed("DT")
-  skip_if_not_installed("LLMR.shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
   skip_if_not(
     "digits" %in% names(formals(LLMR.shiny::as_display_table)),
     "installed LLMR.shiny predates display rounding"
@@ -356,7 +357,7 @@ test_that("panel tables wrap text, round doubles, and retain hidden identifiers"
 
 test_that("demo administration records rows without API calls", {
   skip_if_not_installed("shiny")
-  skip_if_not_installed("LLMR.shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
   usage_seen <- new.env(parent = emptyenv())
   usage_seen$value <- NULL
   shared <- gui_demo_shared(usage_seen)
@@ -450,7 +451,7 @@ gui_fixture_conjoint <- function() {
 
 test_that("the AMCE action is disabled when conjoint responses cannot be used", {
   skip_if_not_installed("shiny")
-  skip_if_not_installed("LLMR.shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
 
   shiny::testServer(
     LLMRpanel:::.panel_gui_module_server,
@@ -504,7 +505,7 @@ test_that("repeated responses retain run identity and summarize shares", {
 
 test_that("demo repeated runs and conjoint instruments use the held panel", {
   skip_if_not_installed("shiny")
-  skip_if_not_installed("LLMR.shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
   usage_seen <- new.env(parent = emptyenv())
   usage_seen$value <- NULL
 
@@ -560,7 +561,7 @@ test_that("demo repeated runs and conjoint instruments use the held panel", {
 
 test_that("ANES field selection preserves the default and restricts on request", {
   skip_if_not_installed("shiny")
-  skip_if_not_installed("LLMR.shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
 
   shiny::testServer(
     LLMRpanel:::.panel_gui_module_server,
@@ -588,7 +589,7 @@ test_that("ANES field selection preserves the default and restricts on request",
 test_that("ANES construction modes ignore the inactive row control", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("DT")
-  skip_if_not_installed("LLMR.shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
 
   expect_true(LLMRpanel:::.panel_gui_uses_panel_size("margins", "selected"))
   expect_true(LLMRpanel:::.panel_gui_uses_panel_size("anes", "draw"))
@@ -639,7 +640,7 @@ test_that("ANES construction modes ignore the inactive row control", {
 
 test_that("large ANES draws drive the scale preview and confirmation", {
   skip_if_not_installed("shiny")
-  skip_if_not_installed("LLMR.shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
 
   modal_seen <- new.env(parent = emptyenv())
   shiny::testServer(
@@ -785,7 +786,7 @@ test_that("a benchmarked run adds the benchmark table to the bundle", {
 
 test_that("demo mode stamps the bundle so offline output cannot pass as model output", {
   skip_if_no_zip()
-  skip_if_not_installed("LLMR.shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
   zipfile <- tempfile(fileext = ".zip")
   LLMRpanel:::.panel_gui_bundle_artifacts(
     gui_fixture_responses(benchmarked = TRUE), zipfile, demo = TRUE)
