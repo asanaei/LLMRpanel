@@ -29,7 +29,7 @@ Suggests:
     shiny,
     bslib,
     DT,
-    LLMR.shiny
+    LLMR.shiny (>= 0.1.2)
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 URL: https://github.com/asanaei/LLMRpanel, https://asanaei.github.io/LLMRpanel/
