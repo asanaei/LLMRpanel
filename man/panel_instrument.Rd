@@ -8,7 +8,8 @@ panel_instrument(items, randomize = "option_order")
 }
 \arguments{
 \item{items}{A list of \link{panel_items} (\code{item_likert()}, \code{item_choice()},
-\code{item_open()}); ids must be unique.}
+\code{item_open()}), or a single item, which is wrapped in a list. Ids must
+be unique.}
 
 \item{randomize}{Which orders to randomize per respondent. The only
 implemented value is \code{"option_order"} (the default): the options of a

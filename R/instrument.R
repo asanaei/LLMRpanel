@@ -53,7 +53,8 @@ item_open <- function(id, text) {
 #' Assemble an instrument
 #'
 #' @param items A list of [panel_items] (`item_likert()`, `item_choice()`,
-#'   `item_open()`); ids must be unique.
+#'   `item_open()`), or a single item, which is wrapped in a list. Ids must
+#'   be unique.
 #' @param randomize Which orders to randomize per respondent. The only
 #'   implemented value is `"option_order"` (the default): the options of a
 #'   choice item are permuted per response, and a Likert scale is shown

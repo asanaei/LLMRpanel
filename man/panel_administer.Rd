@@ -25,18 +25,17 @@ panel_administer(
 \item{config}{An \code{LLMR::llm_config()} for a generative model.}
 
 \item{max_calls}{Integer. If the run would make more than this many calls
-(personas times items), it stops unless \code{confirm = TRUE}, so a large panel
-cannot fire thousands of calls by accident. Default 5000.}
+(personas times items), it stops unless \code{confirm = TRUE}. Default 5000.}
 
 \item{confirm}{Logical. Set \code{TRUE} to proceed past \code{max_calls}.}
 
 \item{price_table, tokens_per_call}{Optional. When both are supplied, the
 preflight reports a cost figure computed from your own \code{price_table} (the
 \code{\link[LLMR:llm_usage]{LLMR::llm_usage()}} format: columns \code{model}, \code{input}, \code{output}, prices per
-million tokens) and your \code{tokens_per_call} assumption -- either one number
-(total tokens per call, priced as a range from all-input to all-output) or
-two, \code{c(input, output)} (priced exactly). The package itself ships no
-prices and estimates no token counts.}
+million tokens) and your \code{tokens_per_call} assumption. One number is a
+per-call total, priced as a range from all-input to all-output; two,
+\code{c(input, output)}, price exactly. The package itself ships no prices and
+estimates no token counts.}
 
 \item{.runner}{Optional runner for offline or deterministic testing: a
 \verb{function(experiments, ...)} that receives a data frame with \code{config} and
@@ -65,10 +64,10 @@ diagnostics and any token counts or per-call \code{duration}; it is \code{NULL} 
 the runner returned none of those usage fields.
 }
 \description{
-Creates one request for each combination of persona and item. Persona text
-is placed in the system message, and item text and options in the user
-message. Closed-item replies are matched to offered options; unmatched
-replies are recorded as \code{NA}. Open-item replies are returned as text.
+Creates one request for each combination of persona and item. The persona
+goes in the system message, the item and its options in the user message.
+A closed-item reply is matched against the options offered, and anything
+unmatched becomes \code{NA}. Open items come back verbatim.
 }
 \examples{
 set.seed(110)   # the panel draw is local; the model call is not

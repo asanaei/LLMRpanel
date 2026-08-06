@@ -96,7 +96,7 @@ test_that("an empty reply from an exhausted budget is named, not just counted", 
   }
   expect_warning(
     panel_administer(.rf_panel(2), instr, .rf_cfg(), .runner = starving),
-    "budget was spent before any text")
+    "budget ran out before any visible text")
   # a genuine unparseable answer is not blamed on the budget
   refusing <- function(experiments, ...) {
     experiments$response_text <- "I would rather not say"

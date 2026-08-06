@@ -6,13 +6,17 @@ uses were not exported by the LLMR.shiny then on CRAN; LLMR.shiny 0.1.2,
 which exports them, is on CRAN now, and the Suggests entry states the
 requirement (LLMR.shiny >= 0.1.2).
 
-Version 0.6.1 also incorporates corrections from an external methodological
-review: the inert item-order randomization is gone (each persona-item pair
-is an independent request, so no questionnaire order is ever shown), Likert
-scales are reversed rather than arbitrarily permuted, human reference
-distributions are validated before comparison, an all-parse-failure item
-gets NA rather than zero shares, runners can no longer rewrite experimental
-assignments, and the vignette now executes offline end to end.
+Version 0.6.1 also changes package behavior:
+
+- Item-order randomization is gone. Each persona-item pair is an independent
+  request, so no questionnaire order was ever shown to the model.
+- A Likert scale is shown reversed for half of responses instead of
+  arbitrarily permuted.
+- Human reference distributions are validated before any comparison, and an
+  item whose every response failed to parse gets NA shares.
+- A runner supplies responses and diagnostics; it cannot rewrite the
+  experimental assignments.
+- The vignette executes offline from beginning to end.
 
 The pretest NOTE flagged "Benchmarked" in the Description as possibly
 misspelled; it is ordinary English, the past participle of "benchmark".

@@ -4,26 +4,25 @@
 
 #' Administer an instrument to a panel
 #'
-#' Creates one request for each combination of persona and item. Persona text
-#' is placed in the system message, and item text and options in the user
-#' message. Closed-item replies are matched to offered options; unmatched
-#' replies are recorded as `NA`. Open-item replies are returned as text.
+#' Creates one request for each combination of persona and item. The persona
+#' goes in the system message, the item and its options in the user message.
+#' A closed-item reply is matched against the options offered, and anything
+#' unmatched becomes `NA`. Open items come back verbatim.
 #'
 #' @param panel A [panel_from_margins()], [panel_from_data()], or
 #'   [panel_from_personas()] result.
 #' @param instrument A [panel_instrument()].
 #' @param config An `LLMR::llm_config()` for a generative model.
 #' @param max_calls Integer. If the run would make more than this many calls
-#'   (personas times items), it stops unless `confirm = TRUE`, so a large panel
-#'   cannot fire thousands of calls by accident. Default 5000.
+#'   (personas times items), it stops unless `confirm = TRUE`. Default 5000.
 #' @param confirm Logical. Set `TRUE` to proceed past `max_calls`.
 #' @param price_table,tokens_per_call Optional. When both are supplied, the
 #'   preflight reports a cost figure computed from your own `price_table` (the
 #'   [LLMR::llm_usage()] format: columns `model`, `input`, `output`, prices per
-#'   million tokens) and your `tokens_per_call` assumption -- either one number
-#'   (total tokens per call, priced as a range from all-input to all-output) or
-#'   two, `c(input, output)` (priced exactly). The package itself ships no
-#'   prices and estimates no token counts.
+#'   million tokens) and your `tokens_per_call` assumption. One number is a
+#'   per-call total, priced as a range from all-input to all-output; two,
+#'   `c(input, output)`, price exactly. The package itself ships no prices and
+#'   estimates no token counts.
 #' @param .runner Optional runner for offline or deterministic testing: a
 #'   `function(experiments, ...)` that receives a data frame with `config` and
 #'   `messages` list-columns and returns those rows with `request_id` and
@@ -230,10 +229,9 @@ panel_administer <- function(panel, instrument, config, max_calls = 5000L,
   if (any(starved)) {
     cli::cli_warn(paste(
       "{sum(starved)} of {nrow(res)} repl{?y/ies} came back empty with",
-      "finish_reason 'length': the output budget was spent before any text",
-      "was emitted, which reasoning models do at small `max_tokens`. These",
-      "are recorded as parse failures but measure the budget, not the",
-      "persona. Raise `max_tokens` in the config and re-administer."))
+      "finish_reason 'length': the output budget ran out before any visible",
+      "text. Raise `max_tokens` and re-administer. These rows currently",
+      "count as parse failures."))
   }
 
   keep <- c("persona_id", "item_id", "type", "item_position",
