@@ -238,9 +238,9 @@ panel_from_data <- function(data, n, persona_template = NULL,
 #' For a reproducible draw, set a seed before calling (the function never sets
 #' one itself).
 #'
-#' @param data A persona data frame, such as `LLMR::anes_2024_personas` (a
-#'   deliberate example choice, not a silent default: those 100 rows are
-#'   diversity-selected United States respondents with no survey weights).
+#' @param data A persona data frame, such as `LLMR::anes_2024_personas`.
+#'   Those 100 rows are diversity-selected United States respondents and
+#'   carry no survey weights, so they stand for no population.
 #' @param n Optional panel size. With `NULL`, every selected row is used; with a
 #'   number, rows are sampled (without replacement when `n` does not exceed the
 #'   pool, otherwise with replacement).

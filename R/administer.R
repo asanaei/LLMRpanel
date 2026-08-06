@@ -220,6 +220,22 @@ panel_administer <- function(panel, instrument, config, max_calls = 5000L,
     as.numeric(match(res$response[i], it$options))
   }, numeric(1))
 
+  # A reply that is empty because the budget ran out is not a refusal to
+  # answer: reasoning models can spend an entire small max_tokens on hidden
+  # reasoning and emit no visible text. Recorded as a parse failure it would
+  # read as measurement, so name the cause once per administration.
+  starved <- !nzchar(trimws(res$response_text %||% "")) &
+    (res$finish_reason %in% "length")
+  starved[is.na(starved)] <- FALSE
+  if (any(starved)) {
+    cli::cli_warn(paste(
+      "{sum(starved)} of {nrow(res)} repl{?y/ies} came back empty with",
+      "finish_reason 'length': the output budget was spent before any text",
+      "was emitted, which reasoning models do at small `max_tokens`. These",
+      "are recorded as parse failures but measure the budget, not the",
+      "persona. Raise `max_tokens` in the config and re-administer."))
+  }
+
   keep <- c("persona_id", "item_id", "type", "item_position",
             "option_order", intersect("profiles", names(res)),
             "response_text", "response_id", "success", "error_message",

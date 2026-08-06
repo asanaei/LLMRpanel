@@ -1,6 +1,6 @@
 # LLMRpanel 0.6.1
 
-Corrections from an external methodological review of 0.6.0 (never on CRAN).
+Corrections replacing 0.6.0, which was never published.
 
 * `item_order` randomization is gone, and `panel_instrument()` refuses it
   with an explanation: every persona-item pair is an independent request,
@@ -21,6 +21,11 @@ Corrections from an external methodological review of 0.6.0 (never on CRAN).
   `NA` shares, not a zero distribution.
 * `panel_bias_audit()` reports `NA` with a note when chi-square expected
   counts are sparse, instead of an unreliable p-value.
+* An administration whose replies come back empty with `finish_reason`
+  `"length"` now says so. Reasoning models can spend a small `max_tokens`
+  entirely on hidden reasoning and emit no visible text; counting those as
+  parse failures reads as a finding about the personas when it is a fact
+  about the budget.
 * `panel_from_personas()` requires `data` (the bundled ANES example is an
   explicit choice, not a silent default), validates `rows` selectors,
   refuses NA or negative weights rather than zeroing them, requires numeric

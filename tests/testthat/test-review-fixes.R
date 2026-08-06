@@ -84,3 +84,27 @@ test_that("placeholder filling is single-pass", {
   out <- LLMRpanel:::.fill("{a} and {b}", list(a = "{b}", b = "safe"))
   expect_identical(out, "{b} and safe")
 })
+
+test_that("an empty reply from an exhausted budget is named, not just counted", {
+  instr <- panel_instrument(list(item_choice("p", "Pick.", c("A", "B"))),
+                            randomize = character(0))
+  starving <- function(experiments, ...) {
+    experiments$response_text <- ""
+    experiments$success <- TRUE
+    experiments$finish_reason <- "length"
+    experiments
+  }
+  expect_warning(
+    panel_administer(.rf_panel(2), instr, .rf_cfg(), .runner = starving),
+    "budget was spent before any text")
+  # a genuine unparseable answer is not blamed on the budget
+  refusing <- function(experiments, ...) {
+    experiments$response_text <- "I would rather not say"
+    experiments$success <- TRUE
+    experiments$finish_reason <- "stop"
+    experiments
+  }
+  expect_no_warning(
+    r <- panel_administer(.rf_panel(2), instr, .rf_cfg(), .runner = refusing))
+  expect_true(all(is.na(as.data.frame(tibble::as_tibble(r))$response)))
+})
