@@ -25,8 +25,10 @@ Corrections from an external methodological review of 0.6.0 (never on CRAN).
   explicit choice, not a silent default), validates `rows` selectors,
   refuses NA or negative weights rather than zeroing them, requires numeric
   weight columns, and warns when weights are supplied without `n`.
-* `panel_power()` documentation states plainly that its dispersion comes
-  from the model panel, not humans, and is not a human-study plan.
+* `panel_power()` is removed. Its arithmetic treated model-persona
+  dispersion as if it were human outcome variance, which is not a sound
+  basis for planning a human study; a design-sensitivity function with an
+  explicit dispersion source may return later.
 * Placeholder filling is single-pass, so substituted values containing
   braces are never re-substituted; the panel print shows a truncated
   persona preview.
@@ -63,7 +65,6 @@ Initial CRAN release.
   with profile and attribute fields, and `conjoint_amce()` estimates from the
   recorded respondent-level profiles with standard errors clustered by
   respondent in a classed result that retains run counts as columns.
-- `panel_power()` calculates two-arm sample sizes from pilot dispersion.
 - `run_panel_studio()` provides the panel workflow in an optional Shiny
   application and can download responses, reports, and benchmark tables. The
   studio now preserves readable long-form output, presents response shares and

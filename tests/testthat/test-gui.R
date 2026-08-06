@@ -166,7 +166,7 @@ test_that("blank max output tokens use the visible panel default", {
   build_job(gui_demo_shared(max_tokens = 768L), 768L, "from the sidebar")
 })
 
-test_that("administration, benchmark, and power actions follow preconditions", {
+test_that("administration and benchmark actions follow preconditions", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("LLMR.shiny", "0.1.2")
 
@@ -271,30 +271,6 @@ test_that("administration, benchmark, and power actions follow preconditions", {
         benchmark_html, "Enter benchmark shares as level=share pairs.",
         fixed = TRUE
       )
-
-      session$setInputs(
-        power_effect = 0.10,
-        power_focal = "yes",
-        power_alpha = 0.05,
-        power_target = 0.80
-      )
-      session$flushReact()
-      power_id <- session$ns("calculate_power")
-      analysis_html <- paste(
-        as.character(output$power_action), collapse = "\n"
-      )
-      expect_false(gui_action_is_disabled(analysis_html, power_id))
-
-      session$setInputs(power_effect = 0)
-      session$flushReact()
-      analysis_html <- paste(
-        as.character(output$power_action), collapse = "\n"
-      )
-      expect_true(gui_action_is_disabled(analysis_html, power_id))
-      expect_match(
-        analysis_html, "Enter a positive minimum detectable difference.",
-        fixed = TRUE
-      )
     }
   )
 })
@@ -392,14 +368,8 @@ test_that("demo administration records rows without API calls", {
         expect_match(results_html, "llmr-text-block", fixed = TRUE)
       }
       session$setInputs(
-        power_effect = 0.1,
-        power_focal = unique(stats::na.omit(responses()$data$response))[[1]],
-        power_alpha = 0.05,
-        power_target = 0.8,
-        calculate_power = 1
       )
       session$flushReact()
-      expect_s3_class(power_result(), "data.frame")
     }
   )
 
@@ -818,9 +788,6 @@ test_that("the results card wires its download control to the artifact bundle", 
     code, fixed = TRUE))
   expect_true(grepl(
     "conjoint_amce(r)",
-    code, fixed = TRUE))
-  expect_true(grepl(
-    "panel_power(r, effect = effect",
     code, fixed = TRUE))
   expect_true(grepl(
     "temperature = job$temperature, max_tokens = job$max_tokens",

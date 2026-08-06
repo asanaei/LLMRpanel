@@ -214,21 +214,6 @@ attribute level. Baseline levels have estimate 0 and missing standard errors.
 Other rows contain the estimated contrast and 95 percent interval. Run counts
 remain in separate columns.
 
-## Two-arm sample sizes
-
-`panel_power()` computes two-arm sample sizes from a minimum detectable effect
-and pilot dispersion. It uses the standard deviation of Likert scores. For
-choice items, it uses a named focal response or the modal response share. The
-result has one row per analyzed closed item.
-
-The dispersion in this arithmetic comes from the model panel, not from
-human respondents, so treat the output as a reading of the pilot
-instrument, not as a sample-size plan for a human study.
-
-```{r power, purl=FALSE}
-panel_power(resp, effect = c(wk4 = 0.4, fund = 0.15))
-```
-
 ## A live administration
 
 The identical call against a live provider drops the `.runner` argument.

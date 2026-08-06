@@ -420,7 +420,6 @@ run_panel_studio <- function(...) {
     panel <- shiny::reactiveVal(NULL)
     responses <- shiny::reactiveVal(NULL)
     benchmark_result <- shiny::reactiveVal(NULL)
-    power_result <- shiny::reactiveVal(NULL)
     amce_result <- shiny::reactiveVal(NULL)
     run_elapsed <- shiny::reactiveVal(NULL)
     run_is_demo <- shiny::reactiveVal(NULL)
@@ -971,7 +970,6 @@ run_panel_studio <- function(...) {
     reset_results <- function() {
       responses(NULL)
       benchmark_result(NULL)
-      power_result(NULL)
       amce_result(NULL)
       run_elapsed(NULL)
       run_is_demo(NULL)
@@ -1303,7 +1301,6 @@ run_panel_studio <- function(...) {
       }
       responses(res$value)
       benchmark_result(NULL)
-      power_result(NULL)
       amce_result(NULL)
       run_elapsed(elapsed)
       run_is_demo(identical(job$mode, "demo"))
@@ -1396,66 +1393,6 @@ run_panel_studio <- function(...) {
       if (!is.null(benchmark_result())) benchmark_result() else responses()
     })
 
-    power_action_state <- shiny::reactive({
-      r <- active_responses()
-      if (is.null(r) || !is.null(r$instrument$conjoint)) {
-        return(list(
-          enabled = FALSE,
-          reason = "Administer a choice item before calculating power."
-        ))
-      }
-      item <- r$instrument$items[[1]]
-      item_rows <- r$data[r$data$item_id == item$id, , drop = FALSE]
-      if (!nrow(item_rows)) {
-        return(list(
-          enabled = FALSE,
-          reason = "Recorded responses are required before calculating power."
-        ))
-      }
-      if (all(item_rows$success %in% FALSE)) {
-        return(list(
-          enabled = FALSE,
-          reason = paste(
-            "Power cannot be calculated because every administration for this",
-            "item failed."
-          )
-        ))
-      }
-      effect <- suppressWarnings(
-        as.numeric(input$power_effect %||% 0.10)
-      )
-      if (length(effect) != 1L || !is.finite(effect) || effect <= 0) {
-        return(list(
-          enabled = FALSE,
-          reason = "Enter a positive minimum detectable difference."
-        ))
-      }
-      alpha <- suppressWarnings(as.numeric(input$power_alpha %||% 0.05))
-      if (length(alpha) != 1L || !is.finite(alpha) ||
-          alpha <= 0 || alpha >= 1) {
-        return(list(
-          enabled = FALSE,
-          reason = "Enter a two-sided alpha between 0 and 1."
-        ))
-      }
-      target <- suppressWarnings(as.numeric(input$power_target %||% 0.80))
-      if (length(target) != 1L || !is.finite(target) ||
-          target <= 0 || target >= 1) {
-        return(list(
-          enabled = FALSE,
-          reason = "Enter a target power between 0 and 1."
-        ))
-      }
-      focal <- input$power_focal %||% item$options[[1]]
-      if (length(focal) != 1L || is.na(focal) ||
-          !(focal %in% item$options)) {
-        return(list(
-          enabled = FALSE,
-          reason = "Select a focal response offered by this item."
-        ))
-      }
-      list(enabled = TRUE, reason = NULL)
-    })
 
     amce_action_state <- shiny::reactive({
       r <- active_responses()
@@ -1516,15 +1453,6 @@ run_panel_studio <- function(...) {
       list(enabled = TRUE, reason = NULL)
     })
 
-    output$power_action <- shiny::renderUI({
-      state <- power_action_state()
-      .panel_gui_primary_action(
-        ns("calculate_power"),
-        "Calculate power",
-        state$enabled,
-        state$reason
-      )
-    })
 
     output$amce_action <- shiny::renderUI({
       state <- amce_action_state()
@@ -1536,30 +1464,6 @@ run_panel_studio <- function(...) {
       )
     })
 
-    shiny::observeEvent(input$calculate_power, {
-      analysis_error(NULL)
-      r <- active_responses()
-      if (is.null(r)) return()
-      item <- r$instrument$items[[1]]
-      effect <- suppressWarnings(as.numeric(input$power_effect))
-      alpha <- suppressWarnings(as.numeric(input$power_alpha))
-      target <- suppressWarnings(as.numeric(input$power_target))
-      focal <- input$power_focal
-      res <- LLMR.shiny::safe_llmr_call(
-        panel_power(
-          r, effect = effect, items = item$id,
-          focal = stats::setNames(focal, item$id),
-          alpha = alpha, power = target
-        ),
-        shared$provider()
-      )
-      if (!res$ok) {
-        analysis_error(res$ui)
-        power_result(NULL)
-        return()
-      }
-      power_result(res$value)
-    })
 
     shiny::observeEvent(input$calculate_amce, {
       analysis_error(NULL)
@@ -1825,53 +1729,14 @@ run_panel_studio <- function(...) {
           DT::DTOutput(ns("amce_tbl"))
         ))
       }
-      item <- r$instrument$items[[1]]
       shiny::tagList(
-        shiny::tags$h5("Power calculation"),
-        shiny::numericInput(
-          ns("power_effect"),
-          shiny::tagList(
-            "Minimum detectable difference ",
-            LLMR.shiny::help_tip(
-              "For a choice item, enter the difference in focal-response proportions between two arms."
-            )
-          ),
-          value = 0.10, min = 0.001, max = 0.99, step = 0.01
-        ),
-        shiny::selectInput(
-          ns("power_focal"),
-          shiny::tagList(
-            "Focal response ",
-            LLMR.shiny::help_tip(
-              "Power is calculated for the share choosing this response."
-            )
-          ),
-          choices = item$options, selected = item$options[[1]]
-        ),
-        shiny::numericInput(
-          ns("power_alpha"), "Two-sided alpha",
-          value = 0.05, min = 0.001, max = 0.2, step = 0.01
-        ),
-        shiny::numericInput(
-          ns("power_target"), "Target power",
-          value = 0.80, min = 0.5, max = 0.99, step = 0.01
-        ),
-        shiny::uiOutput(ns("power_action")),
-        DT::DTOutput(ns("power_tbl"))
+        shiny::tags$p(
+          class = "text-muted",
+          "Response and order diagnostics for this administration appear above."
+        )
       )
     })
 
-    output$power_tbl <- DT::renderDT({
-      shiny::req(power_result())
-      .panel_gui_datatable(
-        power_result(),
-        wrap_columns = intersect(
-          c("item", "item_id", "response", "focal"), names(power_result())
-        ),
-        identifier_columns = "item_id",
-        digits = 3L
-      )
-    })
 
     output$amce_tbl <- DT::renderDT({
       shiny::req(amce_result())

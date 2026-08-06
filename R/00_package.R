@@ -16,8 +16,8 @@
 #'
 #' [panel_benchmark()] compares response shares with a supplied benchmark.
 #' [panel_bias_audit()] counts parse failures and tests first-option sensitivity.
-#' [conjoint_amce()] estimates conjoint effects. [panel_power()] calculates
-#' two-arm sample sizes from pilot dispersion. [LLMR::report()] summarizes an
+#' [conjoint_amce()] estimates conjoint effects from the recorded
+#' respondent-level profile assignments.
 #' administration.
 #'
 #' @keywords internal

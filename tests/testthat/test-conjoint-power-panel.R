@@ -271,51 +271,6 @@ power_responses <- function() {
   panel_administer(panel, instr, cfg, .runner = fake)
 }
 
-test_that("panel_power matches the analytic formulas", {
-  responses <- power_responses()
-  out <- panel_power(responses, effect = c(lik = 0.5, pick = 0.2))
-  z <- stats::qnorm(1 - 0.05 / 2) + stats::qnorm(0.80)
-  sigma <- stats::sd(c(1, 2, 3, 3, 2, 1, 3, 2))
-  expected_lik <- ceiling(2 * sigma^2 * z^2 / 0.5^2)
-  p <- 6 / 8; p1 <- p - 0.1; p2 <- p + 0.1
-  expected_pick <- ceiling(z^2 * (p1 * (1 - p1) + p2 * (1 - p2)) / 0.2^2)
-  expect_equal(out$n_per_arm[out$item_id == "lik"], expected_lik)
-  expect_equal(out$n_per_arm[out$item_id == "pick"], expected_pick)
-  expect_equal(out$dispersion[out$item_id == "pick"], p)
-  expect_false("why" %in% out$item_id)
-})
-
-test_that("panel_power is monotone in effect and accepts named effects", {
-  responses <- power_responses()
-  small <- panel_power(responses, effect = 0.2, items = "lik")
-  large <- panel_power(responses, effect = 0.6, items = "lik")
-  expect_gt(small$n_per_arm, large$n_per_arm)
-  named <- panel_power(responses, effect = c(pick = 0.2, lik = 0.5),
-                       items = c("pick", "lik"))
-  expect_equal(named$effect, c(0.2, 0.5))
-})
-
-test_that("panel_power warns on a zero-variance prior", {
-  responses <- power_responses()
-  is_likert <- responses$data$item_id == "lik"
-  responses$data$response[is_likert] <- "high"
-  responses$data$score[is_likert] <- 3
-  expect_warning(out <- panel_power(responses, effect = c(lik = 0.5),
-                                    items = "lik"),
-                 "no variance in the pilot")
-  expect_true(is.na(out$n_per_arm))
-})
-
-test_that("panel_power reports and excludes execution failures", {
-  responses <- power_responses()
-  pick <- which(responses$data$item_id == "pick")
-  responses$data$success[pick[1]] <- FALSE
-  expect_warning(
-    out <- panel_power(responses, effect = 0.2, items = "pick"),
-    "execution failure")
-  expect_true(is.finite(out$n_per_arm))
-})
-
 test_that("panel_from_data preserves joint structure", {
   set.seed(110)
   src <- data.frame(x = c("a", "a", "b", "b"), y = c("A", "A", "B", "B"))

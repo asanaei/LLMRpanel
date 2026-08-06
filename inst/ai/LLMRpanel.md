@@ -49,7 +49,6 @@ panel_usage(responses, price_table = NULL)
 panel_benchmark(responses, benchmark, benchmark_name = "benchmark")
 panel_bias_audit(responses)
 conjoint_amce(responses)                     # AMCEs, persona-clustered SEs
-panel_power(responses, effect, items = NULL, focal = NULL, alpha = 0.05, power = 0.80)
 run_panel_studio(...)
 
 LLMR::diagnostics(responses)
@@ -92,7 +91,6 @@ cj <- panel_administer(panel, conjoint_instrument(design), cfg)
 conjoint_amce(cj)
 
 # calculate sample sizes from the pilot's dispersion
-panel_power(resp, effect = c(fund = 0.15))
 ```
 
 ## Rules
@@ -132,7 +130,6 @@ panel_power(resp, effect = c(fund = 0.15))
 - `conjoint_amce()` requires responses from `conjoint_instrument()` and clusters
   standard errors by persona. Its classed result retains run counts as ordinary
   columns. Baseline rows have estimate 0 and missing standard errors.
-- `panel_power()` uses pilot dispersion to calculate sample sizes. It does not
   validate the specified effect.
 - `LLMR::diagnostics()` returns the bias audit and benchmark fields.
   `LLMR::report()` returns the classed report.

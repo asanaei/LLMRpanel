@@ -21,8 +21,8 @@ batch API.
 
 \code{\link[=panel_benchmark]{panel_benchmark()}} compares response shares with a supplied benchmark.
 \code{\link[=panel_bias_audit]{panel_bias_audit()}} counts parse failures and tests first-option sensitivity.
-\code{\link[=conjoint_amce]{conjoint_amce()}} estimates conjoint effects. \code{\link[=panel_power]{panel_power()}} calculates
-two-arm sample sizes from pilot dispersion. \code{\link[LLMR:report]{LLMR::report()}} summarizes an
+\code{\link[=conjoint_amce]{conjoint_amce()}} estimates conjoint effects from the recorded
+respondent-level profile assignments.
 administration.
 }
 \seealso{

@@ -49,7 +49,7 @@ test_that("the public surface is the intended initial-release surface", {
     "panel_administer", "panel_batch_fetch", "panel_batch_status",
     "panel_batch_submit", "panel_benchmark", "panel_bias_audit",
     "panel_from_data", "panel_from_margins", "panel_from_personas",
-    "panel_instrument", "panel_power", "panel_usage", "run_panel_studio")
+    "panel_instrument", "panel_usage", "run_panel_studio")
 
   exports <- getNamespaceExports("LLMRpanel")
   # The intended surface must all exist; additions are allowed before 1.0,

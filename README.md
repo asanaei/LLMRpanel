@@ -197,14 +197,6 @@ conjoint_amce(cj_resp)
 
 ### Plan a human study from pilot dispersion
 
-`panel_power()` calculates two arm sample sizes from the observed dispersion
-and a researcher supplied minimum detectable effect. It uses Likert score
-dispersion or a focal choice share and omits open response items. The function
-does not validate the selected effect size.
-
-```r
-panel_power(resp, effect = c(wk4 = 0.4, fund = 0.15))
-```
 
 ## Graphical interface
 
