@@ -238,7 +238,9 @@ panel_from_data <- function(data, n, persona_template = NULL,
 #' For a reproducible draw, set a seed before calling (the function never sets
 #' one itself).
 #'
-#' @param data A persona data frame. Defaults to `LLMR::anes_2024_personas`.
+#' @param data A persona data frame, such as `LLMR::anes_2024_personas` (a
+#'   deliberate example choice, not a silent default: those 100 rows are
+#'   diversity-selected United States respondents with no survey weights).
 #' @param n Optional panel size. With `NULL`, every selected row is used; with a
 #'   number, rows are sampled (without replacement when `n` does not exceed the
 #'   pool, otherwise with replacement).
@@ -258,12 +260,13 @@ panel_from_data <- function(data, n, persona_template = NULL,
 #' }
 #' }
 #' @export
-panel_from_personas <- function(data = NULL, n = NULL, rows = NULL,
+panel_from_personas <- function(data, n = NULL, rows = NULL,
                                 weights = NULL) {
-  if (is.null(data)) {
-    if (!requireNamespace("LLMR", quietly = TRUE))
-      abort("Install LLMR (for anes_2024_personas) or pass `data`.")
-    data <- LLMR::anes_2024_personas
+  if (missing(data) || is.null(data)) {
+    abort(paste(
+      "`data` is required. For the bundled example personas pass",
+      "LLMR::anes_2024_personas explicitly (100 diversity-selected United",
+      "States respondents, no survey weights, not representative)."))
   }
   stopifnot(is.data.frame(data))
   if (!nrow(data)) abort("`data` must contain at least one row.")
@@ -271,22 +274,49 @@ panel_from_personas <- function(data = NULL, n = NULL, rows = NULL,
   N <- nrow(data)
   idx <- seq_len(N)
   if (!is.null(rows)) {
-    idx <- if (is.function(rows)) which(rows(data))
-           else if (is.logical(rows)) which(rows)
-           else as.integer(rows)
-    idx <- idx[idx >= 1L & idx <= N]
+    if (is.function(rows)) {
+      flag <- rows(data)
+      if (!is.logical(flag) || length(flag) != N) {
+        abort("A `rows` predicate must return one logical per row of `data`.")
+      }
+      idx <- which(flag)
+    } else if (is.logical(rows)) {
+      if (length(rows) != N) {
+        abort("A logical `rows` selector must have one entry per row of `data`.")
+      }
+      idx <- which(rows)
+    } else {
+      idx <- as.integer(rows)
+      if (anyNA(idx) || any(idx < 1L) || any(idx > N)) {
+        abort("`rows` indices must be whole numbers between 1 and nrow(data), with no NA.")
+      }
+    }
     if (!length(idx)) abort("`rows` selected no respondents.")
   }
 
   # resolve weights to a probability vector over the SELECTED rows.
   prob <- NULL
+  if (!is.null(weights) && is.null(n)) {
+    cli::cli_warn(paste(
+      "`weights` are used only when `n` draws a sample; with `n = NULL`",
+      "every selected row enters the panel and the weights are ignored."))
+  }
   if (!is.null(weights)) {
     w <- if (is.character(weights) && length(weights) == 1L) {
       if (!(weights %in% names(data))) abort("`weights` must name a column in `data`.")
-      as.numeric(data[[weights]])[idx]
-    } else as.numeric(weights)
+      col <- data[[weights]]
+      if (!is.numeric(col)) {
+        abort("`weights` must name a numeric column (a factor would be read as its codes).")
+      }
+      as.numeric(col)[idx]
+    } else {
+      if (!is.numeric(weights)) abort("`weights` must be numeric.")
+      as.numeric(weights)
+    }
     if (length(w) != length(idx)) abort("`weights` length must match the selected rows.")
-    w[is.na(w) | w < 0] <- 0
+    if (anyNA(w) || any(w < 0)) {
+      abort("`weights` must be nonnegative with no NA; repair them rather than have them silently zeroed.")
+    }
     if (sum(w) <= 0) abort("`weights` must have positive total weight.")
     prob <- w / sum(w)
   }
@@ -332,7 +362,9 @@ panel_from_personas <- function(data = NULL, n = NULL, rows = NULL,
 print.silicon_panel <- function(x, ...) {
   cat(sprintf("<silicon_panel | %d persona(s) | attributes: %s>\n",
               nrow(x), paste(names(attr(x, "margins")), collapse = ", ")))
-  cat(sprintf("  e.g. %s\n", x$persona[1]))
+  preview <- as.character(x$persona[1])
+  if (nchar(preview) > 160L) preview <- paste0(substr(preview, 1L, 157L), "...")
+  cat(sprintf("  e.g. %s\n", preview))
   invisible(x)
 }
 

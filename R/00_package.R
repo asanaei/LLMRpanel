@@ -45,14 +45,20 @@ utils::globalVariables(c("item_id", "response", "share", "share_human",
 # R's function-call lookup skips the NULL and finds the base function.
 requireNamespace <- NULL
 
-# Internal: literal placeholder substitution ({var} -> value), brace-safe.
+# Internal: literal placeholder substitution ({var} -> value), brace-safe and
+# single-pass, so a substituted value that itself contains "{something}" is
+# never re-substituted.
 .fill <- function(template, values) {
-  out <- template
-  for (nm in names(values)) {
-    out <- gsub(paste0("{", nm, "}"), as.character(values[[nm]]), out,
-                fixed = TRUE)
-  }
-  out
+  hits <- gregexpr("\\{[^{}]+\\}", template)
+  tags <- regmatches(template, hits)[[1]]
+  if (!length(tags)) return(template)
+  keys <- substring(tags, 2L, nchar(tags) - 1L)
+  replacements <- vapply(keys, function(key) {
+    if (key %in% names(values)) as.character(values[[key]])
+    else paste0("{", key, "}")
+  }, character(1))
+  regmatches(template, hits) <- list(unname(replacements))
+  template
 }
 
 # Internal: normalize a reply to one of the offered options. The first pass

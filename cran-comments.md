@@ -1,13 +1,20 @@
 ## Resubmission
 
-Resubmission of LLMRpanel 0.6.0. The incoming pretest of 2026-07-27 gave one
-WARNING under "checking dependencies in R code": three objects used by the
-optional GUI (LLMR.shiny::help_tip, LLMR.shiny::llmr_theme,
-LLMR.shiny::text_block_output) are not exported by LLMR.shiny 0.1.1, the
-version the pretest machines held. LLMR.shiny 0.1.2 exports them. The
-Suggests entry now states the version requirement, LLMR.shiny (>= 0.1.2).
+Resubmission of LLMRpanel, bumped to 0.6.1 (0.6.0 was never published).
+The July pretest declined 0.6.0 with a WARNING because three objects its GUI
+uses were not exported by the LLMR.shiny then on CRAN; LLMR.shiny 0.1.2,
+which exports them, is on CRAN now, and the Suggests entry states the
+requirement (LLMR.shiny >= 0.1.2).
 
-The accompanying NOTE flagged "Benchmarked" in the Description as possibly
+Version 0.6.1 also incorporates corrections from an external methodological
+review: the inert item-order randomization is gone (each persona-item pair
+is an independent request, so no questionnaire order is ever shown), Likert
+scales are reversed rather than arbitrarily permuted, human reference
+distributions are validated before comparison, an all-parse-failure item
+gets NA rather than zero shares, runners can no longer rewrite experimental
+assignments, and the vignette now executes offline end to end.
+
+The pretest NOTE flagged "Benchmarked" in the Description as possibly
 misspelled; it is ordinary English, the past participle of "benchmark".
 
 ## The package

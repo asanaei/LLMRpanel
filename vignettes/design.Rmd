@@ -8,10 +8,11 @@ vignette: >
 ---
 
 ```{r, include = FALSE}
-# Set RUN_LIVE <- TRUE to evaluate chunks with configured provider credentials.
-# FALSE keeps package and site builds offline.
+# Every chunk below runs offline through a deterministic runner, so the
+# vignette executes during package builds without credentials or charges.
+# One chunk near the end is gated by RUN_LIVE for a genuinely live call.
 RUN_LIVE <- FALSE
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = RUN_LIVE)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
 LLMRpanel administers survey and experimental instruments to panels of
@@ -21,9 +22,10 @@ from a configured model. `panel_benchmark()` compares closed-item response
 shares with benchmark shares supplied by the user. It records deviations by
 item and response, nonresponse, and the number of closed items covered.
 
-Set `RUN_LIVE` to `TRUE` to evaluate the provider calls below. The default
-`FALSE` setting lets package and site builds run without provider credentials
-or charges.
+Every example below executes offline through the `.runner` seam: a
+deterministic function stands in for the model, so the workflow runs during
+package builds without credentials or charges. One chunk near the end,
+gated by `RUN_LIVE`, shows the same call against a live provider.
 
 ## What silicon panels are for
 
@@ -40,6 +42,19 @@ item orders, option orders, or model configurations.
 
 ```{r setup}
 library(LLMRpanel)
+
+# A deterministic stand-in for the model: it always picks the first
+# DISPLAYED option of a closed item (so option-order randomization shows up
+# in the shares) and answers open items with a fixed sentence.
+first_shown <- function(experiments, ...) {
+  experiments$response_text <- vapply(seq_len(nrow(experiments)), function(i) {
+    shown <- experiments$option_order[i]
+    if (is.na(shown)) "Because it reaches the most people."
+    else strsplit(shown, "|", fixed = TRUE)[[1]][1]
+  }, character(1))
+  experiments$success <- TRUE
+  experiments
+}
 ```
 
 `panel_from_margins()` samples attribute values from the supplied marginal
@@ -76,24 +91,29 @@ among attributes rather than sampling each margin independently.
 `LLMR::report()` identifies whether a panel came from supplied margins,
 microdata rows, or supplied personas.
 
-`panel_administer()` sends each item to each persona. It returns a
-`panel_responses` object with response rows in `$data` and the panel,
-instrument, benchmark record, and token usage in separate components. It
-randomizes item and option order by default and records `item_position` and
-`option_order` in `$data`. The example repeats the administration with a second
-model configuration so response patterns can be compared across models.
+`panel_administer()` sends each item to each persona as an independent
+request. It returns a `panel_responses` object with response rows in `$data`
+and the panel, instrument, benchmark record, and token usage in separate
+components. It randomizes option order per response (a Likert scale is shown
+reversed for a random half) and records `item_position` (the item's fixed
+position in the instrument) and `option_order` (what this respondent saw) in
+`$data`. When comparing models, reset the seed before each administration so
+both models face the same option-order assignments.
 
 ```{r administer, purl=FALSE}
 cfg = LLMR::llm_config("groq", "openai/gpt-oss-20b", temperature = 0.8)
 cfg_qwen = LLMR::llm_config("groq", "qwen/qwen3-32b", temperature = 0.8)
 
-resp = panel_administer(panel, instrument, cfg)
+set.seed(110)
+resp = panel_administer(panel, instrument, cfg, .runner = first_shown)
 resp
 resp$data
 panel_bias_audit(resp)
 LLMR::diagnostics(resp)
 
-resp_qwen = panel_administer(panel, instrument, cfg_qwen)
+set.seed(110)   # the same assignments for the second model
+resp_qwen = panel_administer(panel, instrument, cfg_qwen,
+                             .runner = first_shown)
 panel_bias_audit(resp_qwen)
 ```
 
@@ -184,7 +204,8 @@ level of each attribute and calculates standard errors clustered by persona.
 
 ```{r conjoint_amce, purl=FALSE}
 cj_instr = conjoint_instrument(design, "Which product would you buy?")
-cj = panel_administer(panel, cj_instr, cfg)
+set.seed(110)
+cj = panel_administer(panel, cj_instr, cfg, .runner = first_shown)
 conjoint_amce(cj)
 ```
 
@@ -200,14 +221,28 @@ and pilot dispersion. It uses the standard deviation of Likert scores. For
 choice items, it uses a named focal response or the modal response share. The
 result has one row per analyzed closed item.
 
+The dispersion in this arithmetic comes from the model panel, not from
+human respondents, so treat the output as a reading of the pilot
+instrument, not as a sample-size plan for a human study.
+
 ```{r power, purl=FALSE}
 panel_power(resp, effect = c(wk4 = 0.4, fund = 0.15))
 ```
 
+## A live administration
+
+The identical call against a live provider drops the `.runner` argument.
+This chunk runs only when `RUN_LIVE` is set to `TRUE` in the setup chunk.
+
+```{r live, eval = RUN_LIVE, purl=FALSE}
+resp_live = panel_administer(panel, instrument, cfg)
+resp_live
+```
+
 ## Request counts and model choice
 
-`panel_administer()` makes one request per persona-item pair. Item and option
-randomization do not add requests. Provider prices and prompt and response
+`panel_administer()` makes one request per persona-item pair. Option
+randomization does not add requests. Provider prices and prompt and response
 lengths determine cost. A versioned local model can support later reruns when
 hosted endpoints change. The `$data` field retains `response_text`,
 `response_id`, `success`, `model`, and `provider`, including when a reply cannot

@@ -46,6 +46,14 @@ Calculates analytic sample sizes for a two-arm study. Likert items use the
 standard deviation of \code{score}. Choice items use the share of a focal response
 or, when appropriate, the modal response. Open items are omitted.
 }
+\details{
+The dispersion entering this arithmetic comes from the model panel, not
+from human respondents. Model-persona variance routinely differs from
+human variance (often it is smaller), so treat these figures as a rough
+reading of the pilot instrument, not as a defensible sample-size plan for
+a human study; for that, use dispersion from human pilot data or
+published estimates of the same outcome.
+}
 \examples{
 \dontrun{
 set.seed(110)

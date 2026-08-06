@@ -4,15 +4,21 @@
 \alias{panel_instrument}
 \title{Assemble an instrument}
 \usage{
-panel_instrument(items, randomize = c("item_order", "option_order"))
+panel_instrument(items, randomize = "option_order")
 }
 \arguments{
 \item{items}{A list of \link{panel_items} (\code{item_likert()}, \code{item_choice()},
 \code{item_open()}); ids must be unique.}
 
-\item{randomize}{Which orders to randomize per respondent:
-\code{"item_order"}, \code{"option_order"}, both (default), or \code{character(0)}
-for none. What each respondent saw is recorded in the responses.}
+\item{randomize}{Which orders to randomize per respondent. The only
+implemented value is \code{"option_order"} (the default): the options of a
+choice item are permuted per response, and a Likert scale is shown
+reversed for a random half of responses (an ordered scale has two
+readable orders, not \verb{k!}). \code{"item_order"} is refused: every
+persona-item pair is an independent request, so the model never sees a
+questionnaire order and shuffling one would fabricate an exposure that
+was not administered. \code{character(0)} randomizes nothing. What each
+respondent saw is recorded in the responses.}
 }
 \value{
 An object of class \code{panel_instrument}.

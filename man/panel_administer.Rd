@@ -50,8 +50,10 @@ returned rows may be in any order. Defaults to a live LLM call via
 \value{
 A \code{panel_responses} object with fields \code{data}, \code{panel}, \code{instrument},
 \code{benchmark}, and \code{usage}. \code{data} is a tibble with \code{persona_id}, \code{item_id},
-\code{type}, \code{item_position} (the 1-based position at which this respondent saw
-the item), \code{option_order} (what this respondent saw, \code{|}-separated),
+\code{type}, \code{item_position} (the item's fixed 1-based position in the
+instrument; each request is independent, so no questionnaire order is
+ever shown to the model), \code{option_order} (what this respondent saw,
+\code{|}-separated),
 \code{response} (matched option or \code{NA}; verbatim text for open items), and
 \code{score} (1-based scale position for Likert items). \code{score} uses the item's
 canonical scale rather than its displayed order. \code{response_text},

@@ -42,14 +42,32 @@ panel_benchmark <- function(responses, benchmark, benchmark_name = "benchmark") 
   if (!all(need %in% names(benchmark))) {
     abort("`benchmark` needs columns item_id, response, share.")
   }
+  if (!is.numeric(benchmark$share) || anyNA(benchmark$share) ||
+      any(benchmark$share < 0 | benchmark$share > 1)) {
+    abort("`benchmark$share` must contain probabilities in [0, 1] with no NA.")
+  }
+  key <- paste(benchmark$item_id, benchmark$response, sep = "\r")
+  if (anyDuplicated(key)) {
+    abort("Each benchmark item_id-response pair must appear exactly once.")
+  }
   sums <- stats::aggregate(share ~ item_id, data = benchmark, FUN = sum)
   off <- sums$item_id[abs(sums$share - 1) > 0.01]
   if (length(off)) {
-    cli::cli_warn("Benchmark shares do not sum to 1 for item(s): {.val {off}}.")
+    abort(paste0(
+      "Benchmark shares must sum to 1 within each item; item(s) ",
+      paste(sprintf("'%s'", off), collapse = ", "),
+      " do not. A reference that is not a distribution cannot anchor a",
+      " comparison."))
   }
 
   closed_all <- data[data$type != "open", ]
   if (!nrow(closed_all)) abort("No closed-item responses to benchmark.")
+  if (!is.null(responses$instrument$conjoint)) {
+    abort(paste(
+      "Conjoint responses cannot be benchmarked against marginal shares:",
+      "every respondent saw different profiles, so item-level response",
+      "shares are not comparable quantities."))
+  }
   items_total <- unique(closed_all$item_id)
   items_covered <- intersect(items_total, unique(benchmark$item_id))
   if (!length(items_covered)) {
@@ -79,10 +97,12 @@ panel_benchmark <- function(responses, benchmark, benchmark_name = "benchmark") 
       lev <- unique(as.character(benchmark$response[benchmark$item_id == id]))
       bad <- setdiff(lev, it$options)
       if (length(bad)) {
-        cli::cli_warn(paste(
-          "Benchmark response(s) {.val {bad}} for item {.val {id}} are not",
-          "among its offered options ({.val {it$options}}); their silicon",
-          "share is 0 by construction. Check case and spelling."))
+        abort(paste0(
+          "Benchmark response(s) ", paste(sprintf("'%s'", bad), collapse = ", "),
+          " for item '", id, "' are not among its offered options (",
+          paste(sprintf("'%s'", it$options), collapse = ", "),
+          "); a label that can never match would masquerade as total",
+          " divergence. Recode the benchmark to the offered labels."))
       }
     }
   }
@@ -126,6 +146,11 @@ panel_benchmark <- function(responses, benchmark, benchmark_name = "benchmark") 
                by = c("item_id", "response"), all = TRUE)
   cmp$share_silicon[is.na(cmp$share_silicon)] <- 0
   cmp$share_human[is.na(cmp$share_human)] <- 0
+  # An item with no valid responses at all has an undefined silicon
+  # distribution; zero shares would claim certainty that nothing was chosen.
+  valid_items <- unique(closed$item_id)
+  undefined <- !(cmp$item_id %in% valid_items)
+  cmp$share_silicon[undefined] <- NA_real_
   cmp$deviation <- cmp$share_silicon - cmp$share_human
 
   responses$benchmark <- list(
@@ -317,6 +342,7 @@ panel_bias_audit <- function(responses) {
     failed <- ri$success %in% FALSE
     pf <- if (closed) sum(is.na(ri$response) & !failed) else 0L
     p <- NA_real_
+    order_note <- NA_character_
     if (closed && length(unique(stats::na.omit(ri$option_order))) > 1L) {
       first_seen <- vapply(strsplit(ri$option_order, "|", fixed = TRUE),
                            `[[`, "", 1L)
@@ -324,15 +350,22 @@ panel_bias_audit <- function(responses) {
       if (sum(ok) >= 4L && length(unique(ri$response[ok])) > 1L) {
         tab <- table(ri$response[ok], first_seen[ok])
         if (all(dim(tab) >= 2L)) {
-          p <- tryCatch(
-            suppressWarnings(stats::chisq.test(tab)$p.value),
-            error = function(e) NA_real_)
+          test <- tryCatch(suppressWarnings(stats::chisq.test(tab)),
+                           error = function(e) NULL)
+          if (!is.null(test)) {
+            if (any(test$expected < 5)) {
+              order_note <- "sparse cells; chi-square approximation unreliable"
+            } else {
+              p <- test$p.value
+            }
+          }
         }
       }
     }
     tibble::tibble(item_id = ri$item_id[1], n = nrow(ri),
                    parse_failures = pf, execution_failures = sum(failed),
-                   order_effect_p = p)
+                   order_effect_p = p,
+                   order_test_note = order_note)
   })
   tibble::as_tibble(do.call(rbind, out))
 }
@@ -369,6 +402,13 @@ diagnostics.panel_responses <- function(x, ...) {
 #' Calculates analytic sample sizes for a two-arm study. Likert items use the
 #' standard deviation of `score`. Choice items use the share of a focal response
 #' or, when appropriate, the modal response. Open items are omitted.
+#'
+#' The dispersion entering this arithmetic comes from the model panel, not
+#' from human respondents. Model-persona variance routinely differs from
+#' human variance (often it is smaller), so treat these figures as a rough
+#' reading of the pilot instrument, not as a defensible sample-size plan for
+#' a human study; for that, use dispersion from human pilot data or
+#' published estimates of the same outcome.
 #'
 #' @param responses A [panel_administer()] result (the silicon pilot).
 #' @param effect Raw minimum detectable difference between the two arms:

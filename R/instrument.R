@@ -54,16 +54,22 @@ item_open <- function(id, text) {
 #'
 #' @param items A list of [panel_items] (`item_likert()`, `item_choice()`,
 #'   `item_open()`); ids must be unique.
-#' @param randomize Which orders to randomize per respondent:
-#'   `"item_order"`, `"option_order"`, both (default), or `character(0)`
-#'   for none. What each respondent saw is recorded in the responses.
+#' @param randomize Which orders to randomize per respondent. The only
+#'   implemented value is `"option_order"` (the default): the options of a
+#'   choice item are permuted per response, and a Likert scale is shown
+#'   reversed for a random half of responses (an ordered scale has two
+#'   readable orders, not `k!`). `"item_order"` is refused: every
+#'   persona-item pair is an independent request, so the model never sees a
+#'   questionnaire order and shuffling one would fabricate an exposure that
+#'   was not administered. `character(0)` randomizes nothing. What each
+#'   respondent saw is recorded in the responses.
 #' @return An object of class `panel_instrument`.
 #' @examples
 #' panel_instrument(list(
 #'   item_likert("trust", "How much do you trust the city council?"),
 #'   item_open("reason", "What is the main reason for your answer?")))
 #' @export
-panel_instrument <- function(items, randomize = c("item_order", "option_order")) {
+panel_instrument <- function(items, randomize = "option_order") {
   if (inherits(items, "panel_item")) items <- list(items)
   stopifnot(is.list(items), length(items) >= 1L)
   for (it in items) {
@@ -73,8 +79,15 @@ panel_instrument <- function(items, randomize = c("item_order", "option_order"))
   }
   ids <- vapply(items, `[[`, "", "id")
   if (anyDuplicated(ids)) abort("Item ids must be unique.")
-  bad <- setdiff(randomize, c("item_order", "option_order"))
-  if (length(bad)) abort("`randomize` may contain 'item_order' and/or 'option_order'.")
+  if ("item_order" %in% randomize) {
+    abort(paste(
+      "`item_order` is not implemented: items are administered as",
+      "independent requests, so no respondent ever sees a questionnaire",
+      "order. A sequential administration mode would be required for",
+      "genuine order exposure."))
+  }
+  bad <- setdiff(randomize, "option_order")
+  if (length(bad)) abort("`randomize` may contain only 'option_order'.")
   structure(list(items = items, randomize = randomize),
             class = "panel_instrument")
 }

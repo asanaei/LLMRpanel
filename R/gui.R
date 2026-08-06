@@ -534,7 +534,13 @@ run_panel_studio <- function(...) {
                           )
                         ),
                         choices = names(persona_source),
-                        selected = names(persona_source)
+                        # Demographic fields only by default: selecting all 125
+                        # fields would push every prior attitude item into the
+                        # prompt (target leakage) and multiply its length.
+                        selected = intersect(
+                          LLMR::llm_persona_demographic_fields(persona_source),
+                          names(persona_source)
+                        )
                       )
                     ),
                     shiny::conditionalPanel(

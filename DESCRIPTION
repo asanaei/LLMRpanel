@@ -1,9 +1,9 @@
 Type: Package
 Package: LLMRpanel
 Title: Benchmarked Silicon Samples for Survey and Experiment Design
-Version: 0.6.0
+Version: 0.6.1
 Authors@R:
-    person("Ali", "Sanaei", , "sanaei@uchicago.edu", role = c("aut", "cre"))
+    person("Ali", "Sanaei", , "sanaei@uchicago.edu", role = c("aut", "cre", "cph"))
 Description: Administers survey and experimental instruments to panels of
   language-model personas, with respondent-level randomization, benchmark
   comparison against human data, and conjoint estimation from recorded

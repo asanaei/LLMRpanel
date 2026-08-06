@@ -35,7 +35,7 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Ali Sanaei \email{sanaei@uchicago.edu}
+\strong{Maintainer}: Ali Sanaei \email{sanaei@uchicago.edu} [copyright holder]
 
 }
 \keyword{internal}

@@ -29,13 +29,13 @@ do not estimate a human population.
 panel_from_margins(margins, n, persona_template = NULL)
 panel_from_data(data, n, persona_template = NULL, columns = NULL,
                 weights = NULL)             # joint draws from microdata rows
-panel_from_personas(data = NULL, n = NULL, rows = NULL, weights = NULL)
+panel_from_personas(data, n = NULL, rows = NULL, weights = NULL)
 as_persona_frame(data, questions = NULL, demographics = NULL, answers = NULL)
 item_likert(id, text, scale = c("strongly disagree", "disagree", "neutral",
                                 "agree", "strongly agree"))
 item_choice(id, text, options)
 item_open(id, text)
-panel_instrument(items, randomize = c("item_order", "option_order"))
+panel_instrument(items, randomize = "option_order")
 conjoint_design(attributes, n_tasks = 5L, profiles_per_task = 2L)
 conjoint_instrument(design, question = "Which profile do you prefer?")
 

@@ -1,3 +1,41 @@
+# LLMRpanel 0.6.1
+
+Corrections from an external methodological review of 0.6.0 (never on CRAN).
+
+* `item_order` randomization is gone, and `panel_instrument()` refuses it
+  with an explanation: every persona-item pair is an independent request,
+  so no respondent ever sees a questionnaire order, and shuffling a
+  recorded position number claimed an exposure that was never administered.
+  `item_position` now documents the item's fixed instrument position.
+* Option-order randomization respects scale structure: choice options are
+  permuted, while a Likert scale is shown reversed for a random half of
+  responses (an ordered scale has two readable orders, not k factorial).
+* The submitted grid is the experimental record: a runner may contribute
+  responses and provider diagnostics, never rewrite assignments. Retained
+  provenance grows to request hashes (the default runner now asks LLMR for
+  them), model versions, and durations.
+* `panel_benchmark()` validates its human reference: probabilities in
+  [0, 1], one row per item-response pair, shares summing to one, labels
+  drawn from the offered options, and no conjoint responses (profiles
+  differ by respondent). An item whose every response failed to parse gets
+  `NA` shares, not a zero distribution.
+* `panel_bias_audit()` reports `NA` with a note when chi-square expected
+  counts are sparse, instead of an unreliable p-value.
+* `panel_from_personas()` requires `data` (the bundled ANES example is an
+  explicit choice, not a silent default), validates `rows` selectors,
+  refuses NA or negative weights rather than zeroing them, requires numeric
+  weight columns, and warns when weights are supplied without `n`.
+* `panel_power()` documentation states plainly that its dispersion comes
+  from the model panel, not humans, and is not a human-study plan.
+* Placeholder filling is single-pass, so substituted values containing
+  braces are never re-substituted; the panel print shows a truncated
+  persona preview.
+* The Studio's persona-field default is the demographic fields rather than
+  all 125 columns (prior attitude items in the prompt are target leakage);
+  the vignette now executes offline end to end through a deterministic
+  runner, with one live-gated chunk; cross-model comparisons in it reuse
+  the seed so both models face the same assignments.
+
 # LLMRpanel 0.6.0
 
 Initial CRAN release.

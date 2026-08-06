@@ -34,7 +34,7 @@ cfg <- LLMR::llm_config(
 
 Administration requires an explicit `LLMR::llm_config()`. Under the hood,
 LLMRpanel calls language models through the LLMR package, which reads your API
-key from an environment variable such as `OPENAI_API_KEY`. Set it once in your
+key from an environment variable such as `GROQ_API_KEY`. Set it once in your
 `~/.Renviron` file, a plain text file in your home directory.
 
 ## A complete panel study

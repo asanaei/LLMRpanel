@@ -33,8 +33,10 @@
 #' @param ... Passed to the runner (e.g. `tries`, `progress`).
 #' @return A `panel_responses` object with fields `data`, `panel`, `instrument`,
 #'   `benchmark`, and `usage`. `data` is a tibble with `persona_id`, `item_id`,
-#'   `type`, `item_position` (the 1-based position at which this respondent saw
-#'   the item), `option_order` (what this respondent saw, `|`-separated),
+#'   `type`, `item_position` (the item's fixed 1-based position in the
+#'   instrument; each request is independent, so no questionnaire order is
+#'   ever shown to the model), `option_order` (what this respondent saw,
+#'   `|`-separated),
 #'   `response` (matched option or `NA`; verbatim text for open items), and
 #'   `score` (1-based scale position for Likert items). `score` uses the item's
 #'   canonical scale rather than its displayed order. `response_text`,
@@ -73,7 +75,7 @@ panel_administer <- function(panel, instrument, config, max_calls = 5000L,
     abort("`config` must be an LLMR::llm_config().")
   }
   runner <- .runner %||% function(experiments, ...) {
-    LLMR::call_llm_par(experiments, ...)
+    LLMR::call_llm_par(experiments, ..., .request_hash = TRUE)
   }
 
   exps <- .panel_build_grid(panel, instrument, config)
@@ -96,8 +98,24 @@ panel_administer <- function(panel, instrument, config, max_calls = 5000L,
       "with each id appearing once."))
   }
   res <- res[match(exps$request_id, returned_ids), , drop = FALSE]
-  .panel_parse_responses(res, instrument, panel)
+  # The grid is the experimental record: a runner may supply responses and
+  # provider diagnostics, never rewrite assignments (persona, item, shown
+  # order, drawn profiles).
+  out <- exps
+  for (nm in intersect(names(res), .panel_response_fields)) {
+    out[[nm]] <- res[[nm]]
+  }
+  .panel_parse_responses(out, instrument, panel)
 }
+
+# Response and provenance columns a runner may contribute; everything else in
+# the returned frame is ignored in favor of the submitted grid.
+.panel_response_fields <- c(
+  "response_text", "response_id", "success", "error_message",
+  "finish_reason", "model_version", "request_hash",
+  "sent_tokens", "rec_tokens", "total_tokens", "reasoning_tokens",
+  "cached_tokens", "duration", "duration_s", "created_at",
+  "status_code", "error_code")
 
 # --- internal: grid build, response parse, and preflight (shared) ----------
 # Build the persona x item experiment grid. Each row carries the metadata needed
@@ -110,7 +128,6 @@ panel_administer <- function(panel, instrument, config, max_calls = 5000L,
   }, logical(1)))
   for (p in seq_len(nrow(panel))) {
     items <- instrument$items
-    if ("item_order" %in% instrument$randomize) items <- sample(items)
     for (j in seq_along(items)) {
       it <- items[[j]]
       profiles <- NULL
@@ -131,7 +148,13 @@ panel_administer <- function(panel, instrument, config, max_calls = 5000L,
       }
       opts <- it$options
       if (!is.null(opts) && "option_order" %in% instrument$randomize) {
-        opts <- sample(opts)
+        # An ordered scale has two readable presentations; a nominal choice
+        # set has k!. Reverse the one, permute the other.
+        opts <- if (identical(it$type, "likert")) {
+          if (sample.int(2L, 1L) == 2L) rev(opts) else opts
+        } else {
+          sample(opts)
+        }
       }
       sys <- paste(
         "You are answering a survey strictly in character as the following",
@@ -201,13 +224,15 @@ panel_administer <- function(panel, instrument, config, max_calls = 5000L,
             "option_order", intersect("profiles", names(res)),
             "response_text", "response_id", "success", "error_message",
             "finish_reason", "model", "provider",
+            intersect(c("model_version", "request_hash", "created_at"),
+                      names(res)),
             "response", "score")
   out <- res[, keep]
   out <- tibble::as_tibble(out)
 
   usage_cols <- intersect(
     c("sent_tokens", "rec_tokens", "total_tokens", "reasoning_tokens",
-      "cached_tokens", "duration"), names(res))
+      "cached_tokens", "duration", "duration_s"), names(res))
   usage <- NULL
   if (length(usage_cols)) {
     keep <- intersect(

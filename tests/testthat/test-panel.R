@@ -7,7 +7,7 @@ fix_panel <- function(n = 20, seed = 110) {
     persona_template = "A {age} voter who leans {party}.")
 }
 
-fix_instr <- function(randomize = c("item_order", "option_order")) {
+fix_instr <- function(randomize = "option_order") {
   panel_instrument(list(
     item_likert("wk4", "A four-day work week would benefit society.",
                 scale = c("disagree", "neutral", "agree")),
@@ -64,7 +64,7 @@ test_that("instruments validate and conjoint designs have the right shape", {
   expect_error(panel_instrument(list(item_open("a", "t"), item_open("a", "t"))),
                "unique")
   expect_error(panel_instrument(list(item_open("a", "t")), randomize = "colors"),
-               "item_order")
+               "only 'option_order'")
 
   set.seed(110)
   cj <- conjoint_design(list(price = c("low", "high"),
@@ -142,25 +142,19 @@ test_that("the synchronous runner requires each submitted request_id once", {
     id_error)
 })
 
-test_that("item presentation order is recorded per respondent", {
+test_that("item positions are the instrument's fixed order, never shuffled", {
   set.seed(110)
   r <- panel_administer(fix_panel(20), fix_instr(), fix_cfg(),
                         .runner = runner_by_party)
   expect_true("item_position" %in% names(r$data))
-  # each persona saw every item exactly once, at positions 1..3
-  for (pid in unique(r$data$persona_id)) {
-    expect_setequal(r$data$item_position[r$data$persona_id == pid], 1:3)
-  }
-  # with item_order randomized, an item's position varies across personas
-  expect_gt(length(unique(r$data$item_position[r$data$item_id == "wk4"])), 1L)
-
-  # with randomization off, positions follow the instrument's canonical order
-  set.seed(110)
-  r2 <- panel_administer(fix_panel(5), fix_instr(randomize = character(0)),
-                         fix_cfg(), .runner = runner_by_party)
-  expect_equal(unique(r2$data$item_id[r2$data$item_position == 1]), "wk4")
-  expect_equal(unique(r2$data$item_id[r2$data$item_position == 2]), "plan")
-  expect_equal(unique(r2$data$item_id[r2$data$item_position == 3]), "why")
+  # each persona-item pair is an independent request: the recorded position
+  # is the item's canonical instrument index, identical for every persona
+  expect_equal(unique(r$data$item_position[r$data$item_id == "wk4"]), 1L)
+  expect_equal(unique(r$data$item_id[r$data$item_position == 2]), "plan")
+  expect_equal(unique(r$data$item_id[r$data$item_position == 3]), "why")
+  # and item_order randomization is refused with an explanation
+  expect_error(fix_instr(randomize = c("item_order", "option_order")),
+               "not implemented")
 })
 
 test_that("reserved column names abort early in all three constructors", {
@@ -212,14 +206,14 @@ test_that(".match_option strips quotes and trailing punctuation on a second pass
   expect_true(all(r$data$score == 3))
 })
 
-test_that("panel_benchmark warns when benchmark levels mismatch offered options", {
+test_that("panel_benchmark refuses benchmark levels outside the offered options", {
   set.seed(110)
   r <- panel_administer(fix_panel(10), fix_instr(), fix_cfg(),
                         .runner = runner_by_party)
   bench_typo <- data.frame(item_id = "plan", response = c("plan a", "Plan B"),
                            share = c(.5, .5))
-  expect_warning(panel_benchmark(r, bench_typo, "typo bench"),
-                 "not among its offered options")
+  expect_error(panel_benchmark(r, bench_typo, "typo bench"),
+               "not among its offered options")
   bench_ok <- data.frame(item_id = "plan", response = c("Plan A", "Plan B"),
                          share = c(.5, .5))
   expect_no_warning(panel_benchmark(r, bench_ok, "clean bench"))
@@ -256,7 +250,7 @@ test_that("the banner walks through benchmark coverage states", {
   expect_false(any(grepl("NOT BENCHMARKED|PARTIALLY",
                          utils::capture.output(print(rb)))))
 
-  expect_warning(
+  expect_error(
     panel_benchmark(r, data.frame(item_id = "plan",
                                   response = c("Plan A", "Plan B"),
                                   share = c(.7, .6))),
@@ -275,7 +269,7 @@ test_that("bias_audit detects option-order effects", {
   expect_identical(
     names(ba),
     c("item_id", "n", "parse_failures", "execution_failures",
-      "order_effect_p"))
+      "order_effect_p", "order_test_note"))
   p_choice <- ba$order_effect_p[ba$item_id == "plan"]
   expect_lt(p_choice, 0.01)
   expect_true(is.na(ba$order_effect_p[ba$item_id == "why"]))
@@ -381,8 +375,8 @@ test_that("shared generics dispatch for panel responses", {
   expect_s3_class(dg, "tbl_df")
   expect_equal(names(dg),
                c("item_id", "n", "parse_failures", "execution_failures",
-                 "order_effect_p", "benchmark_state", "items_covered",
-                 "items_total", "mean_abs_dev"))
+                 "order_effect_p", "order_test_note", "benchmark_state",
+                 "items_covered", "items_total", "mean_abs_dev"))
   expect_true(all(dg$benchmark_state == "NOT BENCHMARKED"))
   expect_equal(unique(dg$items_covered), 0L)
   expect_equal(unique(dg$items_total), 2L)
@@ -437,9 +431,10 @@ test_that("benchmarking an all-parse-failure item does not crash", {
   expect_true(!is.null(bm))
   nr <- bm$nonresponse
   expect_equal(nr$nonresponse_rate[nr$item_id == "plan"], 1)
-  # the benchmark responses survive with silicon share 0
+  # zero valid responses is an undefined distribution, not a zero one
   plan_rows <- bm$table[bm$table$item_id == "plan", ]
-  expect_true(all(plan_rows$share_silicon == 0))
+  expect_true(all(is.na(plan_rows$share_silicon)))
+  expect_true(all(is.na(plan_rows$deviation)))
 })
 
 test_that("benchmarking refuses an item with only execution failures", {

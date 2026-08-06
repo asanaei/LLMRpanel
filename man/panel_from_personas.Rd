@@ -4,10 +4,12 @@
 \alias{panel_from_personas}
 \title{Draw a panel from a persona data frame}
 \usage{
-panel_from_personas(data = NULL, n = NULL, rows = NULL, weights = NULL)
+panel_from_personas(data, n = NULL, rows = NULL, weights = NULL)
 }
 \arguments{
-\item{data}{A persona data frame. Defaults to \code{LLMR::anes_2024_personas}.}
+\item{data}{A persona data frame, such as \code{LLMR::anes_2024_personas} (a
+deliberate example choice, not a silent default: those 100 rows are
+diversity-selected United States respondents with no survey weights).}
 
 \item{n}{Optional panel size. With \code{NULL}, every selected row is used; with a
 number, rows are sampled (without replacement when \code{n} does not exceed the
