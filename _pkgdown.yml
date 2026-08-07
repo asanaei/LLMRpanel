@@ -29,9 +29,6 @@ reference:
   - conjoint_design
   - conjoint_instrument
   - conjoint_amce
-- title: Plan human studies from pilot dispersion
-  contents:
-  - panel_power
 - title: Graphical interface
   contents:
   - run_panel_studio
