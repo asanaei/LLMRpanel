@@ -19,9 +19,13 @@ joined to the grid by request id, so the order the provider returns them in
 does not matter.
 }
 \examples{
-\dontrun{
-job <- readRDS("panel_job.rds")
-responses <- panel_batch_fetch(job)
+# Fetching reads the job saved at submission, once the provider reports it
+# complete; the result has the same shape as a synchronous run.
+state <- file.path(tempdir(), "panel_job.rds")
+\donttest{
+if (file.exists(state)) {
+  responses <- panel_batch_fetch(state)
+}
 }
 }
 \seealso{

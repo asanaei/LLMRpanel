@@ -39,13 +39,17 @@
 #' @seealso [panel_batch_fetch()], [panel_batch_status()],
 #'   [panel_administer()].
 #' @examples
-#' \dontrun{
 #' panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 200)
 #' instrument <- panel_instrument(item_likert("wk4", "A four-day work week helps."))
-#' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-#' job <- panel_batch_submit(panel, instrument, cfg, state_path = "panel_job.rds")
-#' # ... later:
-#' resp <- panel_batch_fetch(job)
+#' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b",
+#'                         api_key = LLMR::llm_api_key_env("GROQ_API_KEY"))
+#' state <- file.path(tempdir(), "panel_job.rds")
+#'
+#' \donttest{
+#' if (nzchar(Sys.getenv("GROQ_API_KEY"))) {
+#'   job <- panel_batch_submit(panel, instrument, cfg, state_path = state)
+#'   panel_batch_status(job)
+#' }
 #' }
 #' @export
 panel_batch_submit <- function(panel, instrument, config, state_path = NULL,
@@ -85,9 +89,13 @@ panel_batch_submit <- function(panel, instrument, config, state_path = NULL,
 #' @return The LLMR batch status (a one-row tibble).
 #' @seealso [panel_batch_submit()], [panel_batch_fetch()].
 #' @examples
-#' \dontrun{
-#' job <- readRDS("panel_job.rds")
-#' panel_batch_status(job)
+#' # A job saved by panel_batch_submit(state_path = ) is read back by path,
+#' # so its progress can be checked from a later session.
+#' state <- file.path(tempdir(), "panel_job.rds")
+#' \donttest{
+#' if (file.exists(state)) {
+#'   panel_batch_status(state)
+#' }
 #' }
 #' @export
 panel_batch_status <- function(job) {
@@ -107,9 +115,13 @@ panel_batch_status <- function(job) {
 #' @return A `panel_responses` object.
 #' @seealso [panel_batch_submit()], [panel_batch_status()].
 #' @examples
-#' \dontrun{
-#' job <- readRDS("panel_job.rds")
-#' responses <- panel_batch_fetch(job)
+#' # Fetching reads the job saved at submission, once the provider reports it
+#' # complete; the result has the same shape as a synchronous run.
+#' state <- file.path(tempdir(), "panel_job.rds")
+#' \donttest{
+#' if (file.exists(state)) {
+#'   responses <- panel_batch_fetch(state)
+#' }
 #' }
 #' @export
 panel_batch_fetch <- function(job) {

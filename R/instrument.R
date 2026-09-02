@@ -208,8 +208,17 @@ print.conjoint_design <- function(x, ...) {
 #' instrument <- conjoint_instrument(design, "Which candidate do you prefer?")
 #' instrument
 #' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-#' \dontrun{
-#' panel_administer(panel, instrument, cfg)
+#'
+#' first_shown <- function(experiments, ...) {
+#'   experiments$response_text <- "Profile 1"
+#'   experiments
+#' }
+#' panel_administer(panel, instrument, cfg, .runner = first_shown)
+#'
+#' \donttest{
+#' if (nzchar(Sys.getenv("GROQ_API_KEY"))) {
+#'   panel_administer(panel, instrument, cfg)
+#' }
 #' }
 #' @export
 conjoint_instrument <- function(design,

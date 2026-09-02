@@ -46,13 +46,17 @@ supplied, the API key must be referenced through an environment variable so
 its value is not written to the saved state.
 }
 \examples{
-\dontrun{
 panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 200)
 instrument <- panel_instrument(item_likert("wk4", "A four-day work week helps."))
-cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-job <- panel_batch_submit(panel, instrument, cfg, state_path = "panel_job.rds")
-# ... later:
-resp <- panel_batch_fetch(job)
+cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b",
+                        api_key = LLMR::llm_api_key_env("GROQ_API_KEY"))
+state <- file.path(tempdir(), "panel_job.rds")
+
+\donttest{
+if (nzchar(Sys.getenv("GROQ_API_KEY"))) {
+  job <- panel_batch_submit(panel, instrument, cfg, state_path = state)
+  panel_batch_status(job)
+}
 }
 }
 \seealso{

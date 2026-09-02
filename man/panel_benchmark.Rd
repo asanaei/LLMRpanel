@@ -32,16 +32,28 @@ Without a benchmark, response shares describe the configured model under the
 supplied personas, not a human population.
 }
 \examples{
-\dontrun{
 set.seed(110)
-panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 12)
+panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 12,
+                            persona_template = "A voter who leans {party}.")
 instrument <- panel_instrument(item_choice("plan", "Which plan do you prefer?",
                                            c("A", "B")))
 cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-r <- panel_administer(panel, instrument, cfg)
-r
+
+by_party <- function(experiments, ...) {
+  experiments$response_text <- ifelse(
+    grepl("leans left", vapply(experiments$messages, `[[`, "", "system")),
+    "A", "B")
+  experiments
+}
+r <- panel_administer(panel, instrument, cfg, .runner = by_party)
 bench <- data.frame(item_id = "plan", response = c("A", "B"),
                     share = c(.5, .5))
 panel_benchmark(r, bench, "toy human study")
+
+\donttest{
+if (nzchar(Sys.getenv("GROQ_API_KEY"))) {
+  live <- panel_administer(panel, instrument, cfg)
+  panel_benchmark(live, bench, "toy human study")
+}
 }
 }

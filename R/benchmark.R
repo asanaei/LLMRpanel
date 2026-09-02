@@ -22,17 +22,29 @@
 #'   failure rates per item),
 #'   `$items_covered` / `$items_total`, `$mean_abs_dev`, `$max_dev`.
 #' @examples
-#' \dontrun{
 #' set.seed(110)
-#' panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 12)
+#' panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 12,
+#'                             persona_template = "A voter who leans {party}.")
 #' instrument <- panel_instrument(item_choice("plan", "Which plan do you prefer?",
 #'                                            c("A", "B")))
 #' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-#' r <- panel_administer(panel, instrument, cfg)
-#' r
+#'
+#' by_party <- function(experiments, ...) {
+#'   experiments$response_text <- ifelse(
+#'     grepl("leans left", vapply(experiments$messages, `[[`, "", "system")),
+#'     "A", "B")
+#'   experiments
+#' }
+#' r <- panel_administer(panel, instrument, cfg, .runner = by_party)
 #' bench <- data.frame(item_id = "plan", response = c("A", "B"),
 #'                     share = c(.5, .5))
 #' panel_benchmark(r, bench, "toy human study")
+#'
+#' \donttest{
+#' if (nzchar(Sys.getenv("GROQ_API_KEY"))) {
+#'   live <- panel_administer(panel, instrument, cfg)
+#'   panel_benchmark(live, bench, "toy human study")
+#' }
 #' }
 #' @export
 panel_benchmark <- function(responses, benchmark, benchmark_name = "benchmark") {
@@ -418,7 +430,6 @@ diagnostics.panel_responses <- function(x, ...) {
 #'   `n_execution_failures` record the profile rows used, the respondents
 #'   administered, missing task responses dropped, and failed executions.
 #' @examples
-#' \dontrun{
 #' set.seed(110)
 #' panel <- panel_from_margins(list(group = c(A = .5, B = .5)), n = 6)
 #' design <- conjoint_design(
@@ -426,8 +437,23 @@ diagnostics.panel_responses <- function(x, ...) {
 #'   n_tasks = 6)
 #' instrument <- conjoint_instrument(design)
 #' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-#' r <- panel_administer(panel, instrument, cfg)
+#'
+#' # A synthetic respondent who always takes the red profile: the AMCE for red
+#' # is recovered, and cost is flat.
+#' prefers_red <- function(experiments, ...) {
+#'   shown <- vapply(experiments$messages, `[[`, "", "user")
+#'   first <- sub("Profile 2.*", "", shown)
+#'   experiments$response_text <- ifelse(grepl("red", first),
+#'                                       "Profile 1", "Profile 2")
+#'   experiments
+#' }
+#' r <- panel_administer(panel, instrument, cfg, .runner = prefers_red)
 #' conjoint_amce(r)
+#'
+#' \donttest{
+#' if (nzchar(Sys.getenv("GROQ_API_KEY"))) {
+#'   conjoint_amce(panel_administer(panel, instrument, cfg))
+#' }
 #' }
 #' @references Hainmueller, Jens, Daniel J. Hopkins, and Teppei Yamamoto
 #'   (2014). "Causal Inference in Conjoint Analysis: Understanding

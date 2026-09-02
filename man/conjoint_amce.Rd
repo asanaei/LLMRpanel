@@ -30,7 +30,6 @@ AMCE estimator. The regression uses the respondent-level profiles recorded
 during administration, not the profiles in the initial design table.
 }
 \examples{
-\dontrun{
 set.seed(110)
 panel <- panel_from_margins(list(group = c(A = .5, B = .5)), n = 6)
 design <- conjoint_design(
@@ -38,8 +37,23 @@ design <- conjoint_design(
   n_tasks = 6)
 instrument <- conjoint_instrument(design)
 cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-r <- panel_administer(panel, instrument, cfg)
+
+# A synthetic respondent who always takes the red profile: the AMCE for red
+# is recovered, and cost is flat.
+prefers_red <- function(experiments, ...) {
+  shown <- vapply(experiments$messages, `[[`, "", "user")
+  first <- sub("Profile 2.*", "", shown)
+  experiments$response_text <- ifelse(grepl("red", first),
+                                      "Profile 1", "Profile 2")
+  experiments
+}
+r <- panel_administer(panel, instrument, cfg, .runner = prefers_red)
 conjoint_amce(r)
+
+\donttest{
+if (nzchar(Sys.getenv("GROQ_API_KEY"))) {
+  conjoint_amce(panel_administer(panel, instrument, cfg))
+}
 }
 }
 \references{

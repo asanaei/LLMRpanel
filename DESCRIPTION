@@ -7,7 +7,11 @@ Authors@R:
 Description: Administers survey and experimental instruments to panels of
   language-model personas, with respondent-level randomization, benchmark
   comparison against human data, and conjoint estimation from recorded
-  respondent-level profile assignments.
+  respondent-level profile assignments. Samples of language-model personas
+  follow Argyle et al. (2023) <doi:10.1017/pan.2023.2>; the case for
+  benchmarking them against human data is set out in Bisbee et al. (2024)
+  <doi:10.1017/pan.2024.5>; the conjoint estimand is the average marginal
+  component effect of Hainmueller et al. (2014) <doi:10.1093/pan/mpt024>.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

@@ -67,6 +67,13 @@ run_panel_studio <- function(...) {
     !identical(anes_mode %||% "draw", "selected")
 }
 
+# The seed field is optional: a blank field returns NA and nothing is seeded, so
+# the session's random stream stays as the user left it.
+.panel_gui_seed <- function(value) {
+  seed <- suppressWarnings(as.integer(value))
+  if (length(seed) != 1L) NA_integer_ else seed
+}
+
 .panel_gui_sidebar <- function() {
   LLMR.shiny::shell_sidebar(
     max_tokens_help = sprintf(
@@ -661,6 +668,20 @@ run_panel_studio <- function(...) {
                 ),
                 value = 1, min = 1, max = 20, step = 1
               ),
+              shiny::numericInput(
+                ns("seed"),
+                shiny::tagList(
+                  "Random seed (optional) ",
+                  LLMR.shiny::help_tip(
+                    paste(
+                      "Governs the panel draw, the conjoint profile draws, and",
+                      "the option order each persona sees. Leave it blank to",
+                      "draw from the session's own random stream."
+                    )
+                  )
+                ),
+                value = NA, min = 1, step = 1
+              ),
               shiny::uiOutput(ns("max_tokens_status"))
             ),
             bslib::accordion_panel(
@@ -1013,6 +1034,7 @@ run_panel_studio <- function(...) {
           return()
         }
       }
+      draw_seed <- .panel_gui_seed(input$seed)
       res <- if (identical(source, "anes")) {
         columns <- input$persona_columns
         if (is.null(columns)) columns <- names(persona_source)
@@ -1030,7 +1052,7 @@ run_panel_studio <- function(...) {
           return()
         }
         LLMR.shiny::safe_llmr_call({
-          set.seed(110)
+          if (!is.na(draw_seed)) set.seed(draw_seed)
           frame <- if (setequal(columns, names(persona_source))) {
             persona_source
           } else {
@@ -1054,7 +1076,7 @@ run_panel_studio <- function(...) {
           return()
         }
         LLMR.shiny::safe_llmr_call({
-          set.seed(110)
+          if (!is.na(draw_seed)) set.seed(draw_seed)
           panel_from_margins(margins, n = panel_n,
                              persona_template = template)
         }, shared$provider())
@@ -1209,6 +1231,7 @@ run_panel_studio <- function(...) {
         conjoint_question = question,
         runs = runs,
         mode = mode,
+        seed = .panel_gui_seed(input$seed),
         provider = shared$provider(),
         model = shared$model(),
         temperature = shared$temperature(),
@@ -1222,7 +1245,7 @@ run_panel_studio <- function(...) {
       run_error(NULL)
       analysis_error(NULL)
       run_call <- function(show_progress = FALSE) {
-        set.seed(110)
+        if (!is.na(job$seed)) set.seed(job$seed)
         instrument <- if (identical(job$instrument_type, "conjoint")) {
           design <- conjoint_design(
             job$attributes,
@@ -1264,9 +1287,18 @@ run_panel_studio <- function(...) {
             do.call(rbind, pieces)
           }
         }
+        # Repeated runs must show each persona the same questionnaire, so that
+        # what differs between runs is the model's answer. The supplied seed
+        # serves when there is one; otherwise a single seed is drawn for the set.
+        run_seed <- if (!is.na(job$seed)) {
+          job$seed
+        } else if (job$runs > 1L) {
+          sample.int(.Machine$integer.max, 1L)
+        } else {
+          NA_integer_
+        }
         run_results <- lapply(seq_len(job$runs), function(run) {
-          # Identical randomization across runs isolates model response variation.
-          set.seed(110)
+          if (!is.na(run_seed)) set.seed(run_seed)
           panel_administer(
             job$panel, instrument, cfg,
             confirm = TRUE, .runner = runner

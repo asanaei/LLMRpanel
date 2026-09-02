@@ -16,9 +16,13 @@ The LLMR batch status (a one-row tibble).
 Check the status of a panel batch job
 }
 \examples{
-\dontrun{
-job <- readRDS("panel_job.rds")
-panel_batch_status(job)
+# A job saved by panel_batch_submit(state_path = ) is read back by path,
+# so its progress can be checked from a later session.
+state <- file.path(tempdir(), "panel_job.rds")
+\donttest{
+if (file.exists(state)) {
+  panel_batch_status(state)
+}
 }
 }
 \seealso{

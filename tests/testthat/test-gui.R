@@ -538,7 +538,8 @@ test_that("ANES field selection preserves the default and restricts on request",
     args = list(shared = gui_demo_shared()),
     {
       session$setInputs(
-        source = "anes", anes_mode = "draw", n = 2, build_panel = 1
+        source = "anes", anes_mode = "draw", n = 2, seed = 110,
+        build_panel = 1
       )
       session$flushReact()
       set.seed(110)
@@ -598,7 +599,7 @@ test_that("ANES construction modes ignore the inactive row control", {
       )
       expect_identical(panel()$persona, expected$persona)
 
-      session$setInputs(anes_mode = "draw", n = 4, build_panel = 2)
+      session$setInputs(anes_mode = "draw", n = 4, seed = 110, build_panel = 2)
       session$flushReact()
       set.seed(110)
       expected <- panel_from_personas(LLMR::anes_2024_personas, n = 4)
@@ -809,4 +810,39 @@ test_that("the results card wires its download control to the artifact bundle", 
     ),
     code
   ))
+})
+
+test_that("the Studio seeds only when a seed is supplied", {
+  expect_true(is.na(LLMRpanel:::.panel_gui_seed(NULL)))
+  expect_true(is.na(LLMRpanel:::.panel_gui_seed(NA)))
+  expect_true(is.na(LLMRpanel:::.panel_gui_seed("")))
+  expect_identical(LLMRpanel:::.panel_gui_seed(110), 110L)
+  expect_identical(LLMRpanel:::.panel_gui_seed("110"), 110L)
+
+  code <- paste(deparse(LLMRpanel:::.panel_gui_module_server), collapse = "\n")
+  expect_false(grepl("set.seed(110)", code, fixed = TRUE))
+  expect_true(grepl("is.na(draw_seed)", code, fixed = TRUE))
+  expect_true(grepl("set.seed(draw_seed)", code, fixed = TRUE))
+  expect_true(grepl("set.seed(run_seed)", code, fixed = TRUE))
+})
+
+test_that("a blank seed draws the panel from the session's own stream", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
+
+  set.seed(4242)
+  expected <- panel_from_personas(LLMR::anes_2024_personas, n = 3)
+
+  shiny::testServer(
+    LLMRpanel:::.panel_gui_module_server,
+    args = list(shared = gui_demo_shared()),
+    {
+      set.seed(4242)
+      session$setInputs(
+        source = "anes", anes_mode = "draw", n = 3, build_panel = 1
+      )
+      session$flushReact()
+      expect_identical(panel()$persona, expected$persona)
+    }
+  )
 })

@@ -52,10 +52,6 @@
 #'   item_likert("wk4", "A four-day work week would benefit society."),
 #'   randomize = character(0))
 #' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-#' \dontrun{
-#' resp <- panel_administer(panel, instrument, cfg)
-#' resp
-#' }
 #'
 #' # The `.runner` seam answers without a provider, for tests or for a
 #' # deterministic or external respondent:
@@ -64,6 +60,13 @@
 #'   experiments
 #' }
 #' panel_administer(panel, instrument, cfg, .runner = deterministic)
+#'
+#' \donttest{
+#' if (nzchar(Sys.getenv("GROQ_API_KEY"))) {
+#'   resp <- panel_administer(panel, instrument, cfg)
+#'   resp
+#' }
+#' }
 #' @export
 panel_administer <- function(panel, instrument, config, max_calls = 5000L,
                              confirm = FALSE, price_table = NULL,
