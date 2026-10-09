@@ -286,10 +286,11 @@ panel_from_personas <- function(data, n = NULL, rows = NULL,
       }
       idx <- which(rows)
     } else {
-      idx <- as.integer(rows)
-      if (anyNA(idx) || any(idx < 1L) || any(idx > N)) {
+      if (!is.numeric(rows) || anyNA(rows) || any(rows != floor(rows)) ||
+          any(rows < 1) || any(rows > N)) {
         abort("`rows` indices must be whole numbers between 1 and nrow(data), with no NA.")
       }
+      idx <- as.integer(rows)
     }
     if (!length(idx)) abort("`rows` selected no respondents.")
   }
@@ -322,7 +323,10 @@ panel_from_personas <- function(data, n = NULL, rows = NULL,
   }
 
   if (!is.null(n)) {
-    stopifnot(n >= 1L)
+    if (!is.numeric(n) || length(n) != 1L || is.na(n) || n < 1 || n != floor(n)) {
+      abort("`n` must be one whole number of at least 1.")
+    }
+    n <- as.integer(n)
     pool <- length(idx)
     if (n > pool) {
       warning(sprintf(paste0(
@@ -331,7 +335,10 @@ panel_from_personas <- function(data, n = NULL, rows = NULL,
         "or use panel_from_margins() for more distinct respondents."),
         n, pool, n / pool), call. = FALSE)
     }
-    idx <- sample(idx, n, replace = n > pool, prob = prob)
+    # Draw positions, then index: sample() on a single number x would draw
+    # from 1:x instead of returning x. For two or more rows the draws and the
+    # random-number stream are identical to sample(idx, ...).
+    idx <- idx[sample.int(pool, n, replace = n > pool, prob = prob)]
   }
 
   demo_cols <- if (requireNamespace("LLMR", quietly = TRUE))

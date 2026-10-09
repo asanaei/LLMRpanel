@@ -1,7 +1,7 @@
 Type: Package
 Package: LLMRpanel
 Title: Benchmarked Silicon Samples for Survey and Experiment Design
-Version: 0.6.1
+Version: 0.6.2
 Authors@R:
     person("Ali", "Sanaei", , "sanaei@uchicago.edu", role = c("aut", "cre", "cph"))
 Description: Administers survey and experimental instruments to panels of

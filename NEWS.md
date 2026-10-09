@@ -1,3 +1,10 @@
+# LLMRpanel 0.6.2
+
+* `panel_from_personas()` draws the selected respondent when `rows` selects a
+  single row; it used to sample from rows 1 to that number instead. Draws from
+  two or more rows are unchanged. Fractional `rows` and `n` are refused rather
+  than truncated.
+
 # LLMRpanel 0.6.1
 
 Corrections replacing 0.6.0, which was never published.
