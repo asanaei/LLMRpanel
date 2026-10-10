@@ -38,5 +38,5 @@ text, returned verbatim). Likert responses also get a numeric \code{score}
 \examples{
 item_likert("wk4", "A four-day work week would benefit society.")
 item_choice("vote", "Which proposal do you prefer?", c("A", "B"))
-item_open("why", "In one sentence, why?")
+item_open("why", "What would improve the city council's work?")
 }

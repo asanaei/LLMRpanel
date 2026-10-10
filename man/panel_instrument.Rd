@@ -7,28 +7,39 @@
 panel_instrument(items, randomize = "option_order")
 }
 \arguments{
-\item{items}{A list of \link{panel_items} (\code{item_likert()}, \code{item_choice()},
-\code{item_open()}), or a single item, which is wrapped in a list. Ids must
-be unique.}
+\item{items}{A list of \link{panel_items}, or a single item. Item identifiers
+must be unique.}
 
-\item{randomize}{Which orders to randomize per respondent. The only
-implemented value is \code{"option_order"} (the default): the options of a
-choice item are permuted per response, and a Likert scale is shown
-reversed for a random half of responses (an ordered scale has two
-readable orders, not \verb{k!}). \code{"item_order"} is refused: every
-persona-item pair is an independent request, so the model never sees a
-questionnaire order and shuffling one would fabricate an exposure that
-was not administered. \code{character(0)} randomizes nothing. What each
-respondent saw is recorded in the responses.}
+\item{randomize}{\code{"option_order"} by default. Choice options are permuted
+for each response. A Likert scale retains its supplied order or is
+reversed, each with probability one-half. Use \code{character(0)} to retain
+the supplied option order.}
 }
 \value{
-An object of class \code{panel_instrument}.
+A \code{panel_instrument} object containing \code{items} and \code{randomize}.
 }
 \description{
-Assemble an instrument
+Combines survey items and records the option-order randomization used
+during administration.
+}
+\details{
+Each persona-item pair is administered as an independent request.
+The model does not receive earlier items or responses. \code{"item_order"}
+is therefore refused.
+
+Administration records the displayed options in \code{option_order}.
+\code{item_position} is the item's fixed, 1-based position in the instrument.
+Likert scores use the supplied scale order, including when the displayed
+scale is reversed.
 }
 \examples{
 panel_instrument(list(
-  item_likert("trust", "How much do you trust the city council?"),
-  item_open("reason", "What is the main reason for your answer?")))
+  item_likert("trust", "The city council acts in the public interest."),
+  item_open("reason", "What would improve the city council's work?")
+))
+
+panel_instrument(
+  item_choice("fund", "Choose an investment.", c("transit", "roads")),
+  randomize = character(0)
+)
 }

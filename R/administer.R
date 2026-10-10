@@ -1,72 +1,83 @@
 # administer.R --------------------------------------------------------------------
-# Administration: each persona answers each item. Item and option order can be
-# randomized per response and are recorded with the result.
+# Administration sends one independent request per persona-item pair and
+# records the displayed option order with the response.
 
 #' Administer an instrument to a panel
 #'
-#' Creates one request for each combination of persona and item. The persona
-#' goes in the system message, the item and its options in the user message.
-#' A closed-item reply is matched against the options offered, and anything
-#' unmatched becomes `NA`. Open items come back verbatim.
+#' Creates one independent request for each persona-item pair. The persona
+#' is placed in the system message, and the item and its options are placed
+#' in the user message.
 #'
-#' @param panel A [panel_from_margins()], [panel_from_data()], or
-#'   [panel_from_personas()] result.
-#' @param instrument A [panel_instrument()].
+#' Closed-item replies are matched to the offered options. Unmatched
+#' replies receive `NA`. Open-item replies retain their text with
+#' surrounding whitespace removed.
+#'
+#' @param panel A result from [panel_from_margins()], [panel_from_data()],
+#'   or [panel_from_personas()].
+#' @param instrument A [panel_instrument()] object.
 #' @param config An `LLMR::llm_config()` for a generative model.
-#' @param max_calls Integer. If the run would make more than this many calls
-#'   (personas times items), it stops unless `confirm = TRUE`. Default 5000.
-#' @param confirm Logical. Set `TRUE` to proceed past `max_calls`.
-#' @param price_table,tokens_per_call Optional. When both are supplied, the
-#'   preflight reports a cost figure computed from your own `price_table` (the
-#'   [LLMR::llm_usage()] format: columns `model`, `input`, `output`, prices per
-#'   million tokens) and your `tokens_per_call` assumption. One number is a
-#'   per-call total, priced as a range from all-input to all-output; two,
-#'   `c(input, output)`, price exactly. The package itself ships no prices and
-#'   estimates no token counts.
-#' @param .runner Optional runner for offline or deterministic testing: a
-#'   `function(experiments, ...)` that receives a data frame with `config` and
-#'   `messages` list-columns and returns those rows with `request_id` and
-#'   `response_text` columns. Each submitted `request_id` must appear once;
-#'   returned rows may be in any order. Defaults to a live LLM call via
-#'   `LLMR::call_llm_par()`.
-#' @param ... Passed to the runner (e.g. `tries`, `progress`).
-#' @return A `panel_responses` object with fields `data`, `panel`, `instrument`,
-#'   `benchmark`, and `usage`. `data` is a tibble with `persona_id`, `item_id`,
-#'   `type`, `item_position` (the item's fixed 1-based position in the
-#'   instrument; each request is independent, so no questionnaire order is
-#'   ever shown to the model), `option_order` (what this respondent saw,
-#'   `|`-separated),
-#'   `response` (matched option or `NA`; verbatim text for open items), and
-#'   `score` (1-based scale position for Likert items). `score` uses the item's
-#'   canonical scale rather than its displayed order. `response_text`,
-#'   `response_id`, `success`, `error_message`, `finish_reason`, `model`, and
-#'   `provider` retain execution provenance as ordinary columns. Conjoint
-#'   administrations also include a `profiles` list-column. `benchmark` is
-#'   `NULL` until [panel_benchmark()] is called. `usage` retains execution
-#'   diagnostics and any token counts or per-call `duration`; it is `NULL` when
-#'   the runner returned none of those usage fields.
-#' @examples
-#' set.seed(110)   # the panel draw is local; the model call is not
-#' panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 6)
-#' instrument <- panel_instrument(
-#'   item_likert("wk4", "A four-day work week would benefit society."),
-#'   randomize = character(0))
-#' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
+#' @param max_calls Maximum planned request count before confirmation is
+#'   required. The default is 5000.
+#' @param confirm Set `TRUE` to proceed when the request count exceeds
+#'   `max_calls`.
+#' @param price_table,tokens_per_call Optional inputs for a preflight cost
+#'   calculation. Supply both. `price_table` uses the [LLMR::llm_usage()]
+#'   format, with `model`, `input`, and `output` columns and prices per
+#'   million tokens. A single `tokens_per_call` value gives a total priced
+#'   over the possible input-output allocation. Two values, `c(input,
+#'   output)`, specify the allocation. The package supplies neither prices
+#'   nor estimated token counts.
+#' @param .runner Optional function `(experiments, ...)` for offline or
+#'   external execution. It receives a data frame with `config` and
+#'   `messages` list-columns and returns the experiment rows with
+#'   `request_id` and `response_text`. Each submitted request identifier
+#'   must occur once. Returned rows may be reordered. The default uses
+#'   [LLMR::call_llm_par()].
+#' @param ... Passed to the runner.
+#' @return A `panel_responses` object.
 #'
-#' # The `.runner` seam answers without a provider, for tests or for a
-#' # deterministic or external respondent:
-#' deterministic <- function(experiments, ...) {
+#'   - `data` contains one row per persona-item pair. Its identifiers are
+#'     `persona_id`, `item_id`, and `type`.
+#'   - `item_position` is the item's fixed, 1-based instrument position.
+#'     `option_order` records displayed options separated by `|`.
+#'   - `response` contains the matched option or open-item text. `score`
+#'     gives the 1-based position on a Likert item's supplied scale.
+#'   - Execution columns retain `response_text`, `response_id`, `success`,
+#'     `error_message`, `finish_reason`, `model`, and `provider`.
+#'     Request hashes, model versions, and creation times are retained
+#'     when supplied by the runner.
+#'   - Conjoint administrations include recorded profile draws in a
+#'     `profiles` list-column.
+#'   - `panel` and `instrument` retain the supplied study objects.
+#'     `benchmark` is `NULL` until [panel_benchmark()] is called.
+#'   - `usage` retains available token or duration records and their
+#'     execution identifiers. It is `NULL` when no usage fields were
+#'     returned.
+#' @details
+#' Requests do not contain earlier items or responses. Instrument position
+#' therefore does not describe an order of exposure.
+#'
+#' With `"option_order"` randomization, choice options are permuted for
+#' each request. Likert scales retain their supplied order or are reversed,
+#' each with probability one-half. Likert scores always use the supplied
+#' scale order.
+#' @examples
+#' set.seed(110)
+#' panel <- panel_from_margins(
+#'   list(party = c(left = .5, right = .5)), n = 6
+#' )
+#' instrument <- panel_instrument(
+#'   item_likert("wk4", "A four-day work week would benefit society.")
+#' )
+#' cfg <- LLMR::llm_config("groq", "example-model")
+#' runner <- function(experiments, ...) {
 #'   experiments$response_text <- "agree"
 #'   experiments
 #' }
-#' panel_administer(panel, instrument, cfg, .runner = deterministic)
-#'
-#' \donttest{
-#' if (nzchar(Sys.getenv("GROQ_API_KEY"))) {
-#'   resp <- panel_administer(panel, instrument, cfg)
-#'   resp
-#' }
-#' }
+#' responses <- panel_administer(
+#'   panel, instrument, cfg, .runner = runner
+#' )
+#' responses$data
 #' @export
 panel_administer <- function(panel, instrument, config, max_calls = 5000L,
                              confirm = FALSE, price_table = NULL,

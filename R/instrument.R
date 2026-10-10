@@ -1,7 +1,7 @@
 # instrument.R --------------------------------------------------------------------
 # Instruments: items with response options and conjoint task builders.
-# Option order is data, not noise: panel_administer() randomizes it per response
-# and records what each respondent saw.
+# panel_administer() records displayed option order. When requested by the
+# instrument, it permutes choice options and randomly reverses Likert scales.
 
 #' Survey items
 #'
@@ -18,7 +18,7 @@
 #' @examples
 #' item_likert("wk4", "A four-day work week would benefit society.")
 #' item_choice("vote", "Which proposal do you prefer?", c("A", "B"))
-#' item_open("why", "In one sentence, why?")
+#' item_open("why", "What would improve the city council's work?")
 #' @name panel_items
 NULL
 
@@ -52,23 +52,35 @@ item_open <- function(id, text) {
 
 #' Assemble an instrument
 #'
-#' @param items A list of [panel_items] (`item_likert()`, `item_choice()`,
-#'   `item_open()`), or a single item, which is wrapped in a list. Ids must
-#'   be unique.
-#' @param randomize Which orders to randomize per respondent. The only
-#'   implemented value is `"option_order"` (the default): the options of a
-#'   choice item are permuted per response, and a Likert scale is shown
-#'   reversed for a random half of responses (an ordered scale has two
-#'   readable orders, not `k!`). `"item_order"` is refused: every
-#'   persona-item pair is an independent request, so the model never sees a
-#'   questionnaire order and shuffling one would fabricate an exposure that
-#'   was not administered. `character(0)` randomizes nothing. What each
-#'   respondent saw is recorded in the responses.
-#' @return An object of class `panel_instrument`.
+#' Combines survey items and records the option-order randomization used
+#' during administration.
+#'
+#' @param items A list of [panel_items], or a single item. Item identifiers
+#'   must be unique.
+#' @param randomize `"option_order"` by default. Choice options are permuted
+#'   for each response. A Likert scale retains its supplied order or is
+#'   reversed, each with probability one-half. Use `character(0)` to retain
+#'   the supplied option order.
+#' @return A `panel_instrument` object containing `items` and `randomize`.
+#' @details
+#' Each persona-item pair is administered as an independent request.
+#' The model does not receive earlier items or responses. `"item_order"`
+#' is therefore refused.
+#'
+#' Administration records the displayed options in `option_order`.
+#' `item_position` is the item's fixed, 1-based position in the instrument.
+#' Likert scores use the supplied scale order, including when the displayed
+#' scale is reversed.
 #' @examples
 #' panel_instrument(list(
-#'   item_likert("trust", "How much do you trust the city council?"),
-#'   item_open("reason", "What is the main reason for your answer?")))
+#'   item_likert("trust", "The city council acts in the public interest."),
+#'   item_open("reason", "What would improve the city council's work?")
+#' ))
+#'
+#' panel_instrument(
+#'   item_choice("fund", "Choose an investment.", c("transit", "roads")),
+#'   randomize = character(0)
+#' )
 #' @export
 panel_instrument <- function(items, randomize = "option_order") {
   if (inherits(items, "panel_item")) items <- list(items)
@@ -83,9 +95,7 @@ panel_instrument <- function(items, randomize = "option_order") {
   if ("item_order" %in% randomize) {
     abort(paste(
       "`item_order` is not implemented: items are administered as",
-      "independent requests, so no respondent ever sees a questionnaire",
-      "order. A sequential administration mode would be required for",
-      "genuine order exposure."))
+      "independent requests, so there is no questionnaire order to randomize."))
   }
   bad <- setdiff(randomize, "option_order")
   if (length(bad)) abort("`randomize` may contain only 'option_order'.")
@@ -184,42 +194,40 @@ print.conjoint_design <- function(x, ...) {
 
 #' Build a conjoint instrument
 #'
-#' Converts a [conjoint_design()] into one forced-choice item per task:
-#' each respondent receives a fresh independent profile draw at administration
-#' and is asked to pick one by label.
+#' Converts a conjoint design into one forced-choice item per task.
+#' Administration draws profiles for each persona and asks the model to
+#' choose a profile by its label.
 #'
 #' @param design A [conjoint_design()] object.
 #' @param question Question text shown above each task's profiles.
-#' @return A `panel_instrument` whose items are task-level choice items
-#'   (ids `task_1`, `task_2`, ...; options `"Profile 1"`, `"Profile 2"`,
-#'   ...). Each item carries the attribute levels used for its respondent-level
-#'   draws, and the instrument's `$conjoint` field carries the design metadata
-#'   for [conjoint_amce()].
-#' @details Only option order is randomized; item order stays fixed so the
-#'   task ids remain interpretable. Attribute order inside each profile
-#'   description follows the design's column order. The profiles recorded in
-#'   the design are not reused across respondents.
+#' @return A `panel_instrument` with task identifiers such as `task_1` and
+#'   profile options such as `"Profile 1"`. Each item retains the attribute
+#'   levels used for profile draws. The instrument's `conjoint` field
+#'   retains the design metadata used by [conjoint_amce()].
+#' @details
+#' Each persona-task pair is a separate request. Its `item_position` is
+#' instrument metadata and does not describe an order of exposure.
+#' Profile choice options are permuted for each request.
+#'
+#' Profile descriptions follow profile-number order. Attributes within a
+#' description follow the design's attribute order. The initial profile
+#' table in `design` is not reused across personas.
 #' @examples
 #' set.seed(110)
-#' panel <- panel_from_margins(list(group = c(A = .5, B = .5)), n = 4)
+#' panel <- panel_from_margins(list(group = c(A = 1)), n = 4)
 #' design <- conjoint_design(
 #'   list(economy = c("weak", "strong"), taxes = c("lower", "higher")),
-#'   n_tasks = 3)
-#' instrument <- conjoint_instrument(design, "Which candidate do you prefer?")
-#' instrument
-#' cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-#'
-#' first_shown <- function(experiments, ...) {
+#'   n_tasks = 3
+#' )
+#' instrument <- conjoint_instrument(
+#'   design, "Which candidate do you prefer?"
+#' )
+#' cfg <- LLMR::llm_config("groq", "example-model")
+#' runner <- function(experiments, ...) {
 #'   experiments$response_text <- "Profile 1"
 #'   experiments
 #' }
-#' panel_administer(panel, instrument, cfg, .runner = first_shown)
-#'
-#' \donttest{
-#' if (nzchar(Sys.getenv("GROQ_API_KEY"))) {
-#'   panel_administer(panel, instrument, cfg)
-#' }
-#' }
+#' panel_administer(panel, instrument, cfg, .runner = runner)
 #' @export
 conjoint_instrument <- function(design,
                                 question = "Which profile do you prefer?") {

@@ -7,23 +7,26 @@
 \title{Survey and experiment design with language model persona panels}
 \description{
 LLMRpanel administers survey and experimental instruments to panels of
-language model personas. \code{\link[=panel_from_margins]{panel_from_margins()}} draws persona attributes from
+language model personas. \code{\link[=panel_from_margins]{panel_from_margins()}} draws attributes from
 supplied margins. \code{\link[=panel_from_data]{panel_from_data()}} samples microdata rows, and
 \code{\link[=panel_from_personas]{panel_from_personas()}} uses a prepared persona data frame.
 }
 \details{
-Build instruments with \code{\link[=panel_instrument]{panel_instrument()}} and the item constructors.
-\code{\link[=conjoint_design]{conjoint_design()}} and \code{\link[=conjoint_instrument]{conjoint_instrument()}} create forced-choice conjoint
-tasks.
-\code{\link[=panel_administer]{panel_administer()}} records the item and option order used for each response.
-\code{\link[=panel_batch_submit]{panel_batch_submit()}} submits larger administrations through a provider's
+\code{\link[=panel_instrument]{panel_instrument()}} combines survey items into an instrument.
+\code{\link[=conjoint_design]{conjoint_design()}} and \code{\link[=conjoint_instrument]{conjoint_instrument()}} create forced-choice
+conjoint tasks.
+
+\code{\link[=panel_administer]{panel_administer()}} sends an independent request for each persona-item
+pair. It records the item's fixed instrument position and the displayed
+option order. Choice options can be permuted, and Likert scales can be
+displayed in their original or reversed order.
+\code{\link[=panel_batch_submit]{panel_batch_submit()}} submits administrations through a provider's
 batch API.
 
 \code{\link[=panel_benchmark]{panel_benchmark()}} compares response shares with a supplied benchmark.
-\code{\link[=panel_bias_audit]{panel_bias_audit()}} counts parse failures and tests first-option sensitivity.
-\code{\link[=conjoint_amce]{conjoint_amce()}} estimates conjoint effects from the recorded
-respondent-level profile assignments.
-administration.
+\code{\link[=panel_bias_audit]{panel_bias_audit()}} counts parse failures and tests first-option
+sensitivity. \code{\link[=conjoint_amce]{conjoint_amce()}} estimates conjoint effects from the
+recorded respondent-level profile assignments.
 }
 \seealso{
 Useful links:

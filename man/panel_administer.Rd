@@ -17,78 +17,90 @@ panel_administer(
 )
 }
 \arguments{
-\item{panel}{A \code{\link[=panel_from_margins]{panel_from_margins()}}, \code{\link[=panel_from_data]{panel_from_data()}}, or
-\code{\link[=panel_from_personas]{panel_from_personas()}} result.}
+\item{panel}{A result from \code{\link[=panel_from_margins]{panel_from_margins()}}, \code{\link[=panel_from_data]{panel_from_data()}},
+or \code{\link[=panel_from_personas]{panel_from_personas()}}.}
 
-\item{instrument}{A \code{\link[=panel_instrument]{panel_instrument()}}.}
+\item{instrument}{A \code{\link[=panel_instrument]{panel_instrument()}} object.}
 
 \item{config}{An \code{LLMR::llm_config()} for a generative model.}
 
-\item{max_calls}{Integer. If the run would make more than this many calls
-(personas times items), it stops unless \code{confirm = TRUE}. Default 5000.}
+\item{max_calls}{Maximum planned request count before confirmation is
+required. The default is 5000.}
 
-\item{confirm}{Logical. Set \code{TRUE} to proceed past \code{max_calls}.}
+\item{confirm}{Set \code{TRUE} to proceed when the request count exceeds
+\code{max_calls}.}
 
-\item{price_table, tokens_per_call}{Optional. When both are supplied, the
-preflight reports a cost figure computed from your own \code{price_table} (the
-\code{\link[LLMR:llm_usage]{LLMR::llm_usage()}} format: columns \code{model}, \code{input}, \code{output}, prices per
-million tokens) and your \code{tokens_per_call} assumption. One number is a
-per-call total, priced as a range from all-input to all-output; two,
-\code{c(input, output)}, price exactly. The package itself ships no prices and
-estimates no token counts.}
+\item{price_table, tokens_per_call}{Optional inputs for a preflight cost
+calculation. Supply both. \code{price_table} uses the \code{\link[LLMR:llm_usage]{LLMR::llm_usage()}}
+format, with \code{model}, \code{input}, and \code{output} columns and prices per
+million tokens. A single \code{tokens_per_call} value gives a total priced
+over the possible input-output allocation. Two values, \code{c(input, output)}, specify the allocation. The package supplies neither prices
+nor estimated token counts.}
 
-\item{.runner}{Optional runner for offline or deterministic testing: a
-\verb{function(experiments, ...)} that receives a data frame with \code{config} and
-\code{messages} list-columns and returns those rows with \code{request_id} and
-\code{response_text} columns. Each submitted \code{request_id} must appear once;
-returned rows may be in any order. Defaults to a live LLM call via
-\code{LLMR::call_llm_par()}.}
+\item{.runner}{Optional function \verb{(experiments, ...)} for offline or
+external execution. It receives a data frame with \code{config} and
+\code{messages} list-columns and returns the experiment rows with
+\code{request_id} and \code{response_text}. Each submitted request identifier
+must occur once. Returned rows may be reordered. The default uses
+\code{\link[LLMR:call_llm_par]{LLMR::call_llm_par()}}.}
 
-\item{...}{Passed to the runner (e.g. \code{tries}, \code{progress}).}
+\item{...}{Passed to the runner.}
 }
 \value{
-A \code{panel_responses} object with fields \code{data}, \code{panel}, \code{instrument},
-\code{benchmark}, and \code{usage}. \code{data} is a tibble with \code{persona_id}, \code{item_id},
-\code{type}, \code{item_position} (the item's fixed 1-based position in the
-instrument; each request is independent, so no questionnaire order is
-ever shown to the model), \code{option_order} (what this respondent saw,
-\code{|}-separated),
-\code{response} (matched option or \code{NA}; verbatim text for open items), and
-\code{score} (1-based scale position for Likert items). \code{score} uses the item's
-canonical scale rather than its displayed order. \code{response_text},
-\code{response_id}, \code{success}, \code{error_message}, \code{finish_reason}, \code{model}, and
-\code{provider} retain execution provenance as ordinary columns. Conjoint
-administrations also include a \code{profiles} list-column. \code{benchmark} is
-\code{NULL} until \code{\link[=panel_benchmark]{panel_benchmark()}} is called. \code{usage} retains execution
-diagnostics and any token counts or per-call \code{duration}; it is \code{NULL} when
-the runner returned none of those usage fields.
+A \code{panel_responses} object.
+\itemize{
+\item \code{data} contains one row per persona-item pair. Its identifiers are
+\code{persona_id}, \code{item_id}, and \code{type}.
+\item \code{item_position} is the item's fixed, 1-based instrument position.
+\code{option_order} records displayed options separated by \code{|}.
+\item \code{response} contains the matched option or open-item text. \code{score}
+gives the 1-based position on a Likert item's supplied scale.
+\item Execution columns retain \code{response_text}, \code{response_id}, \code{success},
+\code{error_message}, \code{finish_reason}, \code{model}, and \code{provider}.
+Request hashes, model versions, and creation times are retained
+when supplied by the runner.
+\item Conjoint administrations include recorded profile draws in a
+\code{profiles} list-column.
+\item \code{panel} and \code{instrument} retain the supplied study objects.
+\code{benchmark} is \code{NULL} until \code{\link[=panel_benchmark]{panel_benchmark()}} is called.
+\item \code{usage} retains available token or duration records and their
+execution identifiers. It is \code{NULL} when no usage fields were
+returned.
+}
 }
 \description{
-Creates one request for each combination of persona and item. The persona
-goes in the system message, the item and its options in the user message.
-A closed-item reply is matched against the options offered, and anything
-unmatched becomes \code{NA}. Open items come back verbatim.
+Creates one independent request for each persona-item pair. The persona
+is placed in the system message, and the item and its options are placed
+in the user message.
+}
+\details{
+Closed-item replies are matched to the offered options. Unmatched
+replies receive \code{NA}. Open-item replies retain their text with
+surrounding whitespace removed.
+
+Requests do not contain earlier items or responses. Instrument position
+therefore does not describe an order of exposure.
+
+With \code{"option_order"} randomization, choice options are permuted for
+each request. Likert scales retain their supplied order or are reversed,
+each with probability one-half. Likert scores always use the supplied
+scale order.
 }
 \examples{
-set.seed(110)   # the panel draw is local; the model call is not
-panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 6)
+set.seed(110)
+panel <- panel_from_margins(
+  list(party = c(left = .5, right = .5)), n = 6
+)
 instrument <- panel_instrument(
-  item_likert("wk4", "A four-day work week would benefit society."),
-  randomize = character(0))
-cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-
-# The `.runner` seam answers without a provider, for tests or for a
-# deterministic or external respondent:
-deterministic <- function(experiments, ...) {
+  item_likert("wk4", "A four-day work week would benefit society.")
+)
+cfg <- LLMR::llm_config("groq", "example-model")
+runner <- function(experiments, ...) {
   experiments$response_text <- "agree"
   experiments
 }
-panel_administer(panel, instrument, cfg, .runner = deterministic)
-
-\donttest{
-if (nzchar(Sys.getenv("GROQ_API_KEY"))) {
-  resp <- panel_administer(panel, instrument, cfg)
-  resp
-}
-}
+responses <- panel_administer(
+  panel, instrument, cfg, .runner = runner
+)
+responses$data
 }

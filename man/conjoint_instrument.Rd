@@ -12,42 +12,39 @@ conjoint_instrument(design, question = "Which profile do you prefer?")
 \item{question}{Question text shown above each task's profiles.}
 }
 \value{
-A \code{panel_instrument} whose items are task-level choice items
-(ids \code{task_1}, \code{task_2}, ...; options \code{"Profile 1"}, \code{"Profile 2"},
-...). Each item carries the attribute levels used for its respondent-level
-draws, and the instrument's \verb{$conjoint} field carries the design metadata
-for \code{\link[=conjoint_amce]{conjoint_amce()}}.
+A \code{panel_instrument} with task identifiers such as \code{task_1} and
+profile options such as \code{"Profile 1"}. Each item retains the attribute
+levels used for profile draws. The instrument's \code{conjoint} field
+retains the design metadata used by \code{\link[=conjoint_amce]{conjoint_amce()}}.
 }
 \description{
-Converts a \code{\link[=conjoint_design]{conjoint_design()}} into one forced-choice item per task:
-each respondent receives a fresh independent profile draw at administration
-and is asked to pick one by label.
+Converts a conjoint design into one forced-choice item per task.
+Administration draws profiles for each persona and asks the model to
+choose a profile by its label.
 }
 \details{
-Only option order is randomized; item order stays fixed so the
-task ids remain interpretable. Attribute order inside each profile
-description follows the design's column order. The profiles recorded in
-the design are not reused across respondents.
+Each persona-task pair is a separate request. Its \code{item_position} is
+instrument metadata and does not describe an order of exposure.
+Profile choice options are permuted for each request.
+
+Profile descriptions follow profile-number order. Attributes within a
+description follow the design's attribute order. The initial profile
+table in \code{design} is not reused across personas.
 }
 \examples{
 set.seed(110)
-panel <- panel_from_margins(list(group = c(A = .5, B = .5)), n = 4)
+panel <- panel_from_margins(list(group = c(A = 1)), n = 4)
 design <- conjoint_design(
   list(economy = c("weak", "strong"), taxes = c("lower", "higher")),
-  n_tasks = 3)
-instrument <- conjoint_instrument(design, "Which candidate do you prefer?")
-instrument
-cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-
-first_shown <- function(experiments, ...) {
+  n_tasks = 3
+)
+instrument <- conjoint_instrument(
+  design, "Which candidate do you prefer?"
+)
+cfg <- LLMR::llm_config("groq", "example-model")
+runner <- function(experiments, ...) {
   experiments$response_text <- "Profile 1"
   experiments
 }
-panel_administer(panel, instrument, cfg, .runner = first_shown)
-
-\donttest{
-if (nzchar(Sys.getenv("GROQ_API_KEY"))) {
-  panel_administer(panel, instrument, cfg)
-}
-}
+panel_administer(panel, instrument, cfg, .runner = runner)
 }

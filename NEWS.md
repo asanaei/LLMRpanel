@@ -1,5 +1,12 @@
 # LLMRpanel 0.6.2
 
+* The help and vignette describe each persona-item pair as an independent
+  request with option-order randomization; claims about item-order
+  randomization and sample-size planning are removed.
+
+* `run_panel_studio()` refuses malformed population margins and benchmark
+  shares, naming the entry, instead of dropping it.
+
 * `panel_from_personas()` draws the selected respondent when `rows` selects a
   single row; it used to sample from rows 1 to that number instead. Draws from
   two or more rows are unchanged. Fractional `rows` and `n` are refused rather

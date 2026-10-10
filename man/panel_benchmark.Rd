@@ -2,58 +2,65 @@
 % Please edit documentation in R/benchmark.R
 \name{panel_benchmark}
 \alias{panel_benchmark}
-\title{Compare silicon responses with a human benchmark}
+\title{Compare panel responses with a human benchmark}
 \usage{
 panel_benchmark(responses, benchmark, benchmark_name = "benchmark")
 }
 \arguments{
 \item{responses}{A \code{\link[=panel_administer]{panel_administer()}} result.}
 
-\item{benchmark}{A data frame with columns \code{item_id}, \code{response}, and
-\code{share} (human marginal proportions). Shares within an item should sum
-to 1; a deviation beyond rounding draws a warning.}
+\item{benchmark}{A data frame with \code{item_id}, \code{response}, and \code{share}
+columns. Shares must be numeric probabilities in \verb{[0, 1]} without
+missing values. The function raises an error when an item's share
+total differs from 1 by more than 0.01. Each item-response pair must
+occur once, and covered response labels must be offered options.}
 
-\item{benchmark_name}{How the source should be cited in reports (e.g.
-\code{"ANES 2024 pilot"}).}
+\item{benchmark_name}{Name used to identify the benchmark in reports.}
 }
 \value{
-\code{responses} with its \code{benchmark} field set:
-\verb{$table} (per covered item and response: \code{share_silicon},
-\code{share_human}, \code{deviation}), \verb{$nonresponse} (nonresponse and execution
-failure rates per item),
-\verb{$items_covered} / \verb{$items_total}, \verb{$mean_abs_dev}, \verb{$max_dev}.
+\code{responses} with its \code{benchmark} field populated.
+\itemize{
+\item \code{table} contains the panel share, human share, and their difference
+for each covered item-response pair.
+\item \code{nonresponse} contains execution-failure and nonresponse rates
+by item.
+\item \code{items_covered} and \code{items_total} record closed-item coverage.
+\item \code{mean_abs_dev} and \code{max_dev} summarize absolute deviations.
+\item \code{benchmark_name} and \code{ts} identify the comparison and its time.
+}
 }
 \description{
-Compares closed-item response shares with human benchmark shares supplied
-by the user. The result contains deviations for covered item-response
-pairs, the number of closed items covered, and nonresponse rates by item.
-The function does not alter responses or adjust response shares.
-Without a benchmark, response shares describe the configured model under the
-supplied personas, not a human population.
+Compares closed-item response shares with human benchmark shares.
+The comparison uses responses that parsed and were not reported as
+execution failures. It does not alter responses or adjust their shares.
+}
+\details{
+Without a benchmark, response shares describe the configured model
+under the supplied personas.
+
+The function refuses conjoint responses because profile assignments
+differ across personas. It also refuses a covered item when every
+execution failed. If executions occurred but no response parsed for
+an item, its panel shares and deviations are \code{NA}.
 }
 \examples{
-set.seed(110)
-panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 12,
-                            persona_template = "A voter who leans {party}.")
-instrument <- panel_instrument(item_choice("plan", "Which plan do you prefer?",
-                                           c("A", "B")))
-cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b")
-
-by_party <- function(experiments, ...) {
-  experiments$response_text <- ifelse(
-    grepl("leans left", vapply(experiments$messages, `[[`, "", "system")),
-    "A", "B")
+panel <- panel_from_margins(list(group = c(A = 1)), n = 4)
+instrument <- panel_instrument(
+  item_choice("fund", "Choose an investment.", c("transit", "roads")),
+  randomize = character(0)
+)
+cfg <- LLMR::llm_config("groq", "example-model")
+runner <- function(experiments, ...) {
+  experiments$response_text <- "transit"
   experiments
 }
-r <- panel_administer(panel, instrument, cfg, .runner = by_party)
-bench <- data.frame(item_id = "plan", response = c("A", "B"),
-                    share = c(.5, .5))
-panel_benchmark(r, bench, "toy human study")
-
-\donttest{
-if (nzchar(Sys.getenv("GROQ_API_KEY"))) {
-  live <- panel_administer(panel, instrument, cfg)
-  panel_benchmark(live, bench, "toy human study")
-}
-}
+responses <- panel_administer(
+  panel, instrument, cfg, .runner = runner
+)
+benchmark <- data.frame(
+  item_id = "fund",
+  response = c("transit", "roads"),
+  share = c(.6, .4)
+)
+panel_benchmark(responses, benchmark, "Example human benchmark")
 }

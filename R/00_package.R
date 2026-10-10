@@ -3,22 +3,25 @@
 #' Survey and experiment design with language model persona panels
 #'
 #' LLMRpanel administers survey and experimental instruments to panels of
-#' language model personas. [panel_from_margins()] draws persona attributes from
+#' language model personas. [panel_from_margins()] draws attributes from
 #' supplied margins. [panel_from_data()] samples microdata rows, and
 #' [panel_from_personas()] uses a prepared persona data frame.
 #'
-#' Build instruments with [panel_instrument()] and the item constructors.
-#' [conjoint_design()] and [conjoint_instrument()] create forced-choice conjoint
-#' tasks.
-#' [panel_administer()] records the item and option order used for each response.
-#' [panel_batch_submit()] submits larger administrations through a provider's
+#' [panel_instrument()] combines survey items into an instrument.
+#' [conjoint_design()] and [conjoint_instrument()] create forced-choice
+#' conjoint tasks.
+#'
+#' [panel_administer()] sends an independent request for each persona-item
+#' pair. It records the item's fixed instrument position and the displayed
+#' option order. Choice options can be permuted, and Likert scales can be
+#' displayed in their original or reversed order.
+#' [panel_batch_submit()] submits administrations through a provider's
 #' batch API.
 #'
 #' [panel_benchmark()] compares response shares with a supplied benchmark.
-#' [panel_bias_audit()] counts parse failures and tests first-option sensitivity.
-#' [conjoint_amce()] estimates conjoint effects from the recorded
-#' respondent-level profile assignments.
-#' administration.
+#' [panel_bias_audit()] counts parse failures and tests first-option
+#' sensitivity. [conjoint_amce()] estimates conjoint effects from the
+#' recorded respondent-level profile assignments.
 #'
 #' @keywords internal
 #' @importFrom rlang %||% abort

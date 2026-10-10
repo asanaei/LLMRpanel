@@ -8,44 +8,40 @@ vignette: >
 ---
 
 ```{r, include = FALSE}
-# Every chunk below runs offline through a deterministic runner, so the
-# vignette executes during package builds without credentials or charges.
-# One chunk near the end is gated by RUN_LIVE for a genuinely live call.
 RUN_LIVE <- FALSE
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
 LLMRpanel administers survey and experimental instruments to panels of
-language model personas. Use it to pretest questions, pilot conjoint
-designs, calculate sample sizes from pilot dispersion, or measure responses
-from a configured model. `panel_benchmark()` compares closed-item response
-shares with benchmark shares supplied by the user. It records deviations by
-item and response, nonresponse, and the number of closed items covered.
+language model personas. It can be used to pretest questions and pilot
+conjoint designs. Responses describe a configured model under the supplied
+personas.
 
-Every example below executes offline through the `.runner` seam: a
-deterministic function stands in for the model, so the workflow runs during
-package builds without credentials or charges. One chunk near the end,
-gated by `RUN_LIVE`, shows the same call against a live provider.
+`panel_benchmark()` compares closed-item response shares with benchmark shares
+supplied by the user. It records deviations for the covered responses and
+nonresponse rates by item.
+
+The examples use a deterministic response function through `.runner`.
+The live example runs only when `RUN_LIVE` is set to `TRUE`.
 
 ## What silicon panels are for
 
-1. **Instrument pretesting.** Administer draft items and inspect unmatched
-replies and first-option sensitivity.
+1. Instrument pretesting uses draft items to examine unmatched replies and
+   first-option sensitivity.
 
-2. **Design piloting.** Run conjoint tasks and estimate response
-dispersion before planning human data collection.
+2. Design piloting uses conjoint tasks to examine responses to recorded
+   profile assignments.
 
-3. **Model measurement.** Compare response distributions across personas,
-item orders, option orders, or model configurations.
+3. Model measurement compares response distributions under different personas
+   or model configurations. Displayed option order can also be varied.
 
 ## Panels and instruments
 
 ```{r setup}
 library(LLMRpanel)
 
-# A deterministic stand-in for the model: it always picks the first
-# DISPLAYED option of a closed item (so option-order randomization shows up
-# in the shares) and answers open items with a fixed sentence.
+# Closed items receive the first displayed option. Open items receive a
+# fixed sentence.
 first_shown <- function(experiments, ...) {
   experiments$response_text <- vapply(seq_len(nrow(experiments)), function(i) {
     shown <- experiments$option_order[i]
@@ -62,7 +58,7 @@ distributions. `set.seed()` makes this draw reproducible.
 
 ```{r panel, purl=FALSE}
 set.seed(110)
-panel = panel_from_margins(
+panel <- panel_from_margins(
   list(
     age = c("18 to 34" = .30, "35 to 64" = .45, "65 plus" = .25),
     party = c(left = .45, right = .45, independent = .10)
@@ -72,14 +68,17 @@ panel = panel_from_margins(
 )
 panel
 
-instrument = panel_instrument(list(
-  item_likert("wk4", "A four day work week would benefit society."),
+instrument <- panel_instrument(list(
+  item_likert("wk4", "A four-day work week would benefit society."),
   item_choice(
     "fund",
     "Which should the city fund first?",
     c("public transit", "road repair")
   ),
-  item_open("why", "In one sentence, why?")
+  item_open(
+    "why",
+    "What should the city consider when choosing between public transit and road repair?"
+  )
 ))
 instrument
 ```
@@ -91,14 +90,17 @@ among attributes rather than sampling each margin independently.
 `LLMR::report()` identifies whether a panel came from supplied margins,
 microdata rows, or supplied personas.
 
-`panel_administer()` sends each item to each persona as an independent
-request. It returns a `panel_responses` object with response rows in `$data`
-and the panel, instrument, benchmark record, and token usage in separate
-components. It randomizes option order per response (a Likert scale is shown
-reversed for a random half) and records `item_position` (the item's fixed
-position in the instrument) and `option_order` (what this respondent saw) in
-`$data`. When comparing models, reset the seed before each administration so
-both models face the same option-order assignments.
+`panel_administer()` sends each persona-item pair as an independent request.
+It returns a `panel_responses` object. Response rows are stored in `$data`;
+the panel and instrument are retained in separate fields.
+
+The default instrument settings permute choice options for each request.
+A Likert scale retains its original order or is reversed, each with probability
+one-half. `option_order` records the displayed options. `item_position` records
+the item's fixed position in the instrument, rather than an order of exposure.
+
+When comparing models, reset the seed before each administration to reproduce
+the same option assignments.
 
 ```{r administer, purl=FALSE}
 cfg = LLMR::llm_config("groq", "openai/gpt-oss-20b", temperature = 0.8)

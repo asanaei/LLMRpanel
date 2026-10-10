@@ -846,3 +846,242 @@ test_that("a blank seed draws the panel from the session's own stream", {
     }
   )
 })
+
+test_that("invalid margins disable construction and forced events preserve the panel", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
+
+  cases <- list(
+    c(" \n ", "Enter at least one population margin."),
+    c("age young=0.3, old=0.7",
+      "Population margin line 2 ('age young=0.3, old=0.7') needs ':' after the margin name."),
+    c(": young=0.3, old=0.7",
+      "Population margin line 2 (': young=0.3, old=0.7') has an empty margin name."),
+    c("age: young=1\n age : old=1",
+      "Population margin line 3 repeats the name 'age'."),
+    c("age:", "Margin 'age' has an empty token at position 1."),
+    c("age: , young=1", "Margin 'age' has an empty token at position 1."),
+    c("age: young=1, , old=1", "Margin 'age' has an empty token at position 2."),
+    c("age: young=1, old=1, ", "Margin 'age' has an empty token at position 3."),
+    c("age: young=0.3, old",
+      paste("Margin 'age' has token 'old' without '='.",
+            "Use level=share pairs and a decimal point for fractional shares.")),
+    c("age: young=0,3, old=0.7",
+      paste("Margin 'age' has token '3' without '='.",
+            "Use level=share pairs and a decimal point for fractional shares.")),
+    c("age: =0.3, old=0.7", "Margin 'age' has an empty level in token '=0.3'."),
+    c("age: young=0.3, young =0.7",
+      "Margin 'age' repeats level 'young' in token 'young =0.7'."),
+    c("age: young=0, old=0", "Margin 'age' must have a positive, finite total weight."),
+    c("age: young=1e308, old=1e308",
+      "Margin 'age' must have a positive, finite total weight.")
+  )
+  tokens <- c(
+    "young=bad=0.3", "young=0.3=0.7", "35-64=0.45x", "young=30%",
+    "young=", "young=1 2", "young=NA", "young=NaN", "young=Inf",
+    "young=-Inf", "young=1e309", "young=-0.3"
+  )
+  cases <- c(cases, lapply(tokens, function(token) {
+    c(paste0("age: ", token, ", old=0.7"), sprintf(
+      paste("Margin 'age' has invalid share token '%s'.",
+            "Enter one finite, nonnegative number after '='."), token
+    ))
+  }))
+
+  shiny::testServer(
+    LLMRpanel:::.panel_gui_module_server,
+    args = list(shared = gui_demo_shared()),
+    {
+      session$setInputs(
+        source = "margins", margins = "age: young=3, old=7",
+        persona_tmpl = "A {age} voter.", n = 6, seed = 110,
+        instrument_type = "choice", item_text = "Increase spending?",
+        item_opts = "yes, no", runs = 1, build_panel = 1,
+        benchmark = "yes=0.5, no=0.5", benchmark_name = "toy benchmark"
+      )
+      session$setInputs(administer = 1)
+      session$setInputs(compare_benchmark = 1)
+      held_panel <- panel()
+      held_responses <- responses()
+      held_result <- benchmark_result()
+      expect_s3_class(held_panel, "silicon_panel")
+      expect_s3_class(held_result, "panel_responses")
+      expect_identical(parse_margins(NULL), list(
+        value = NULL, error = "Enter at least one population margin."
+      ))
+
+      for (i in seq_along(cases)) {
+        text <- cases[[i]][[1]]
+        message <- cases[[i]][[2]]
+        if (nzchar(trimws(text))) text <- paste("group: A=1", text, sep = "\n")
+        expect_identical(parse_margins(text), list(value = NULL, error = message))
+        session$setInputs(margins = text)
+        expect_identical(build_panel_action_state(), list(enabled = FALSE, reason = message))
+        html <- paste(as.character(output$build_panel_action), collapse = "\n")
+        expect_true(gui_action_is_disabled(html, session$ns("build_panel")), info = text)
+        expect_match(gsub("&#39;", "'", html, fixed = TRUE), message, fixed = TRUE)
+
+        session$setInputs(build_panel = i + 1L)
+        warning <- paste(as.character(run_error()), collapse = "\n")
+        expect_match(gsub("&#39;", "'", warning, fixed = TRUE), message, fixed = TRUE)
+        expect_identical(panel(), held_panel)
+        expect_identical(responses(), held_responses)
+        expect_identical(benchmark_result(), held_result)
+      }
+    }
+  )
+})
+
+test_that("unnormalized Studio margins preserve seeded draws and supplied weights", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
+
+  margins <- list(
+    age = c(young = 30, middle = 45, older = 25, unused = 0),
+    party = c(left = 4.5, right = 4.5, independent = 1)
+  )
+  template <- "A {age} voter who leans {party}."
+  set.seed(110)
+  expected <- panel_from_margins(margins, n = 12, persona_template = template)
+  text <- paste(
+    "", " age : young=3e1, middle =45, older=+25, unused=0 ", "",
+    " party: left=4.5, right=4.5, independent=1 ", "", sep = "\n"
+  )
+  shiny::testServer(
+    LLMRpanel:::.panel_gui_module_server,
+    args = list(shared = gui_demo_shared()),
+    {
+      expect_identical(parse_margins(text), list(value = margins, error = NULL))
+      session$setInputs(
+        source = "margins", margins = text, persona_tmpl = template,
+        n = 12, seed = 110
+      )
+      expect_true(build_panel_action_state()$enabled)
+      session$setInputs(build_panel = 1)
+      expect_identical(panel(), expected)
+      expect_identical(attr(panel(), "margins"), margins)
+      expect_null(run_error())
+    }
+  )
+})
+
+test_that("invalid benchmark tokens disable comparison and forced events preserve results", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
+
+  cases <- list(
+    c("", "Enter benchmark shares as level=share pairs."),
+    c(", yes=1", "Benchmark shares have an empty token at position 1."),
+    c("yes=0.5, , no=0.5", "Benchmark shares have an empty token at position 2."),
+    c("yes=0.5, no=0.5, ", "Benchmark shares have an empty token at position 3."),
+    c("yes=0.5, no", paste("Benchmark token 'no' needs '='.",
+      "Use level=share pairs and a decimal point for fractional shares.")),
+    c("yes=0,5, no=0.5", paste("Benchmark token '5' needs '='.",
+      "Use level=share pairs and a decimal point for fractional shares.")),
+    c("yes=0.5, =0.5", "Benchmark token '=0.5' has an empty level."),
+    c("yes=0.5, yes =0.5", "Benchmark level 'yes' is repeated in token 'yes =0.5'.")
+  )
+  tokens <- c(
+    "no=0.005x", "no=bad=0.005", "no=0.005=0.005", "no=30%", "no=",
+    "no=1 2", "no=NA", "no=NaN", "no=Inf", "no=-Inf", "no=1e309", "no=-0.005"
+  )
+  cases <- c(cases, lapply(tokens, function(token) {
+    c(paste0("yes=0.995, ", token), sprintf(
+      paste("Benchmark share token '%s' is invalid.",
+            "Enter one finite, nonnegative number after '='."), token
+    ))
+  }))
+
+  shiny::testServer(
+    LLMRpanel:::.panel_gui_module_server,
+    args = list(shared = gui_demo_shared()),
+    {
+      session$setInputs(
+        source = "margins", margins = "group: A=1", persona_tmpl = "A {group} voter.",
+        n = 6, seed = 110, instrument_type = "choice", item_text = "Increase spending?",
+        item_opts = "yes, no", runs = 1, build_panel = 1,
+        benchmark = "yes=0.5, no=0.5", benchmark_name = "toy benchmark"
+      )
+      session$setInputs(administer = 1)
+      session$setInputs(compare_benchmark = 1)
+      held_responses <- responses()
+      held_result <- benchmark_result()
+      expect_s3_class(held_result, "panel_responses")
+      expect_identical(parse_named_shares(NULL), list(
+        value = NULL, error = "Enter benchmark shares as level=share pairs."
+      ))
+
+      for (i in seq_along(cases)) {
+        text <- cases[[i]][[1]]
+        message <- cases[[i]][[2]]
+        expect_identical(parse_named_shares(text), list(value = NULL, error = message))
+        session$setInputs(benchmark = text)
+        expect_identical(benchmark_action_state(), list(enabled = FALSE, reason = message))
+        html <- paste(as.character(output$benchmark_action), collapse = "\n")
+        expect_true(gui_action_is_disabled(html, session$ns("compare_benchmark")), info = text)
+        expect_match(gsub("&#39;", "'", html, fixed = TRUE), message, fixed = TRUE)
+
+        session$setInputs(compare_benchmark = i + 1L)
+        warning <- paste(as.character(run_error()), collapse = "\n")
+        expect_match(gsub("&#39;", "'", warning, fixed = TRUE), message, fixed = TRUE)
+        expect_identical(responses(), held_responses)
+        expect_identical(benchmark_result(), held_result)
+      }
+
+      session$setInputs(benchmark = " yes = 9.95e-1, no = .005 ")
+      expect_true(benchmark_action_state()$enabled)
+      expect_identical(parse_named_shares(input$benchmark), list(
+        value = c(yes = .995, no = .005), error = NULL
+      ))
+      session$setInputs(compare_benchmark = length(cases) + 2L)
+      expect_null(run_error())
+      table <- benchmark_result()$benchmark$table
+      expect_equal(table$share_human[match(c("yes", "no"), table$response)], c(.995, .005))
+      expect_identical(responses(), held_responses)
+    }
+  )
+})
+
+test_that("benchmark probability, total, and offered-label checks remain in the API", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
+
+  cases <- list(
+    c("yes=1.2, no=0", "probabilities in [0, 1]"),
+    c("yes=0.8, no=0.3", "must sum to 1"),
+    c("yes=0, no=0", "must sum to 1"),
+    c("yes=1e308, no=1e308", "probabilities in [0, 1]"),
+    c("yes=0.5, typo=0.5", "not among its offered options")
+  )
+  shiny::testServer(
+    LLMRpanel:::.panel_gui_module_server,
+    args = list(shared = gui_demo_shared()),
+    {
+      responses(gui_fixture_responses())
+      benchmark_result(gui_fixture_responses(benchmarked = TRUE))
+      held_result <- benchmark_result()
+      session$setInputs(benchmark_name = "toy benchmark")
+      for (i in seq_along(cases)) {
+        text <- cases[[i]][[1]]
+        parsed <- parse_named_shares(text)
+        expect_null(parsed$error)
+        session$setInputs(benchmark = text)
+        expect_true(benchmark_action_state()$enabled)
+        benchmark <- data.frame(
+          item_id = "q1", response = names(parsed$value), share = unname(parsed$value)
+        )
+        expect_error(panel_benchmark(responses(), benchmark), cases[[i]][[2]], fixed = TRUE)
+        session$setInputs(compare_benchmark = i)
+        expect_match(paste(as.character(run_error()), collapse = "\n"), cases[[i]][[2]], fixed = TRUE)
+        expect_identical(benchmark_result(), held_result)
+      }
+      expect_identical(parse_named_shares("yes=0.995"), list(
+        value = c(yes = .995), error = NULL
+      ))
+      session$setInputs(benchmark = "yes=0.995", compare_benchmark = length(cases) + 1L)
+      expect_null(run_error())
+      table <- benchmark_result()$benchmark$table
+      expect_equal(table$share_human[match("yes", table$response)], .995)
+    }
+  )
+})

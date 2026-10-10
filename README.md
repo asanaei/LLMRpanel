@@ -39,9 +39,9 @@ key from an environment variable such as `GROQ_API_KEY`. Set it once in your
 
 ## A complete panel study
 
-The workflow constructs a panel, defines an instrument, records randomized
-assignments, compares closed items with human data, and uses the response
-dispersion for study planning.
+The workflow builds a persona panel and an instrument. Administration records
+the displayed option order, and benchmark comparisons use supplied human
+response shares.
 
 ### Build a persona panel
 
@@ -113,17 +113,25 @@ instrument <- panel_instrument(list(
   ),
   item_open(
     "reason",
-    "What is the main reason for your answer?"
+    "What should the city consider when choosing between public transit and road repair?"
   )
 ))
 ```
 
-### Administer with respondent randomization
+### Administer the instrument
 
-`panel_administer()` sends each item to each persona. By default,
-`panel_instrument()` randomizes item order and closed item option order for each
-respondent. The response data record `item_position` and `option_order`, so the
-realized assignments remain available for analysis.
+`panel_administer()` sends a separate request for each persona-item pair.
+A request contains the persona and one item. It does not contain earlier items
+or their responses.
+
+With the default instrument settings, choice options are permuted for each
+request. A Likert scale is displayed in its original or reversed order, each
+with probability one-half. Set `randomize = character(0)` in
+`panel_instrument()` to retain the supplied option order.
+
+The response data record the displayed options in `option_order`.
+`item_position` is the item's fixed, 1-based position in the instrument.
+It does not record an order of exposure.
 
 ```r
 resp <- panel_administer(panel, instrument, cfg)
@@ -194,9 +202,6 @@ cj_instrument <- conjoint_instrument(
 cj_resp <- panel_administer(panel, cj_instrument, cfg)
 conjoint_amce(cj_resp)
 ```
-
-### Plan a human study from pilot dispersion
-
 
 ## Graphical interface
 
