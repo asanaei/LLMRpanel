@@ -15,7 +15,9 @@
 #'   columns. Shares must be numeric probabilities in `[0, 1]` without
 #'   missing values. The function raises an error when an item's share
 #'   total differs from 1 by more than 0.01. Each item-response pair must
-#'   occur once, and covered response labels must be offered options.
+#'   occur once, and covered response labels must be offered options. An
+#'   offered option that the benchmark omits for a covered item is taken as
+#'   a known human share of zero, not as a missing value.
 #' @param benchmark_name Name used to identify the benchmark in reports.
 #' @return `responses` with its `benchmark` field populated.
 #'

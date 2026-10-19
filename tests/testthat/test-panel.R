@@ -596,3 +596,22 @@ test_that("the report gives the reason beside an order p of n/a", {
   plan <- grep("^  plan ", rep, value = TRUE)
   expect_false(grepl("n/a", plan, fixed = TRUE))
 })
+
+test_that("an option the benchmark omits is a known human share of zero", {
+  panel <- panel_from_margins(list(group = c(A = 1)), n = 4)
+  instrument <- panel_instrument(
+    item_choice("fund", "Choose.", c("transit", "roads", "bikes")),
+    randomize = character(0))
+  runner <- function(experiments, ...) {
+    experiments$response_text <- c("transit", "bikes", "transit", "roads")
+    experiments
+  }
+  r <- panel_administer(panel, instrument, fix_cfg(), .runner = runner)
+  b <- panel_benchmark(r, data.frame(item_id = "fund",
+                                     response = c("transit", "roads"),
+                                     share = c(.6, .4)))
+  tab <- b$benchmark$table
+  expect_identical(tab$share_human[tab$response == "bikes"], 0)
+  expect_equal(tab$share_silicon[tab$response == "bikes"], .25)
+  expect_equal(tab$deviation[tab$response == "bikes"], .25)
+})
