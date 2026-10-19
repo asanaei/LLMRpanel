@@ -15,8 +15,11 @@ carry no survey weights, so they stand for no population.}
 number, rows are sampled (without replacement when \code{n} does not exceed the
 pool, otherwise with replacement).}
 
-\item{rows}{Optional row selector: an integer or logical vector, or a predicate
-\verb{function(df)} returning a logical vector. Applied before sampling.}
+\item{rows}{Optional row selector: a numeric vector of whole-number row
+positions, a logical vector with one entry per row, or a predicate
+\verb{function(df)} returning such a logical vector. Applied before sampling.
+Character and factor selectors are refused, since a factor's codes are
+not row positions.}
 
 \item{weights}{Optional survey weights for the draw: a column name in \code{data},
 or a numeric vector aligned to the selected rows. Used only when \code{n} is
@@ -24,7 +27,7 @@ given. \code{NULL} (default) draws uniformly.}
 }
 \value{
 A \code{silicon_panel}: a tibble with \code{persona_id}, the demographic columns,
-and \code{persona}.
+and \code{persona}, with the attributes \code{margins}, \code{source}, and \code{source_rows}.
 }
 \description{
 Turns rows of a persona data frame (one respondent per row, demographics plus
@@ -38,7 +41,11 @@ rendered as a person to answer in character.
 \details{
 Unlike \code{\link[=panel_from_margins]{panel_from_margins()}} and \code{\link[=panel_from_data]{panel_from_data()}}, this constructor keeps
 each selected respondent's answers together. The \code{margins} attribute contains
-the demographic distribution of the selected rows.
+the demographic distribution of the selected rows, and the \code{source_rows}
+attribute gives, for each persona in \code{persona_id} order, the row of \code{data}
+it was drawn from. A persona can therefore be traced to its source record
+with \code{attr(panel, "source_rows")[panel$persona_id]}, which still holds after
+the panel's rows are subset.
 
 For a reproducible draw, set a seed before calling (the function never sets
 one itself).

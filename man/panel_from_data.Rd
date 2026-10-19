@@ -28,7 +28,8 @@ weights (rows are drawn with probability proportional to it).}
 }
 \value{
 A \code{silicon_panel}: a tibble with \code{persona_id}, the selected
-attribute columns, and \code{persona}.
+attribute columns, and \code{persona}. Its \code{source_rows} attribute gives, for
+each persona in \code{persona_id} order, the row of \code{data} it was drawn from.
 }
 \description{
 Samples rows from a data frame with replacement, which preserves the

@@ -9,8 +9,19 @@
 
 * `panel_from_personas()` draws the selected respondent when `rows` selects a
   single row; it used to sample from rows 1 to that number instead. Draws from
-  two or more rows are unchanged. Fractional `rows` and `n` are refused rather
-  than truncated.
+  two or more rows are unchanged.
+
+* `panel_from_personas()` stops with "`rows` indices must be whole numbers
+  between 1 and nrow(data), with no NA." when `rows` is fractional, character,
+  or a factor. Before, `rows = c(1.9, 3.7)` selected rows 1 and 3,
+  `rows = "3"` selected row 3, and a factor selected the rows numbered by its
+  level codes. A fractional `n` stops with "`n` must be one whole number of at
+  least 1."; before, `n = 2.5` drew two personas.
+
+* `panel_from_personas()` and `panel_from_data()` record the source rows they
+  drew in a new `source_rows` attribute, giving for each persona in
+  `persona_id` order the row of `data` it came from. `as_tibble()` drops it
+  along with `margins` and `source`.
 
 # LLMRpanel 0.6.1
 

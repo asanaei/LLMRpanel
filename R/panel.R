@@ -141,7 +141,8 @@ panel_from_margins <- function(margins, n, persona_template = NULL) {
 #' @param weights Optional name of a single column of nonnegative sampling
 #'   weights (rows are drawn with probability proportional to it).
 #' @return A `silicon_panel`: a tibble with `persona_id`, the selected
-#'   attribute columns, and `persona`.
+#'   attribute columns, and `persona`. Its `source_rows` attribute gives, for
+#'   each persona in `persona_id` order, the row of `data` it was drawn from.
 #' @examples
 #' set.seed(110)
 #' src <- data.frame(
@@ -218,7 +219,7 @@ panel_from_data <- function(data, n, persona_template = NULL,
     }
   })
   structure(out, class = c("silicon_panel", class(out)), margins = margins,
-            source = "microdata")
+            source = "microdata", source_rows = as.integer(idx))
 }
 
 #' Draw a panel from a persona data frame
@@ -233,7 +234,11 @@ panel_from_data <- function(data, n, persona_template = NULL,
 #'
 #' Unlike [panel_from_margins()] and [panel_from_data()], this constructor keeps
 #' each selected respondent's answers together. The `margins` attribute contains
-#' the demographic distribution of the selected rows.
+#' the demographic distribution of the selected rows, and the `source_rows`
+#' attribute gives, for each persona in `persona_id` order, the row of `data`
+#' it was drawn from. A persona can therefore be traced to its source record
+#' with `attr(panel, "source_rows")[panel$persona_id]`, which still holds after
+#' the panel's rows are subset.
 #'
 #' For a reproducible draw, set a seed before calling (the function never sets
 #' one itself).
@@ -244,13 +249,16 @@ panel_from_data <- function(data, n, persona_template = NULL,
 #' @param n Optional panel size. With `NULL`, every selected row is used; with a
 #'   number, rows are sampled (without replacement when `n` does not exceed the
 #'   pool, otherwise with replacement).
-#' @param rows Optional row selector: an integer or logical vector, or a predicate
-#'   `function(df)` returning a logical vector. Applied before sampling.
+#' @param rows Optional row selector: a numeric vector of whole-number row
+#'   positions, a logical vector with one entry per row, or a predicate
+#'   `function(df)` returning such a logical vector. Applied before sampling.
+#'   Character and factor selectors are refused, since a factor's codes are
+#'   not row positions.
 #' @param weights Optional survey weights for the draw: a column name in `data`,
 #'   or a numeric vector aligned to the selected rows. Used only when `n` is
 #'   given. `NULL` (default) draws uniformly.
 #' @return A `silicon_panel`: a tibble with `persona_id`, the demographic columns,
-#'   and `persona`.
+#'   and `persona`, with the attributes `margins`, `source`, and `source_rows`.
 #' @seealso [LLMR::anes_2024_personas], [panel_administer()].
 #' @examples
 #' \donttest{
@@ -362,7 +370,7 @@ panel_from_personas <- function(data, n = NULL, rows = NULL,
   margins <- lapply(chosen[, demo_cols, drop = FALSE],
                     function(col) prop.table(table(col[!is.na(col)])))
   structure(out, class = c("silicon_panel", class(out)), margins = margins,
-            source = "personas")
+            source = "personas", source_rows = as.integer(idx))
 }
 
 #' @export
@@ -379,6 +387,7 @@ print.silicon_panel <- function(x, ...) {
 as_tibble.silicon_panel <- function(x, ...) {
   attr(x, "margins") <- NULL
   attr(x, "source") <- NULL
+  attr(x, "source_rows") <- NULL
   class(x) <- setdiff(class(x), "silicon_panel")
   tibble::as_tibble(x, ...)
 }
