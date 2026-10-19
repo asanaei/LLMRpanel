@@ -1,73 +1,41 @@
-## Resubmission (references, examples, seed)
+## The update
 
-The three points raised in review are addressed; the version is unchanged
-because 0.6.1 was never published.
-
-- The Description field cites the methods: Argyle et al. (2023)
-  <doi:10.1017/pan.2023.2> for samples of language-model personas, Bisbee et
-  al. (2024) <doi:10.1017/pan.2024.5> for benchmarking them against human
-  data, and Hainmueller et al. (2014) <doi:10.1093/pan/mpt024> for the average
-  marginal component effect.
-- No example uses `\dontrun{}`. The administration, conjoint, and benchmark
-  examples now execute through the package's `.runner` seam, which answers
-  without a provider, so the AMCE example recovers a known effect offline in
-  under a tenth of a second. Live and batch calls sit in `\donttest{}` behind a
-  check for `GROQ_API_KEY`, and the two batch-retrieval examples read the job
-  file a submission would have written, so all of them are no-ops without a
-  key. The check makes no network call.
-- `R/gui.R` sets no specific seed. The Studio has an optional "Random seed"
-  field: left blank, nothing is seeded and the session's random stream is
-  untouched; given a value, it governs the panel draw, the conjoint profile
-  draws, and the option order each persona sees. Repeated runs of one
-  administration still share a single randomization, so what differs between
-  runs is the model's answer; when no seed is supplied that shared value is
-  drawn once from the session's own stream.
-
-## Earlier resubmission
-
-Resubmission of LLMRpanel, bumped to 0.6.1 (0.6.0 was never published).
-The July pretest declined 0.6.0 with a WARNING because three objects its GUI
-uses were not exported by the LLMR.shiny then on CRAN; LLMR.shiny 0.1.2,
-which exports them, is on CRAN now, and the Suggests entry states the
-requirement (LLMR.shiny >= 0.1.2).
-
-Version 0.6.1 also changes package behavior:
-
-- Item-order randomization is gone. Each persona-item pair is an independent
-  request, so no questionnaire order was ever shown to the model.
-- A Likert scale is shown reversed for half of responses instead of
-  arbitrarily permuted.
-- Human reference distributions are validated before any comparison, and an
-  item whose every response failed to parse gets NA shares.
-- A runner supplies responses and diagnostics; it cannot rewrite the
-  experimental assignments.
-- The vignette executes offline from beginning to end.
-
-The pretest NOTE flagged "Benchmarked" in the Description as possibly
-misspelled; it is ordinary English, the past participle of "benchmark".
-
-## The package
-
-The package Imports LLMR (>= 0.8.9), which is on CRAN. It Suggests
-LLMR.shiny (>= 0.1.2); every use of LLMR.shiny (and of the other GUI
-dependencies shiny, bslib, DT) is guarded with requireNamespace(), and the
-package's core has no Shiny dependency. The test suite and the vignette run
-fully offline through the package's `.runner` seam. No test or vignette makes
-a network call, and the examples' live blocks are skipped unless the user has
-set an API key.
+This updates LLMRpanel 0.6.1, published on 2026-09-12. When `rows` selected a
+single row k, `panel_from_personas()` sampled from rows 1 to k; it now draws
+the selected row, refuses fractional, character, and factor selectors and a
+fractional `n`, and records the source row of each persona in a `source_rows`
+attribute. The Studio refuses population margins and benchmark shares it
+cannot parse instead of dropping them. The item constructors refuse missing,
+empty, or indistinguishable labels and malformed ids, and `conjoint_design()`
+refuses fractional or zero counts and unusable attribute names or levels.
+`conjoint_amce()` records and prints its reference levels and the number of
+estimation clusters, and warns when a declared level is absent from the
+estimation data. `panel_bias_audit()` gives a reason whenever it reports no
+order-test p-value. The help, the vignette, and the shipped usage guide no
+longer describe the item-order randomization and sample-size planning removed
+in 0.6.1, and the key-gated `panel_batch_submit()` example submits three
+requests instead of 200. Exported names and documented result columns are
+unchanged; NEWS lists each new error.
 
 ## Test environments
 
-- local macOS 26.5 (arm64), R 4.4.3
-- R CMD build; R CMD check --as-cran on the tarball
+- local macOS 26.7.1 (aarch64-apple-darwin20), R 4.4.3: R CMD check
+  --as-cran --no-manual on the built tarball, with
+  _R_CHECK_FORCE_SUGGESTS_=false, against LLMR 0.8.11 from CRAN with
+  LLMR.shiny 0.1.2 from CRAN and, separately, with LLMR.shiny 0.1.3, which is
+  being submitted at the same time.
 
 ## R CMD check results
 
-0 errors | 0 warnings | 3 notes
+0 errors | 0 warnings | 1 note
 
-- "checking CRAN incoming feasibility ... NOTE: New submission".
 - "checking for future file timestamps ... NOTE: unable to verify current
-  time". Environmental; no network during the check.
-- "checking HTML version of manual ... NOTE": emitted by an older system
-  `tidy` that does not recognize the HTML5 elements R generates; it does not
-  reproduce on CRAN.
+  time": the check machine could not reach a time server.
+
+The examples run offline. The live and batch examples are in `\donttest{}`
+and run only when `GROQ_API_KEY` is set; the check above ran without it, so
+no example contacted a provider.
+
+## Reverse dependencies
+
+None.
