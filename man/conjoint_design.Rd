@@ -7,20 +7,23 @@
 conjoint_design(attributes, n_tasks = 5L, profiles_per_task = 2L)
 }
 \arguments{
-\item{attributes}{Named list of level vectors.}
+\item{attributes}{Named list of level vectors, with at least two
+attributes. Attribute names must be unique and nonempty and must not be
+\code{task}, \code{profile}, \code{persona_id}, or \code{chosen}, which name the design's own
+columns. Each attribute needs at least one level, and its levels must be
+unique, nonempty, and not missing.}
 
-\item{n_tasks}{Tasks per respondent.}
+\item{n_tasks}{Tasks per respondent: one whole number of at least 1.}
 
-\item{profiles_per_task}{Profiles shown per task (default 2).}
+\item{profiles_per_task}{Profiles shown per task (default 2): one whole
+number of at least 1. \code{\link[=conjoint_instrument]{conjoint_instrument()}} needs at least two.}
 }
 \value{
 A \code{conjoint_design} list with fields \code{profiles}, a tibble containing
 \code{task}, \code{profile}, and one column per attribute, and \code{attributes}, the
 named list of attribute levels. Render it into forced-choice items with
 \code{\link[=conjoint_instrument]{conjoint_instrument()}} and estimate with \code{\link[=conjoint_amce]{conjoint_amce()}} after
-administration. Profiles within a task are distinct when the attribute
-space permits them. When it does not, duplicates remain and a warning is
-issued.
+administration.
 }
 \description{
 Random profile pairs (or k-tuples) over the supplied attributes, the
@@ -28,6 +31,15 @@ design for a forced-choice conjoint. Profiles are sampled uniformly and
 independently per attribute; set a seed beforehand for a reproducible
 design (the function never sets one). At administration, fresh profiles are
 drawn independently for every respondent from the same attribute levels.
+}
+\details{
+Within a task, a profile that repeats one already drawn is redrawn, up to
+25 times. When the attribute space holds fewer distinct profiles than
+\code{profiles_per_task}, every task repeats a profile. Otherwise a repeat
+remains only when all 25 redraws repeat a profile, which can happen when the
+space is barely larger than the task. Either case draws a warning that says
+which occurred. The profiles drawn for each respondent at administration
+follow the same rule without a warning.
 }
 \examples{
 set.seed(110)

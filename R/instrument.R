@@ -10,10 +10,17 @@
 #' text, returned verbatim). Likert responses also get a numeric `score`
 #' (position on the scale as given, 1-based).
 #'
-#' @param id Item identifier (unique within an instrument).
-#' @param text The question text.
-#' @param scale For [item_likert()]: response options from low to high.
-#' @param options For [item_choice()]: the choice options.
+#' Replies are matched to the labels after trimming surrounding spaces and,
+#' failing an exact match, without regard to case. Labels must therefore
+#' differ by more than case or surrounding spaces; labels that do not, and
+#' missing or empty labels, are refused when the item is built.
+#'
+#' @param id Item identifier: one nonempty string, unique within an
+#'   instrument.
+#' @param text The question text: one nonempty string.
+#' @param scale For [item_likert()]: two or more response labels from low to
+#'   high.
+#' @param options For [item_choice()]: two or more choice labels.
 #' @return An object of class `panel_item`.
 #' @examples
 #' item_likert("wk4", "A four-day work week would benefit society.")
@@ -22,13 +29,64 @@
 #' @name panel_items
 NULL
 
+# A short printed form of an offending value, for error messages.
+.show_value <- function(x) {
+  shown <- paste(deparse(x, width.cutoff = 60L), collapse = " ")
+  if (nchar(shown) > 60L) shown <- paste0(substr(shown, 1L, 57L), "...")
+  shown
+}
+
+# A design count such as n_tasks: one whole number of at least 1.
+.check_count <- function(x, arg) {
+  if (!is.numeric(x) || length(x) != 1L || !is.finite(x) || x < 1 ||
+      x != round(x)) {
+    abort(sprintf("`%s` must be one whole number of at least 1, not %s.",
+                  arg, .show_value(x)))
+  }
+  invisible(x)
+}
+
+# An item id or question text: one nonempty, nonmissing string.
+.check_item_text <- function(x, arg) {
+  if (!is.character(x) || length(x) != 1L || is.na(x) || !nzchar(trimws(x))) {
+    abort(sprintf("`%s` must be one nonempty character string, not %s.",
+                  arg, .show_value(x)))
+  }
+  invisible(x)
+}
+
+# Response labels: at least two, none missing or empty, and none that a reply
+# could not tell apart, since replies are matched after trimming and, failing
+# an exact match, without regard to case.
+.check_labels <- function(x, arg) {
+  if (!is.character(x) || length(x) < 2L) {
+    abort(sprintf("`%s` must be a character vector of at least two labels, not %s.",
+                  arg, .show_value(x)))
+  }
+  bad <- is.na(x) | !nzchar(trimws(x))
+  if (any(bad)) {
+    abort(sprintf("`%s` has a missing or empty label at position %s.",
+                  arg, paste(which(bad), collapse = ", ")))
+  }
+  key <- tolower(trimws(x))
+  clash <- duplicated(key) | duplicated(key, fromLast = TRUE)
+  if (any(clash)) {
+    abort(sprintf(paste(
+      "`%s` has labels that replies cannot tell apart: %s.",
+      "Labels must differ by more than case or surrounding spaces."),
+      arg, paste(sprintf("\"%s\"", x[clash]), collapse = ", ")))
+  }
+  invisible(x)
+}
+
 #' @rdname panel_items
 #' @export
 item_likert <- function(id, text,
                         scale = c("strongly disagree", "disagree", "neutral",
                                   "agree", "strongly agree")) {
-  stopifnot(is.character(id), nzchar(id), is.character(text), nzchar(text),
-            is.character(scale), length(scale) >= 2L)
+  .check_item_text(id, "id")
+  .check_item_text(text, "text")
+  .check_labels(scale, "scale")
   structure(list(id = id, text = text, type = "likert", options = scale),
             class = "panel_item")
 }
@@ -36,8 +94,9 @@ item_likert <- function(id, text,
 #' @rdname panel_items
 #' @export
 item_choice <- function(id, text, options) {
-  stopifnot(is.character(id), nzchar(id), is.character(text), nzchar(text),
-            is.character(options), length(options) >= 2L)
+  .check_item_text(id, "id")
+  .check_item_text(text, "text")
+  .check_labels(options, "options")
   structure(list(id = id, text = text, type = "choice", options = options),
             class = "panel_item")
 }
@@ -45,7 +104,8 @@ item_choice <- function(id, text, options) {
 #' @rdname panel_items
 #' @export
 item_open <- function(id, text) {
-  stopifnot(is.character(id), nzchar(id), is.character(text), nzchar(text))
+  .check_item_text(id, "id")
+  .check_item_text(text, "text")
   structure(list(id = id, text = text, type = "open", options = NULL),
             class = "panel_item")
 }
@@ -91,7 +151,11 @@ panel_instrument <- function(items, randomize = "option_order") {
     }
   }
   ids <- vapply(items, `[[`, "", "id")
-  if (anyDuplicated(ids)) abort("Item ids must be unique.")
+  if (anyDuplicated(ids)) {
+    abort(sprintf("Item ids must be unique; repeated: %s.",
+                  paste(sprintf("\"%s\"", unique(ids[duplicated(ids)])),
+                        collapse = ", ")))
+  }
   if ("item_order" %in% randomize) {
     abort(paste(
       "`item_order` is not implemented: items are administered as",
@@ -146,16 +210,27 @@ print.panel_instrument <- function(x, ...) {
 #' design (the function never sets one). At administration, fresh profiles are
 #' drawn independently for every respondent from the same attribute levels.
 #'
-#' @param attributes Named list of level vectors.
-#' @param n_tasks Tasks per respondent.
-#' @param profiles_per_task Profiles shown per task (default 2).
+#' Within a task, a profile that repeats one already drawn is redrawn, up to
+#' 25 times. When the attribute space holds fewer distinct profiles than
+#' `profiles_per_task`, every task repeats a profile. Otherwise a repeat
+#' remains only when all 25 redraws repeat a profile, which can happen when the
+#' space is barely larger than the task. Either case draws a warning that says
+#' which occurred. The profiles drawn for each respondent at administration
+#' follow the same rule without a warning.
+#'
+#' @param attributes Named list of level vectors, with at least two
+#'   attributes. Attribute names must be unique and nonempty and must not be
+#'   `task`, `profile`, `persona_id`, or `chosen`, which name the design's own
+#'   columns. Each attribute needs at least one level, and its levels must be
+#'   unique, nonempty, and not missing.
+#' @param n_tasks Tasks per respondent: one whole number of at least 1.
+#' @param profiles_per_task Profiles shown per task (default 2): one whole
+#'   number of at least 1. [conjoint_instrument()] needs at least two.
 #' @return A `conjoint_design` list with fields `profiles`, a tibble containing
 #'   `task`, `profile`, and one column per attribute, and `attributes`, the
 #'   named list of attribute levels. Render it into forced-choice items with
 #'   [conjoint_instrument()] and estimate with [conjoint_amce()] after
-#'   administration. Profiles within a task are distinct when the attribute
-#'   space permits them. When it does not, duplicates remain and a warning is
-#'   issued.
+#'   administration.
 #' @examples
 #' set.seed(110)
 #' conjoint_design(
@@ -164,19 +239,59 @@ print.panel_instrument <- function(x, ...) {
 #' @export
 conjoint_design <- function(attributes, n_tasks = 5L, profiles_per_task = 2L) {
   stopifnot(is.list(attributes), length(attributes) >= 2L)
-  if (is.null(names(attributes)) || any(!nzchar(names(attributes)))) {
+  nms <- names(attributes)
+  if (is.null(nms) || anyNA(nms) || any(!nzchar(trimws(nms)))) {
     abort("`attributes` must be a named list of level vectors.")
   }
+  if (anyDuplicated(nms)) {
+    abort(sprintf("Attribute names must be unique; repeated: %s.",
+                  paste(sprintf("\"%s\"", unique(nms[duplicated(nms)])),
+                        collapse = ", ")))
+  }
+  reserved <- intersect(nms, c("task", "profile", "persona_id", "chosen"))
+  if (length(reserved)) {
+    abort(sprintf(paste(
+      "Attribute name %s is reserved for the design's own columns;",
+      "rename the attribute."),
+      paste(sprintf("\"%s\"", reserved), collapse = ", ")))
+  }
+  for (a in nms) {
+    lv <- attributes[[a]]
+    if (!is.atomic(lv) || !length(lv)) {
+      abort(sprintf("Attribute \"%s\" must be a vector of at least one level.", a))
+    }
+    lv <- as.character(lv)
+    if (anyNA(lv) || any(!nzchar(trimws(lv)))) {
+      abort(sprintf("Attribute \"%s\" has a missing or empty level at position %s.",
+                    a, paste(which(is.na(lv) | !nzchar(trimws(lv))), collapse = ", ")))
+    }
+    if (anyDuplicated(lv)) {
+      abort(sprintf("Attribute \"%s\" repeats the level(s) %s.", a,
+                    paste(sprintf("\"%s\"", unique(lv[duplicated(lv)])),
+                          collapse = ", ")))
+    }
+  }
+  .check_count(n_tasks, "n_tasks")
+  .check_count(profiles_per_task, "profiles_per_task")
   rows <- lapply(seq_len(n_tasks), function(tk) {
     .draw_conjoint_task(attributes, tk, seq_len(profiles_per_task))
   })
   cramped <- any(vapply(rows, function(task) {
-    anyDuplicated(task[, names(attributes), drop = FALSE]) > 0L
+    anyDuplicated(task[, nms, drop = FALSE]) > 0L
   }, logical(1)))
   if (cramped) {
-    cli::cli_warn(paste(
-      "The attribute space is too small for distinct profiles in every",
-      "task; some tasks contain duplicates."))
+    space <- prod(lengths(attributes))
+    if (space < profiles_per_task) {
+      cli::cli_warn(paste(
+        "The attribute space is too small for distinct profiles: it holds",
+        "{space} distinct profile{?s} and each task shows {profiles_per_task},",
+        "so every task contains duplicates."))
+    } else {
+      cli::cli_warn(paste(
+        "Some tasks contain duplicate profiles because 25 redraws found no",
+        "distinct one, although the attribute space holds {space} distinct",
+        "profiles. Draw the design again, or show fewer profiles per task."))
+    }
   }
   profiles <- tibble::as_tibble(do.call(rbind, rows))
   structure(list(profiles = profiles, attributes = attributes),

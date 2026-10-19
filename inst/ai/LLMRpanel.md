@@ -160,6 +160,10 @@ and options are in `messages[["user"]]`.
   match the instrument's ids.
 - "too small for distinct profiles" (warning) -> enlarge conjoint attribute
   levels or accept duplicate profiles knowingly.
+- "25 redraws found no distinct one" (warning) -> draw the design again or show
+  fewer profiles per task.
+- "replies cannot tell apart" -> two option or scale labels are equal after
+  ignoring case and surrounding spaces; rename one.
 - "Some declared conjoint levels are absent from the estimation data"
   (warning) -> failed or unparsed executions removed every profile showing a
   level; when it was an attribute's first level, effects are relative to the

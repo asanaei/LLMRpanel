@@ -18,13 +18,15 @@ item_choice(id, text, options)
 item_open(id, text)
 }
 \arguments{
-\item{id}{Item identifier (unique within an instrument).}
+\item{id}{Item identifier: one nonempty string, unique within an
+instrument.}
 
-\item{text}{The question text.}
+\item{text}{The question text: one nonempty string.}
 
-\item{scale}{For \code{\link[=item_likert]{item_likert()}}: response options from low to high.}
+\item{scale}{For \code{\link[=item_likert]{item_likert()}}: two or more response labels from low to
+high.}
 
-\item{options}{For \code{\link[=item_choice]{item_choice()}}: the choice options.}
+\item{options}{For \code{\link[=item_choice]{item_choice()}}: two or more choice labels.}
 }
 \value{
 An object of class \code{panel_item}.
@@ -34,6 +36,12 @@ Three item types cover most quantitative instruments: a Likert item (an
 agree-disagree battery row), a forced choice, and an open item (free
 text, returned verbatim). Likert responses also get a numeric \code{score}
 (position on the scale as given, 1-based).
+}
+\details{
+Replies are matched to the labels after trimming surrounding spaces and,
+failing an exact match, without regard to case. Labels must therefore
+differ by more than case or surrounding spaces; labels that do not, and
+missing or empty labels, are refused when the item is built.
 }
 \examples{
 item_likert("wk4", "A four-day work week would benefit society.")

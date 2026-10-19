@@ -38,6 +38,47 @@
   every persona administered, including those whose responses all failed or
   did not parse, so the two differ after such failures.
 
+* `item_likert()`, `item_choice()`, and `item_open()` stop with "`id` must be
+  one nonempty character string, not ..." when the id is missing, empty, or
+  longer than one string, and with the same message for `text`. Before, an
+  `NA` id or question was accepted and sent as the text "NA", and a longer
+  vector was accepted and failed later or built a malformed request.
+
+* `item_choice()` and `item_likert()` stop with "`options` has a missing or
+  empty label at position ..." (or "`scale` has ...") when a label is `NA` or
+  empty, and with "`options` has labels that replies cannot tell apart: ..."
+  when two labels are equal after ignoring case and surrounding spaces, which
+  is how replies are matched to labels. Before, such labels were accepted: a
+  repeated Likert label made its score ambiguous, and a reply matching two
+  labels was assigned to the first. A label set that is not character or has
+  fewer than two labels stops with "must be a character vector of at least two
+  labels" instead of a `stopifnot()` message.
+
+* `panel_instrument()` names the repeated ids in its error "Item ids must be
+  unique; repeated: ...".
+
+* `conjoint_design()` stops with "`n_tasks` must be one whole number of at
+  least 1, not ..." and with the same message for `profiles_per_task`.
+  Before, `n_tasks = 2.5` built two tasks, `profiles_per_task = 2.5` showed two
+  profiles per task, and a count of zero built an empty design.
+
+* `conjoint_design()` stops with "Attribute names must be unique; repeated:
+  ..." and, for attributes named `task`, `profile`, `persona_id`, or `chosen`,
+  with "Attribute name ... is reserved for the design's own columns". Before,
+  both failed later with a tibble error about duplicated column names. It also
+  stops when an attribute has no levels ("must be a vector of at least one
+  level"), a missing or empty level ("has a missing or empty level at position
+  ..."), or a repeated level ("repeats the level(s) ..."). Before, a repeated
+  level was drawn more often than the others and made `conjoint_amce()` stop on
+  a singular design matrix, and an `NA` level was shown as "NA".
+
+* The duplicate-profile warning of `conjoint_design()` names its cause. "The
+  attribute space is too small for distinct profiles: it holds ..." means a
+  task shows more profiles than the attributes can form; "Some tasks contain
+  duplicate profiles because 25 redraws found no distinct one, ..." means the
+  redraws ran out in a space that could have supplied them. Before, both cases
+  were reported as a space too small.
+
 # LLMRpanel 0.6.1
 
 Corrections replacing 0.6.0, which was never published.
