@@ -6,17 +6,18 @@ skip_without_sources <- function() {
               "Package sources are not available.")
 }
 
-test_that("help and the vignette contain no affirmative claims about removed features", {
+test_that("help, the vignette, and the AI capsule contain no affirmative claims about removed features", {
   skip_without_sources()
   man <- test_path("..", "..", "man")
   files <- c(
     list.files(man, pattern = "[.]Rd$", full.names = TRUE),
-    test_path("..", "..", "vignettes", "design.Rmd")
+    test_path("..", "..", "vignettes", "design.Rmd"),
+    test_path("..", "..", "inst", "ai", "LLMRpanel.md")
   )
   expect_gt(length(files), 1L)
   expect_true(all(file.exists(files)))
   claims <- paste(c(
-    "randomiz[a-z]* item[ -]order",
+    "randomiz[a-z]* item[ -](and option )?order",
     "item (and option )?order (can be|is) randomiz",
     "item orders, option orders",
     "records the item and option order",

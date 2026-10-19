@@ -61,7 +61,7 @@ tibble::as_tibble(panel)
 
 ```r
 library(LLMRpanel)
-set.seed(110)   # panel draws and order randomization are local RNG
+set.seed(110)   # panel draws and option order use the session's RNG
 
 panel <- panel_from_margins(
   list(age   = c("18-34" = .3, "35-64" = .45, "65+" = .25),
@@ -89,8 +89,6 @@ design <- conjoint_design(list(price = c("low", "high"),
                                origin = c("domestic", "imported")), n_tasks = 4)
 cj <- panel_administer(panel, conjoint_instrument(design), cfg)
 conjoint_amce(cj)
-
-# calculate sample sizes from the pilot's dispersion
 ```
 
 ## Rules
@@ -110,9 +108,12 @@ conjoint_amce(cj)
 - A benchmark data frame has columns `item_id`, `response`, and `share`.
   Shares should sum to 1 within each item. The comparison uses covered items
   and reports the number of closed items covered.
-- `panel_instrument()` randomizes item and option order by default.
-  `panel_bias_audit()` tests whether responses are associated with the first
-  option shown.
+- Each persona-item pair is an independent request, so the model never sees
+  an item order; `item_position` is the item's fixed position in the
+  instrument. By default `panel_instrument()` permutes choice options and
+  shows a Likert scale reversed with probability one-half;
+  `randomize = character(0)` keeps the supplied order. `panel_bias_audit()`
+  tests whether responses are associated with the first option shown.
 - Likert `score` is the 1-based position in the scale supplied to
   `item_likert()` and is stored in `responses$data`.
 - Unmatched closed-item replies remain `NA` and are counted as nonresponse.
@@ -130,7 +131,6 @@ conjoint_amce(cj)
 - `conjoint_amce()` requires responses from `conjoint_instrument()` and clusters
   standard errors by persona. Its classed result retains run counts as ordinary
   columns. Baseline rows have estimate 0 and missing standard errors.
-  validate the specified effect.
 - `LLMR::diagnostics()` returns the bias audit and benchmark fields.
   `LLMR::report()` returns the classed report.
 - `tibble::as_tibble(responses)` returns the plain `responses$data` tibble.
