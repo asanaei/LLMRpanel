@@ -46,7 +46,8 @@ supplied, the API key must be referenced through an environment variable so
 its value is not written to the saved state.
 }
 \examples{
-panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 200)
+# Three personas and one item make a batch of three requests.
+panel <- panel_from_margins(list(party = c(left = .5, right = .5)), n = 3)
 instrument <- panel_instrument(item_likert("wk4", "A four-day work week helps."))
 cfg <- LLMR::llm_config("groq", "openai/gpt-oss-20b",
                         api_key = LLMR::llm_api_key_env("GROQ_API_KEY"))
