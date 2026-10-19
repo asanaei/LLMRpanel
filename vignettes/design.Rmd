@@ -201,8 +201,10 @@ design$attributes
 `$profiles` and warns when the attribute space cannot supply them.
 `conjoint_instrument()` creates one forced-choice item per task. Administration
 renders a fresh draw for each respondent and records it with the response.
-`conjoint_amce()` estimates from those recorded profiles relative to the first
-level of each attribute and calculates standard errors clustered by persona.
+`conjoint_amce()` estimates from those recorded profiles relative to a
+reference level for each attribute and calculates standard errors clustered by
+persona. The reference is the first level, in the design's order, that appears
+in the estimation data.
 
 ```{r conjoint_amce, purl=FALSE}
 cj_instr = conjoint_instrument(design, "Which product would you buy?")
@@ -212,9 +214,14 @@ conjoint_amce(cj)
 ```
 
 `conjoint_amce()` returns a classed result with one row for each observed
-attribute level. Baseline levels have estimate 0 and missing standard errors.
+attribute level. Reference levels have estimate 0 and missing standard errors.
 Other rows contain the estimated contrast and 95 percent interval. Run counts
-remain in separate columns.
+remain in separate columns. The printed header names the reference levels,
+which are also in `attr(amce, "reference")`, and gives the number of personas
+whose responses entered the estimate, the clusters for the standard errors.
+When every profile showing an attribute's first level is lost, for instance
+because those executions failed, the next level present becomes the reference
+and a warning names it.
 
 ## A live administration
 

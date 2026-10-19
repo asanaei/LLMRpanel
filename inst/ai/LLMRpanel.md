@@ -130,7 +130,11 @@ conjoint_amce(cj)
   `$profiles` and the attribute universe in `$attributes`.
 - `conjoint_amce()` requires responses from `conjoint_instrument()` and clusters
   standard errors by persona. Its classed result retains run counts as ordinary
-  columns. Baseline rows have estimate 0 and missing standard errors.
+  columns. Reference rows have estimate 0 and missing standard errors.
+  `attr(amce, "reference")` names each attribute's reference level, the first
+  declared level present in the estimation data, and `attr(amce, "n_clusters")`
+  counts the personas whose responses were estimated; `n_respondents` counts
+  every persona administered.
 - `LLMR::diagnostics()` returns the bias audit and benchmark fields.
   `LLMR::report()` returns the classed report.
 - `tibble::as_tibble(responses)` returns the plain `responses$data` tibble.
@@ -156,6 +160,10 @@ and options are in `messages[["user"]]`.
   match the instrument's ids.
 - "too small for distinct profiles" (warning) -> enlarge conjoint attribute
   levels or accept duplicate profiles knowingly.
+- "Some declared conjoint levels are absent from the estimation data"
+  (warning) -> failed or unparsed executions removed every profile showing a
+  level; when it was an attribute's first level, effects are relative to the
+  level the warning names.
 - "must be a *named* probability vector" -> name every margin level.
 - "needs an administration of a conjoint_instrument()" -> `conjoint_amce()`
   was given a plain instrument; build it with `conjoint_instrument(design)`.

@@ -291,3 +291,90 @@ test_that("panel_from_data respects weights approximately", {
   expect_lt(share_high, 0.99)
   expect_true(all((panel$segment == "high") == (panel$mirror == "H")))
 })
+
+collect_warnings <- function(expr) {
+  messages <- character(0)
+  value <- withCallingHandlers(expr, warning = function(w) {
+    messages <<- c(messages, conditionMessage(w))
+    invokeRestart("muffleWarning")
+  })
+  list(value = value, warnings = messages)
+}
+
+test_that("conjoint_amce names its reference levels and estimation clusters", {
+  panel <- test_panel(6)
+  instr <- conjoint_instrument(known_design())
+  cfg <- LLMR::llm_config("groq", "any-model")
+  set.seed(110)
+  responses <- panel_administer(panel, instr, cfg, .runner = prefer_red_runner)
+  expect_no_warning(out <- conjoint_amce(responses))
+  expect_identical(attr(out, "reference"), c(color = "blue", cost = "low"))
+  expect_identical(attr(out, "n_clusters"), 6L)
+  expect_output(print(out), "Reference levels: color = blue; cost = low",
+                fixed = TRUE)
+  expect_output(print(out), "6 respondent(s), 6 estimation cluster(s)",
+                fixed = TRUE)
+
+  saved <- out
+  attr(saved, "reference") <- NULL
+  attr(saved, "n_clusters") <- NULL
+  printed <- utils::capture.output(print(saved))
+  expect_match(printed[1], "6 respondent(s) |", fixed = TRUE)
+  expect_false(any(grepl("Reference levels", printed, fixed = TRUE)))
+})
+
+test_that("a lost first level is reported and the new reference is recorded", {
+  panel <- test_panel(12)
+  instr <- conjoint_instrument(known_design())
+  cfg <- LLMR::llm_config("groq", "any-model")
+  blue_fails <- function(experiments, ...) {
+    out <- prefer_red_runner(experiments, ...)
+    user <- vapply(out$messages, `[[`, "", "user")
+    out$success <- !grepl("color: blue", user, fixed = TRUE)
+    out
+  }
+  set.seed(110)
+  responses <- panel_administer(panel, instr, cfg, .runner = blue_fails)
+  got <- collect_warnings(conjoint_amce(responses))
+  out <- got$value
+  expect_true(any(grepl("execution failure", got$warnings)))
+  expect_true(any(grepl(
+    "`color`: the first declared level \"blue\" is absent, so effects are relative to \"red\".",
+    got$warnings, fixed = TRUE)))
+  expect_identical(attr(out, "reference"), c(color = "red", cost = "low"))
+  expect_false("blue" %in% out$level)
+  expect_identical(out$estimate[out$attribute == "color"], 0)
+})
+
+test_that("an absent later level is named, and failed personas are not clusters", {
+  panel <- test_panel(8)
+  set.seed(110)
+  design <- conjoint_design(
+    list(color = c("blue", "red", "green"), cost = c("low", "high")),
+    n_tasks = 6)
+  instr <- conjoint_instrument(design)
+  cfg <- LLMR::llm_config("groq", "any-model")
+  green_and_persona_1_fail <- function(experiments, ...) {
+    out <- prefer_red_runner(experiments, ...)
+    user <- vapply(out$messages, `[[`, "", "user")
+    out$success <- !grepl("color: green", user, fixed = TRUE) &
+      out$persona_id != 1L
+    out
+  }
+  set.seed(110)
+  responses <- panel_administer(panel, instr, cfg,
+                                .runner = green_and_persona_1_fail)
+  got <- collect_warnings(conjoint_amce(responses))
+  out <- got$value
+  expect_true(any(grepl("`color`: \"green\" is absent and has no estimate.",
+                        got$warnings, fixed = TRUE)))
+  expect_false(any(grepl("first declared level", got$warnings, fixed = TRUE)))
+  expect_identical(attr(out, "reference"), c(color = "blue", cost = "low"))
+  expect_false("green" %in% out$level)
+  estimated <- responses$data$success & !is.na(responses$data$response)
+  expect_false(any(estimated[responses$data$persona_id == 1L]))
+  expect_identical(out$n_respondents[1], 8L)
+  expect_identical(attr(out, "n_clusters"),
+                   length(unique(responses$data$persona_id[estimated])))
+  expect_lt(attr(out, "n_clusters"), 8L)
+})

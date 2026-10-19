@@ -425,15 +425,26 @@ diagnostics.panel_responses <- function(x, ...) {
 #' AMCE estimator. The regression uses the respondent-level profiles recorded
 #' during administration, not the profiles in the initial design table.
 #'
+#' Each attribute's effects are relative to its reference level: the first
+#' level, in the design's order, that appears in the estimation data. That is
+#' the first declared level unless every profile showing it was lost, for
+#' example because the executions that drew it failed or their replies did not
+#' parse. A warning names the attribute and the level that took its place when
+#' this happens, and also names any other declared level that is absent and so
+#' has no row in the table.
+#'
 #' @param responses A [panel_administer()] result whose instrument came from
 #'   [conjoint_instrument()].
 #' @return A `conjoint_amce` tibble: `attribute`, `level`, `estimate`, `std_error`,
-#'   `ci_lo`, `ci_hi`. Baseline levels (the first level present, in the
-#'   design's order) appear with estimate 0 and `std_error = NA`, so the
-#'   table feeds the familiar conjoint plot directly. The ordinary columns
-#'   `n_profiles`, `n_respondents`, `n_dropped_na`, and
+#'   `ci_lo`, `ci_hi`. Reference levels appear with estimate 0 and
+#'   `std_error = NA`, so the table feeds the familiar conjoint plot directly.
+#'   The ordinary columns `n_profiles`, `n_respondents`, `n_dropped_na`, and
 #'   `n_execution_failures` record the profile rows used, the respondents
-#'   administered, missing task responses dropped, and failed executions.
+#'   administered (including those whose responses failed), missing task
+#'   responses dropped, and failed executions. The attribute `reference` is a
+#'   character vector naming each attribute's reference level, and
+#'   `n_clusters` is the number of personas with at least one estimated
+#'   response, the clusters behind the standard errors.
 #' @examples
 #' set.seed(110)
 #' panel <- panel_from_margins(list(group = c(A = .5, B = .5)), n = 6)
@@ -522,6 +533,36 @@ conjoint_amce <- function(responses) {
     lev <- as.character(attrs[[a]])
     lev[lev %in% as.character(unique(long[[a]]))]
   }), attr_names)
+  reference <- vapply(level_list, function(lev) {
+    if (length(lev)) lev[[1]] else NA_character_
+  }, character(1))
+  absence <- character(0)
+  for (a in attr_names) {
+    declared <- as.character(attrs[[a]])
+    missing_levels <- setdiff(declared, level_list[[a]])
+    if (declared[[1]] %in% missing_levels) {
+      absence <- c(absence, if (is.na(reference[[a]])) {
+        sprintf("`%s`: no declared level is present, so it has no estimate.", a)
+      } else {
+        sprintf(
+          "`%s`: the first declared level \"%s\" is absent, so effects are relative to \"%s\".",
+          a, declared[[1]], reference[[a]])
+      })
+      missing_levels <- missing_levels[-1]
+    }
+    if (length(missing_levels)) {
+      absence <- c(absence, sprintf(
+        "`%s`: %s %s absent and %s no estimate.", a,
+        paste(sprintf("\"%s\"", missing_levels), collapse = ", "),
+        if (length(missing_levels) == 1L) "is" else "are",
+        if (length(missing_levels) == 1L) "has" else "have"))
+    }
+  }
+  if (length(absence)) {
+    rlang::warn(c(
+      "Some declared conjoint levels are absent from the estimation data.",
+      stats::setNames(absence, rep("*", length(absence)))))
+  }
 
   x_cols <- list("(Intercept)" = rep(1, nrow(long)))
   term_index <- list()
@@ -577,17 +618,27 @@ conjoint_amce <- function(responses) {
   out$n_respondents <- as.integer(length(unique(r_all$persona_id)))
   out$n_dropped_na <- as.integer(n_dropped_na)
   out$n_execution_failures <- as.integer(n_execution_failures)
+  attr(out, "reference") <- reference
+  attr(out, "n_clusters") <- as.integer(G)
   class(out) <- c("conjoint_amce", class(out))
   out
 }
 
 #' @export
 print.conjoint_amce <- function(x, ...) {
+  clusters <- attr(x, "n_clusters")
   cat(sprintf(paste0(
-    "<conjoint_amce | %d profile row(s) | %d respondent(s) | ",
+    "<conjoint_amce | %d profile row(s) | %d respondent(s)%s | ",
     "%d missing, %d execution failure(s)>\n"),
-    x$n_profiles[1], x$n_respondents[1], x$n_dropped_na[1],
-    x$n_execution_failures[1]))
+    x$n_profiles[1], x$n_respondents[1],
+    if (is.null(clusters)) "" else sprintf(", %d estimation cluster(s)", clusters),
+    x$n_dropped_na[1], x$n_execution_failures[1]))
+  reference <- attr(x, "reference")
+  if (!is.null(reference)) {
+    cat(sprintf("Reference levels: %s\n",
+                paste(sprintf("%s = %s", names(reference), reference),
+                      collapse = "; ")))
+  }
   estimates <- x
   class(estimates) <- setdiff(class(estimates), "conjoint_amce")
   print(estimates[, c("attribute", "level", "estimate", "std_error",

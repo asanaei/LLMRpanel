@@ -12,12 +12,15 @@ conjoint_amce(responses)
 }
 \value{
 A \code{conjoint_amce} tibble: \code{attribute}, \code{level}, \code{estimate}, \code{std_error},
-\code{ci_lo}, \code{ci_hi}. Baseline levels (the first level present, in the
-design's order) appear with estimate 0 and \code{std_error = NA}, so the
-table feeds the familiar conjoint plot directly. The ordinary columns
-\code{n_profiles}, \code{n_respondents}, \code{n_dropped_na}, and
+\code{ci_lo}, \code{ci_hi}. Reference levels appear with estimate 0 and
+\code{std_error = NA}, so the table feeds the familiar conjoint plot directly.
+The ordinary columns \code{n_profiles}, \code{n_respondents}, \code{n_dropped_na}, and
 \code{n_execution_failures} record the profile rows used, the respondents
-administered, missing task responses dropped, and failed executions.
+administered (including those whose responses failed), missing task
+responses dropped, and failed executions. The attribute \code{reference} is a
+character vector naming each attribute's reference level, and
+\code{n_clusters} is the number of personas with at least one estimated
+response, the clusters behind the standard errors.
 }
 \description{
 Average marginal component effects from a \code{\link[=conjoint_instrument]{conjoint_instrument()}}
@@ -28,6 +31,15 @@ on the t distribution with G - 1 degrees of freedom (G personas).
 Under uniform, independent profile randomization this is the standard
 AMCE estimator. The regression uses the respondent-level profiles recorded
 during administration, not the profiles in the initial design table.
+}
+\details{
+Each attribute's effects are relative to its reference level: the first
+level, in the design's order, that appears in the estimation data. That is
+the first declared level unless every profile showing it was lost, for
+example because the executions that drew it failed or their replies did not
+parse. A warning names the attribute and the level that took its place when
+this happens, and also names any other declared level that is absent and so
+has no row in the table.
 }
 \examples{
 set.seed(110)

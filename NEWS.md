@@ -23,6 +23,21 @@
   `persona_id` order the row of `data` it came from. `as_tibble()` drops it
   along with `margins` and `source`.
 
+* `conjoint_amce()` records each attribute's reference level in a new
+  `reference` attribute and prints the reference levels below the header. The
+  reference is still the first declared level present in the estimation data.
+  When that is not the first declared level, for example because every
+  execution showing it failed, the function warns "Some declared conjoint
+  levels are absent from the estimation data." and names the level that took
+  its place; before, the baseline changed without a message. The same warning
+  names any other declared level that is absent and so has no row.
+
+* `conjoint_amce()` stores the number of personas whose responses entered the
+  estimate, the clusters behind its standard errors, in a new `n_clusters`
+  attribute and prints it beside `n_respondents`. `n_respondents` still counts
+  every persona administered, including those whose responses all failed or
+  did not parse, so the two differ after such failures.
+
 # LLMRpanel 0.6.1
 
 Corrections replacing 0.6.0, which was never published.
