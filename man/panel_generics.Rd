@@ -7,6 +7,24 @@
 \alias{as_tibble.silicon_panel}
 \alias{as_tibble.panel_responses}
 \title{Shared generic methods}
+\value{
+\code{diagnostics()} returns the \code{\link[=panel_bias_audit]{panel_bias_audit()}} tibble, one row per
+item, with four columns that repeat on every row: \code{benchmark_state}
+(\code{"NOT BENCHMARKED"}, \code{"PARTIALLY BENCHMARKED"}, or \code{"BENCHMARKED"}),
+\code{items_covered} and \code{items_total}, the numbers of closed items covered by
+the benchmark and administered, and \code{mean_abs_dev}, the benchmark's mean
+absolute deviation, or \code{NA} when there is no benchmark.
+
+\code{report()} returns a \code{panel_report} object: a character vector that
+prints one line per element. The lines give the benchmark state, the
+panel's source and demographic fields, the response and failure counts,
+and each item's first-option sensitivity.
+
+\code{as_tibble()} returns a tibble. For \code{panel_responses} it is the \code{data}
+field, one row per persona-item pair. For a \code{silicon_panel} it is the
+persona table without the \code{silicon_panel} class and without the
+\code{margins}, \code{source}, and \code{source_rows} attributes.
+}
 \description{
 LLMRpanel provides \code{LLMR::diagnostics()}, \code{LLMR::report()}, and \code{plot()}
 methods for \code{panel_responses} objects. It provides \code{tibble::as_tibble()}
