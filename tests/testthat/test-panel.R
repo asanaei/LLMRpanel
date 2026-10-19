@@ -510,3 +510,89 @@ test_that("panel_from_personas draws beyond the ANES pool with replacement", {
   )
   expect_equal(nrow(p), 250L)
 })
+
+test_that("every order test without a p-value says why", {
+  set.seed(110)
+  r <- panel_administer(fix_panel(40), fix_instr(), fix_cfg(),
+                        .runner = runner_first_option)
+  ba <- panel_bias_audit(r)
+  expect_true(is.na(ba$order_test_note[ba$item_id == "plan"]))
+  expect_identical(ba$order_test_note[ba$item_id == "why"],
+                   "open item; no options to order")
+
+  set.seed(110)
+  fixed <- panel_bias_audit(panel_administer(
+    fix_panel(40), fix_instr(randomize = character(0)), fix_cfg(),
+    .runner = runner_first_option))
+  expect_identical(fixed$order_test_note[fixed$item_id == "plan"],
+                   "option order did not vary")
+
+  set.seed(110)
+  few <- panel_bias_audit(panel_administer(
+    fix_panel(3), fix_instr(), fix_cfg(), .runner = runner_first_option))
+  expect_identical(few$order_test_note[few$item_id == "plan"],
+                   "3 parsed response(s); the test needs at least 4")
+
+  same <- function(experiments, ...) {
+    experiments$response_text <- "Plan A"
+    experiments$success <- TRUE
+    experiments
+  }
+  set.seed(110)
+  uniform <- panel_bias_audit(panel_administer(
+    fix_panel(20), fix_instr(), fix_cfg(), .runner = same))
+  expect_identical(uniform$order_test_note[uniform$item_id == "plan"],
+                   "every parsed response is the same")
+
+  only_a_first_parses <- function(experiments, ...) {
+    out <- runner_first_option(experiments, ...)
+    user <- vapply(out$messages, `[[`, "", "user")
+    a_first <- grepl("Options: Plan A", user, fixed = TRUE)
+    out$response_text <- ifelse(
+      a_first, rep(c("Plan A", "Plan B"), length.out = nrow(out)), "unclear")
+    out
+  }
+  set.seed(110)
+  one_first <- panel_bias_audit(panel_administer(
+    fix_panel(30), fix_instr(), fix_cfg(), .runner = only_a_first_parses))
+  expect_identical(one_first$order_test_note[one_first$item_id == "plan"],
+                   "one option was shown first in every parsed response")
+
+  set.seed(110)
+  sparse <- panel_bias_audit(panel_administer(
+    fix_panel(8), fix_instr(), fix_cfg(), .runner = runner_first_option))
+  expect_identical(sparse$order_test_note[sparse$item_id == "plan"],
+                   "sparse cells; chi-square approximation unreliable")
+  expect_true(all(is.na(sparse$order_effect_p)))
+  expect_false(anyNA(sparse$order_test_note))
+})
+
+test_that("a chi-squared test that fails is recorded and warned about", {
+  set.seed(110)
+  r <- panel_administer(fix_panel(40), fix_instr(), fix_cfg(),
+                        .runner = runner_first_option)
+  testthat::local_mocked_bindings(
+    chisq.test = function(...) stop("no test today"), .package = "stats")
+  expect_warning(
+    expect_warning(ba <- panel_bias_audit(r),
+                   "first-option test for item \"plan\" did not run: no test today",
+                   fixed = TRUE),
+    "first-option test for item \"wk4\" did not run", fixed = TRUE)
+  expect_true(is.na(ba$order_effect_p[ba$item_id == "plan"]))
+  expect_identical(ba$order_test_note[ba$item_id == "plan"],
+                   "chi-squared test failed: no test today")
+  rep <- suppressWarnings(LLMR::report(r))
+  expect_true(any(grepl("order p = n/a (chi-squared test failed: no test today)",
+                        rep, fixed = TRUE)))
+})
+
+test_that("the report gives the reason beside an order p of n/a", {
+  set.seed(110)
+  r <- panel_administer(fix_panel(40), fix_instr(), fix_cfg(),
+                        .runner = runner_first_option)
+  rep <- LLMR::report(r)
+  why <- grep("^  why ", rep, value = TRUE)
+  expect_match(why, "order p = n/a (open item; no options to order)", fixed = TRUE)
+  plan <- grep("^  plan ", rep, value = TRUE)
+  expect_false(grepl("n/a", plan, fixed = TRUE))
+})

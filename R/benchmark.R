@@ -334,8 +334,13 @@ plot.panel_responses <- function(x, ...) {
 #'
 #' @param responses A [panel_administer()] result.
 #' @return A tibble: `item_id`, `n`, `parse_failures`, `execution_failures`,
-#'   `order_effect_p` (the first-option chi-squared p-value; NA when order was
-#'   not randomized or cells are too sparse).
+#'   `order_effect_p`, and `order_test_note`. `order_effect_p` is the
+#'   first-option chi-squared p-value. When it is `NA`, `order_test_note` says
+#'   why: the item is open, its option order did not vary, fewer than four
+#'   responses parsed, every parsed response is the same, one option was shown
+#'   first in every parsed response, the expected cell counts are below five,
+#'   or the test itself failed, in which case a warning is also issued.
+#'   `order_test_note` is `NA` when a p-value is reported.
 #' @examples
 #' panel <- panel_from_margins(list(group = c(A = 1)), n = 4)
 #' instrument <- panel_instrument(
@@ -360,21 +365,36 @@ panel_bias_audit <- function(responses) {
     pf <- if (closed) sum(is.na(ri$response) & !failed) else 0L
     p <- NA_real_
     order_note <- NA_character_
-    if (closed && length(unique(stats::na.omit(ri$option_order))) > 1L) {
+    if (!closed) {
+      order_note <- "open item; no options to order"
+    } else if (length(unique(stats::na.omit(ri$option_order))) < 2L) {
+      order_note <- "option order did not vary"
+    } else {
       first_seen <- vapply(strsplit(ri$option_order, "|", fixed = TRUE),
                            `[[`, "", 1L)
       ok <- !is.na(ri$response)
-      if (sum(ok) >= 4L && length(unique(ri$response[ok])) > 1L) {
+      if (sum(ok) < 4L) {
+        order_note <- sprintf(
+          "%d parsed response(s); the test needs at least 4", sum(ok))
+      } else if (length(unique(ri$response[ok])) < 2L) {
+        order_note <- "every parsed response is the same"
+      } else {
         tab <- table(ri$response[ok], first_seen[ok])
-        if (all(dim(tab) >= 2L)) {
+        if (any(dim(tab) < 2L)) {
+          order_note <- "one option was shown first in every parsed response"
+        } else {
           test <- tryCatch(suppressWarnings(stats::chisq.test(tab)),
-                           error = function(e) NULL)
-          if (!is.null(test)) {
-            if (any(test$expected < 5)) {
-              order_note <- "sparse cells; chi-square approximation unreliable"
-            } else {
-              p <- test$p.value
-            }
+                           error = function(e) e)
+          if (inherits(test, "error")) {
+            order_note <- paste("chi-squared test failed:",
+                                conditionMessage(test))
+            rlang::warn(sprintf(
+              "The first-option test for item \"%s\" did not run: %s",
+              ri$item_id[1], conditionMessage(test)))
+          } else if (any(test$expected < 5)) {
+            order_note <- "sparse cells; chi-square approximation unreliable"
+          } else {
+            p <- test$p.value
           }
         }
       }
@@ -692,7 +712,9 @@ panel_report <- function(responses, ...) {
     "FIRST-OPTION SENSITIVITY (chi-squared p by item; small p = which option was listed first moved the answers):",
     sprintf("  %-12s n = %3d  execution failures = %2d  parse failures = %2d  order p = %s",
             ba$item_id, ba$n, ba$execution_failures, ba$parse_failures,
-            ifelse(is.na(ba$order_effect_p), "n/a",
+            ifelse(is.na(ba$order_effect_p),
+                   ifelse(is.na(ba$order_test_note), "n/a",
+                          paste0("n/a (", ba$order_test_note, ")")),
                    format(round(ba$order_effect_p, 4))))
   )
   structure(lines, class = "panel_report")

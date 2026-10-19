@@ -11,8 +11,13 @@ panel_bias_audit(responses)
 }
 \value{
 A tibble: \code{item_id}, \code{n}, \code{parse_failures}, \code{execution_failures},
-\code{order_effect_p} (the first-option chi-squared p-value; NA when order was
-not randomized or cells are too sparse).
+\code{order_effect_p}, and \code{order_test_note}. \code{order_effect_p} is the
+first-option chi-squared p-value. When it is \code{NA}, \code{order_test_note} says
+why: the item is open, its option order did not vary, fewer than four
+responses parsed, every parsed response is the same, one option was shown
+first in every parsed response, the expected cell counts are below five,
+or the test itself failed, in which case a warning is also issued.
+\code{order_test_note} is \code{NA} when a p-value is reported.
 }
 \description{
 Counts execution and parse failures by item. For closed items administered

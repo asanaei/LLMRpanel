@@ -79,6 +79,16 @@
   redraws ran out in a space that could have supplied them. Before, both cases
   were reported as a space too small.
 
+* `panel_bias_audit()` fills `order_test_note` whenever `order_effect_p` is
+  `NA`, with the reason no p-value is reported: an open item, an option order
+  that did not vary, fewer than four parsed responses, identical parsed
+  responses, one option shown first in every parsed response, or sparse cells.
+  Before, only sparse cells had a note, and the other cases were `NA` in both
+  columns. When `stats::chisq.test()` itself fails, the note records its
+  message and the function warns "The first-option test for item ... did not
+  run: ..."; before, the failure was dropped without a trace. `LLMR::report()`
+  prints the note beside "order p = n/a".
+
 # LLMRpanel 0.6.1
 
 Corrections replacing 0.6.0, which was never published.
