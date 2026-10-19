@@ -24,6 +24,9 @@ unchanged; NEWS lists each new error.
   _R_CHECK_FORCE_SUGGESTS_=false, against LLMR 0.8.11 from CRAN with
   LLMR.shiny 0.1.2 from CRAN and, separately, with LLMR.shiny 0.1.3, which is
   being submitted at the same time.
+- the same platform: R CMD check --as-cran --no-manual on the built tarball
+  against LLMR 0.8.14 with LLMR.shiny 0.1.3. LLMR 0.8.14 is submitted ahead
+  of this package and will be on CRAN first. The result is the same 1 note.
 
 ## R CMD check results
 
@@ -31,6 +34,10 @@ unchanged; NEWS lists each new error.
 
 - "checking for future file timestamps ... NOTE: unable to verify current
   time": the check machine could not reach a time server.
+
+CRAN's spell check may flag the author names Bisbee and Hainmueller and the
+terms of art estimand and benchmarked in DESCRIPTION, and AMCE and Likert in
+the help pages. All are spelled correctly.
 
 The examples run offline. The live and batch examples are in `\donttest{}`
 and run only when `GROQ_API_KEY` is set; the check above ran without it, so
