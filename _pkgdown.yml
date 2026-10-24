@@ -12,6 +12,9 @@ reference:
   - panel_from_data
   - panel_from_personas
   - as_persona_frame
+- title: Data
+  contents:
+  - anes_2024_personas
 - title: Survey and experimental instruments
   contents:
   - panel_items

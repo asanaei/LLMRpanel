@@ -13,21 +13,25 @@
 #' stated answers are rendered separately. A question map supplies the wording
 #' used for answer fields. Plain data frames use the flat key-value rendering.
 #'
-#' @param data A decoded data frame, one respondent per row. Values should
-#'   already be human-readable labels (decode a labelled survey file with, for
-#'   example, `haven::as_factor()` first).
+#' @param data A data frame, one respondent per row. Columns may hold text,
+#'   numbers, factors, or labeled survey values as `haven::read_dta()` and
+#'   `haven::read_sav()` return them; values are decoded when the personas
+#'   are rendered, by the rules under "Rendering of values" in
+#'   [panel_from_personas()].
 #' @param questions Optional named character vector mapping column names to the
 #'   human question wording, e.g.
 #'   `c(pid = "Party identification", ab = "Abortion position")`. Columns absent
 #'   from this map keep their column name. Without it the column names stand in
-#'   for the questions, which is formatting, not a faithful translation.
+#'   for the questions, which is formatting, not a faithful translation, and
+#'   rendering the stated answers draws a warning.
 #' @param demographics Optional character vector of columns to treat as
 #'   demographic background (the rest become stated answers). Defaults to the
 #'   common demographic names found in `data`.
 #' @param answers Optional character vector restricting which columns may appear
 #'   as stated answers. Defaults to every column that is not a demographic, an
 #'   `id`-named, or a `weight`-named column, so analysis-only columns do not leak
-#'   into the prompt.
+#'   into the prompt. Identifier columns are never rendered, even when named
+#'   here.
 #' @return `data` with the persona contract attached and class `persona_frame`.
 #' @seealso [panel_from_data()], [panel_from_personas()],
 #'   [LLMR::llm_persona_split()].

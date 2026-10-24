@@ -543,7 +543,7 @@ test_that("ANES field selection preserves the default and restricts on request",
       )
       session$flushReact()
       set.seed(110)
-      expected <- panel_from_personas(LLMR::anes_2024_personas, n = 2)
+      expected <- panel_from_personas(LLMRpanel::anes_2024_personas, n = 2)
       expect_identical(panel()$persona, expected$persona)
 
       session$setInputs(
@@ -595,14 +595,14 @@ test_that("ANES construction modes ignore the inactive row control", {
       )
       expect_equal(nrow(panel()), 3L)
       expected <- panel_from_personas(
-        LLMR::anes_2024_personas, rows = selected_rows
+        LLMRpanel::anes_2024_personas, rows = selected_rows
       )
       expect_identical(panel()$persona, expected$persona)
 
       session$setInputs(anes_mode = "draw", n = 4, seed = 110, build_panel = 2)
       session$flushReact()
       set.seed(110)
-      expected <- panel_from_personas(LLMR::anes_2024_personas, n = 4)
+      expected <- panel_from_personas(LLMRpanel::anes_2024_personas, n = 4)
       expect_equal(nrow(panel()), 4L)
       expect_identical(panel()$persona, expected$persona)
     }
@@ -831,7 +831,7 @@ test_that("a blank seed draws the panel from the session's own stream", {
   skip_if_not_installed("LLMR.shiny", "0.1.2")
 
   set.seed(4242)
-  expected <- panel_from_personas(LLMR::anes_2024_personas, n = 3)
+  expected <- panel_from_personas(LLMRpanel::anes_2024_personas, n = 3)
 
   shiny::testServer(
     LLMRpanel:::.panel_gui_module_server,
@@ -1082,6 +1082,60 @@ test_that("benchmark probability, total, and offered-label checks remain in the 
       expect_null(run_error())
       table <- benchmark_result()$benchmark$table
       expect_equal(table$share_human[match("yes", table$response)], .995)
+    }
+  )
+})
+
+test_that("the Studio uses the package's own personas and previews the text it sends", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("DT")
+  skip_if_not_installed("LLMR.shiny", "0.1.2")
+
+  shiny::testServer(
+    LLMRpanel:::.panel_gui_module_server,
+    args = list(shared = gui_demo_shared()),
+    {
+      expect_identical(persona_source, LLMRpanel::anes_2024_personas)
+      expect_true("demo_rural_urban_identity" %in% persona_fields)
+      expect_false("ideology_score" %in% persona_fields)
+      session$flushReact()
+      html <- paste(as.character(output$module_ui), collapse = "\n")
+      expect_match(html, "Selected persona as sent", fixed = TRUE)
+      expect_match(html, 'value="demo_rural_urban_identity"', fixed = TRUE)
+      expect_false(grepl('value="ideology_score"', html, fixed = TRUE))
+      expect_false(grepl('value="demo_community_type"', html, fixed = TRUE))
+
+      demographics <- LLMR::llm_persona_demographic_fields(persona_source)
+      session$setInputs(
+        source = "anes", anes_mode = "selected",
+        persona_columns = demographics,
+        `personas-table_rows_selected` = 4L
+      )
+      session$flushReact()
+      preview <- output$persona_text
+      expect_match(preview, "^Source row 4\n\n")
+      expect_false(grepl("On a questionnaire", preview, fixed = TRUE))
+      suppressMessages(session$setInputs(build_panel = 1))
+      session$flushReact()
+      expect_identical(sub("^Source row 4\n\n", "", preview), panel()$persona)
+
+      # one demographic and one answer: the preview names exactly those two
+      session$setInputs(
+        persona_columns = c("demo_sex", "att_id_party_identification")
+      )
+      session$flushReact()
+      preview <- sub("^Source row 4\n\n", "", output$persona_text)
+      suppressMessages(session$setInputs(build_panel = 2))
+      session$flushReact()
+      expect_identical(preview, panel()$persona)
+      expect_match(preview, "^You are this person: sex ")
+      expect_match(preview, "On a questionnaire you gave these answers: Party identification -- ")
+      expect_false(grepl("age ", preview, fixed = TRUE))
+      expect_false(grepl(";", preview, fixed = TRUE))
+
+      session$setInputs(persona_columns = character(0))
+      session$flushReact()
+      expect_identical(output$persona_text, "Select at least one persona field.")
     }
   )
 })

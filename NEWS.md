@@ -1,3 +1,99 @@
+# LLMRpanel 0.6.3
+
+## The bundled ANES personas
+
+* `anes_2024_personas` now ships with LLMRpanel, and the examples, the Studio,
+  and the tests use it in place of `LLMR::anes_2024_personas`. FocusGroup
+  ships an identical copy. The data were rebuilt from the May 19, 2026 Full
+  Release of the ANES 2024 Time Series Study with corrected coding, so the 100
+  respondents and their `ideology_score` values differ from those in LLMR's
+  copy. The old build had turned the middle answers of six seven-point scales
+  into missing values, which also tilted the selection of respondents and the
+  ideology scores toward people who chose the ends of those scales. It kept
+  four immigration-policy labels that the Stata file cuts at 80 characters,
+  interviewer notes such as "{VOL}", two items from the spouse/partner survey
+  that gave 14 personas their partner's answers, and six fields that were
+  empty for everyone because their items were asked only on paper or only of
+  the GSS re-interview sample, which this release does not include. Answers on
+  the six scales now read "5 on a scale from 1 (...) to 7 (...)" and feeling
+  thermometers "70 on a 0-100 feeling thermometer". `?anes_2024_personas`
+  documents the coding and the selection.
+
+* Changed handles: `demo_community_type` is replaced by
+  `demo_rural_urban_identity`, and the three confidence items
+  `att_val_confidence_in_the_supreme_co`, `att_val_confidence_in_the_scientific`,
+  and `att_val_confidence_in_the_press` by `att_val_trust_in_the_judiciary`,
+  `att_val_trust_in_scientists`, and `att_val_trust_in_traditional_media`.
+  `att_val_general_happiness` and `att_val_importance_of_remaining_a_de` are
+  gone. `demo_home_ownership` now comes from the item asked of everyone, so its
+  values include "Rented for cash"; the MAGA thermometer and satisfaction with
+  democracy come from post-election items asked of every respondent. The frame
+  has 123 columns, 17 of them demographic.
+
+## Rendering of persona values
+
+* Missing-data labels are left out of the persona text. `panel_from_personas()`
+  and `panel_from_data()` gain `na_strings`, regular expressions that mark a
+  value or value label as missing; `NULL`, the default, uses the patterns of
+  FocusGroup's `fg_default_na_strings()`. Before, a frame decoded with
+  `haven::as_factor()`, as the help of `as_persona_frame()` advised, gave
+  personas answers such as "-9. Refused", "-3. RESTRICTED", and "-8. Don't
+  know". A few patterns are anchored: "Error" must be the whole label and
+  "RESTRICTED" its first word, so "Terrorism" and "There is an error" are
+  kept. The others match anywhere in a value, as in FocusGroup, so a free-text
+  answer such as "I refused to answer the door" is left out, and reported. Pass `na_strings = character(0)` or a narrower vector for frames
+  with free-text answers.
+
+* Labeled survey columns, as `haven::read_dta()` and `haven::read_sav()` return
+  them, are decoded from their value labels, without haven. A labeled code is
+  shown as its label without the code prefix, and an unlabeled code on a scale
+  labeled only at its ends as "5 on a scale from 1 (...) to 7 (...)", where a
+  scale centered on zero runs from -m to m even when its midpoint is labeled.
+  Before, such a column was rendered as bare codes ("spend -- 5"), or stopped
+  with an error when haven was not loaded. An unlabeled negative code is left
+  out as missing, and any other unlabeled code is shown as the code, each with
+  a warning naming the column. Factor levels as `haven::as_factor()` writes
+  them, and character columns as `as.character(haven::as_factor())` writes
+  them, are decoded by the same rules, and code prefixes ("1. ") are removed
+  from factor levels and character values.
+
+* Numbers are written in full: "income 100000", not "income 1e+05".
+
+* Identifier columns (`id`, `caseid`, `case_id`, `respondent_id`, `respid`,
+  `resp_id`, `persona_id`, `uid`, `record_id`, and `row_id`, ignoring case,
+  and columns whose variable label calls them a case or respondent ID, as the
+  ANES label of V240001 does), the column named by `weights`, a column named
+  `persona`, and `ideology_score` are never rendered. Before,
+  `panel_from_personas()` and `panel_from_data()` without a template wrote
+  them into the persona text ("id -- 101; respondent_id -- R1", "wt -- 1.2"),
+  and `panel_from_data()` wrote the `ideology_score` of the bundled personas.
+  They remain columns of the panel where they were before. A
+  `persona_template` that names one of them is an error.
+
+* Values left out of the persona text are reported in a message that names
+  each field and the number of personas without it. Before, they were dropped
+  silently, and `panel_from_data()` without a template wrote "column: NA". A
+  template placeholder without a value is now filled with nothing, with a
+  warning; before, it showed "NA".
+
+* `panel_from_personas()` gains `questions`, question texts named by column,
+  which take precedence over the frame's dictionary. When column names stand
+  in for the questions of stated answers, as when column subsetting has
+  dropped a frame's dictionary, a warning lists the columns.
+
+* A value label exactly 80 characters long draws a warning: Stata files cut
+  value labels at that length.
+
+* The demographic columns of a panel from `panel_from_personas()` hold the
+  values as the personas state them, and the margins both constructors cite
+  count those values, so a missing-data label is no longer a category.
+
+* In `run_panel_studio()`, the persona preview, now titled "Selected persona as
+  sent", shows the text sent with each request, rendered from the selected
+  fields only; before, it showed every field while only the selected ones were
+  sent. `ideology_score`, which is never rendered, is no longer offered as a
+  field.
+
 # LLMRpanel 0.6.2
 
 * The help and vignette describe each persona-item pair as an independent

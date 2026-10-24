@@ -5,7 +5,8 @@
 #' LLMRpanel administers survey and experimental instruments to panels of
 #' language model personas. [panel_from_margins()] draws attributes from
 #' supplied margins. [panel_from_data()] samples microdata rows, and
-#' [panel_from_personas()] uses a prepared persona data frame.
+#' [panel_from_personas()] uses a prepared persona data frame, such as the
+#' bundled [anes_2024_personas].
 #'
 #' [panel_instrument()] combines survey items into an instrument.
 #' [conjoint_design()] and [conjoint_instrument()] create forced-choice

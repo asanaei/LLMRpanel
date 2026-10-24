@@ -9,7 +9,8 @@ panel_from_data(
   n,
   persona_template = NULL,
   columns = NULL,
-  weights = NULL
+  weights = NULL,
+  na_strings = NULL
 )
 }
 \arguments{
@@ -18,13 +19,27 @@ panel_from_data(
 \item{n}{Panel size.}
 
 \item{persona_template}{Text with \code{{attribute}} placeholders rendered
-per persona. \code{NULL} builds a plain "attribute: value" persona.}
+per persona. \code{NULL} builds a plain "attribute: value" persona. A
+placeholder whose value is left out as missing is filled with nothing,
+and a placeholder may not name an identifier or the \code{weights} column.}
 
 \item{columns}{Attribute columns to keep. Defaults to every column
-except the \code{weights} column when one is given.}
+except the \code{weights} column when one is given. Identifier columns are
+kept in the panel but never rendered into the persona text.}
 
 \item{weights}{Optional name of a single column of nonnegative sampling
-weights (rows are drawn with probability proportional to it).}
+weights (rows are drawn with probability proportional to it). The column
+is never rendered into the persona text.}
+
+\item{na_strings}{Regular expressions, matched ignoring case against each
+value and value label, that mark it as missing. \code{NULL} (the default) uses
+the patterns of FocusGroup's \code{fg_default_na_strings()}, which match the
+missing-data labels of the ANES and similar releases: "Inapplicable",
+"Refused", "Don't know", "Not asked", "DK/RF", "No post-election
+interview", "Insufficient partial, interview deleted", "RESTRICTED",
+"Error", "Technical error", "Not reported", and the like. \code{character(0)}
+treats no label as missing. The patterns match anywhere in the text, so a
+free-text answer containing "refused" or "missing" is left out too.}
 }
 \value{
 A \code{silicon_panel}: a tibble with \code{persona_id}, the selected
@@ -37,9 +52,15 @@ joint distribution of the selected attributes, and renders each sampled
 row as a persona. This is the joint-distribution counterpart of
 \code{\link[=panel_from_margins]{panel_from_margins()}}, which samples attributes independently. The
 margins the report cites are computed from the source data, one
-\code{prop.table(table())} per selected column.
+\code{prop.table(table())} per selected column over its values as the personas
+state them, so a missing-data label is not a category.
 }
 \details{
+Without a template, a plain data frame renders as "attribute: value" pairs,
+and a \code{persona_frame} (see \code{\link[=as_persona_frame]{as_persona_frame()}}) renders as background and
+stated answers, as \code{\link[=panel_from_personas]{panel_from_personas()}} does. Values are written as
+text by the rules under "Rendering of values" in \code{\link[=panel_from_personas]{panel_from_personas()}}.
+
 For a reproducible panel, set a seed before calling (the function never
 sets one itself).
 }

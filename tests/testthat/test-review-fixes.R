@@ -72,9 +72,10 @@ test_that("panel_from_personas requires data and honest weights", {
   expect_error(
     panel_from_personas(df, n = 2, weights = "f"),
     "numeric column")
-  expect_warning(
-    panel_from_personas(data.frame(x = c("p", "q")), weights = c(1, 2)),
-    "ignored")
+  got <- suppressMessages(collect_warnings(
+    panel_from_personas(data.frame(x = c("p", "q")), weights = c(1, 2))))
+  expect_true(any(grepl("ignored", got$warnings)))
+  expect_true(any(grepl("column names stand in", got$warnings)))
   expect_error(
     panel_from_personas(data.frame(x = c("p", "q")), rows = c(1L, 9L)),
     "between 1 and")

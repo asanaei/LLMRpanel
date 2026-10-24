@@ -79,6 +79,7 @@ test_that("an `answers` restriction keeps excluded columns out of the persona te
 test_that("panel_from_personas handles a frame with no recognized demographics", {
   pf <- as_persona_frame(
     data.frame(pid = c("Democrat", "Republican"), stringsAsFactors = FALSE),
+    questions = c(pid = "Party identification"),
     demographics = character(0))
   expect_message(p <- panel_from_personas(pf, n = 2),
                  "No demographic columns")
@@ -94,6 +95,7 @@ test_that("panel_from_personas uses its second positional argument as n", {
     data.frame(age = c("20", "30", "40", "50"),
                answer = c("a", "b", "c", "d"),
                stringsAsFactors = FALSE),
+    questions = c(answer = "Your answer"),
     demographics = "age")
   set.seed(110)
   p <- panel_from_personas(pf, 2)
@@ -110,8 +112,11 @@ test_that("panel_from_personas accepts weights and warns on heavy duplication", 
   expect_equal(nrow(p), 30L)
   # heavily-weighted "a" should dominate the draw
   expect_true(mean(grepl("\\ba\\b", p$persona)) > 0.5)
-  # n >> distinct pool warns once
-  expect_warning(panel_from_personas(pf, n = 30), "Diversity is capped")
+  # n >> distinct pool warns once; without `weights = "w"` the column w is
+  # a stated answer, shown under its column name, which warns as well
+  got <- collect_warnings(panel_from_personas(pf, n = 30))
+  expect_identical(sum(grepl("Diversity is capped", got$warnings)), 1L)
+  expect_true(any(grepl("column names stand in for the questions: w\\.", got$warnings)))
 })
 
 # --- B1: preflight + gate ----------------------------------------------------

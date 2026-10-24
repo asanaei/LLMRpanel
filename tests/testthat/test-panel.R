@@ -313,6 +313,7 @@ test_that("the generic report identifies the panel's actual source", {
   persona_data <- as_persona_frame(
     data.frame(age = c("30", "40"), opinion = c("a", "b"),
                stringsAsFactors = FALSE),
+    questions = c(opinion = "Your opinion"),
     demographics = "age")
   from_personas <- panel_from_personas(persona_data)
 
@@ -471,7 +472,7 @@ test_that("a weighted panel cites weighted source margins", {
 test_that("panel_from_personas builds a silicon_panel that administers", {
   skip_if_not_installed("LLMR")
   set.seed(110)
-  p <- panel_from_personas(LLMR::anes_2024_personas, n = 6)
+  p <- panel_from_personas(LLMRpanel::anes_2024_personas, n = 6)
   expect_s3_class(p, "silicon_panel")
   expect_true(all(c("persona_id", "persona") %in% names(p)))
   expect_equal(nrow(p), 6L)
@@ -496,7 +497,7 @@ test_that("panel_from_personas builds a silicon_panel that administers", {
 
 test_that("panel_from_personas respects a rows predicate", {
   skip_if_not_installed("LLMR")
-  p <- panel_from_personas(LLMR::anes_2024_personas,
+  p <- panel_from_personas(LLMRpanel::anes_2024_personas,
                            rows = function(d) d$ideology_score > 0.5, n = 4)
   expect_equal(nrow(p), 4L)
 })
@@ -505,7 +506,7 @@ test_that("panel_from_personas draws beyond the ANES pool with replacement", {
   skip_if_not_installed("LLMR")
   set.seed(110)
   expect_warning(
-    p <- panel_from_personas(LLMR::anes_2024_personas, n = 250),
+    p <- panel_from_personas(LLMRpanel::anes_2024_personas, n = 250),
     "Drawing 250 personas from 100 distinct respondent"
   )
   expect_equal(nrow(p), 250L)

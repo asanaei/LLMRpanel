@@ -3,9 +3,9 @@
 
 drawn_rows <- function(...) {
   testthat::local_mocked_bindings(
-    .render_persona_text = function(data, r) paste0("row ", r),
+    .render_persona_text = function(data, r, ...) paste0("row ", r),
     .package = "LLMRpanel")
-  p <- panel_from_personas(LLMR::anes_2024_personas, ...)
+  p <- panel_from_personas(LLMRpanel::anes_2024_personas, ...)
   as.integer(sub("row ", "", p$persona))
 }
 
@@ -35,7 +35,7 @@ test_that("draws from several rows match sample() exactly", {
 
 test_that("fractional, missing, and out-of-range selectors are refused", {
   skip_if_not_installed("LLMR")
-  d <- LLMR::anes_2024_personas
+  d <- LLMRpanel::anes_2024_personas
   expect_error(panel_from_personas(d, rows = c(1.9, 3.7)), "whole numbers")
   expect_error(panel_from_personas(d, rows = c(1, NA)), "whole numbers")
   expect_error(panel_from_personas(d, rows = 0), "whole numbers")
@@ -47,16 +47,16 @@ test_that("fractional, missing, and out-of-range selectors are refused", {
 
 test_that("character and factor selectors are refused, not read as positions", {
   skip_if_not_installed("LLMR")
-  d <- LLMR::anes_2024_personas
+  d <- LLMRpanel::anes_2024_personas
   expect_error(panel_from_personas(d, rows = c("3", "5")), "whole numbers")
   expect_error(panel_from_personas(d, rows = factor(c(10, 20))), "whole numbers")
 })
 
 traced_panel <- function(...) {
   testthat::local_mocked_bindings(
-    .render_persona_text = function(data, r) paste0("row ", r),
+    .render_persona_text = function(data, r, ...) paste0("row ", r),
     .package = "LLMRpanel")
-  panel_from_personas(LLMR::anes_2024_personas, ...)
+  panel_from_personas(LLMRpanel::anes_2024_personas, ...)
 }
 
 test_that("source_rows traces every persona to the row it was drawn from", {

@@ -429,7 +429,19 @@ run_panel_studio <- function(...) {
     run_is_demo <- shiny::reactiveVal(NULL)
     run_error <- shiny::reactiveVal(NULL)
     analysis_error <- shiny::reactiveVal(NULL)
-    persona_source <- LLMR::anes_2024_personas
+    persona_source <- LLMRpanel::anes_2024_personas
+    # The fields offered for rendering; `ideology_score` is never rendered.
+    persona_fields <- setdiff(names(persona_source), "ideology_score")
+    # The frame a panel is built from, restricted to the chosen fields. The
+    # build and the persona preview both use it, so the preview shows the
+    # text that is sent.
+    persona_frame_for <- function(columns) {
+      if (is.null(columns) || setequal(columns, persona_fields)) {
+        persona_source
+      } else {
+        .restrict_persona_frame(persona_source, columns)
+      }
+    }
 
     output$module_ui <- shiny::renderUI({
       bslib::card(
@@ -541,13 +553,13 @@ run_panel_studio <- function(...) {
                             "Clear a field to omit it from the persona text sent with each request."
                           )
                         ),
-                        choices = names(persona_source),
-                        # Demographic fields only by default: selecting all 125
+                        choices = persona_fields,
+                        # Demographic fields only by default: selecting all 122
                         # fields would push every prior attitude item into the
                         # prompt (target leakage) and multiply its length.
                         selected = intersect(
                           LLMR::llm_persona_demographic_fields(persona_source),
-                          names(persona_source)
+                          persona_fields
                         )
                       )
                     ),
@@ -555,7 +567,7 @@ run_panel_studio <- function(...) {
                       condition = sprintf(
                         "input['%s'] == 'selected'", ns("anes_mode")
                       ),
-                      shiny::tags$h6("Full selected persona"),
+                      shiny::tags$h6("Selected persona as sent"),
                       LLMR.shiny::text_block_output(
                         ns("persona_text"), height = "12rem"
                       )
@@ -883,7 +895,7 @@ run_panel_studio <- function(...) {
       }
       if (identical(source, "anes")) {
         columns <- input$persona_columns
-        if (is.null(columns)) columns <- names(persona_source)
+        if (is.null(columns)) columns <- persona_fields
         if (!length(columns)) {
           return(list(
             enabled = FALSE,
@@ -1114,14 +1126,19 @@ run_panel_studio <- function(...) {
     output$persona_text <- shiny::renderText({
       rows <- persona_rows()
       if (!length(rows)) {
-        return("Select a persona row above to inspect its full rendered text.")
+        return("Select a persona row above to inspect the text sent for it.")
+      }
+      columns <- input$persona_columns
+      if (!is.null(columns) && !length(columns)) {
+        return("Select at least one persona field.")
       }
       row <- rows[[1]]
+      text <- as.character(.render_persona_text(persona_frame_for(columns), row))
       paste0(
         "Source row ", row,
         if (length(rows) > 1L) " (the first selected row)" else "",
         "\n\n",
-        .render_persona_text(persona_source, row)
+        if (nzchar(text)) text else "(no text: every selected field is missing for this respondent)"
       )
     })
 
@@ -1140,7 +1157,7 @@ run_panel_studio <- function(...) {
       draw_seed <- .panel_gui_seed(input$seed)
       res <- if (identical(source, "anes")) {
         columns <- input$persona_columns
-        if (is.null(columns)) columns <- names(persona_source)
+        if (is.null(columns)) columns <- persona_fields
         if (!length(columns)) {
           administer_warning("Select at least one persona field.")
           return()
@@ -1156,13 +1173,8 @@ run_panel_studio <- function(...) {
         }
         LLMR.shiny::safe_llmr_call({
           if (!is.na(draw_seed)) set.seed(draw_seed)
-          frame <- if (setequal(columns, names(persona_source))) {
-            persona_source
-          } else {
-            .restrict_persona_frame(persona_source, columns)
-          }
           panel_from_personas(
-            frame,
+            persona_frame_for(columns),
             rows = if (identical(anes_mode, "selected")) rows else NULL,
             n = if (identical(anes_mode, "selected")) NULL else panel_n
           )

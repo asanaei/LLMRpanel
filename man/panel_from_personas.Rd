@@ -4,12 +4,19 @@
 \alias{panel_from_personas}
 \title{Draw a panel from a persona data frame}
 \usage{
-panel_from_personas(data, n = NULL, rows = NULL, weights = NULL)
+panel_from_personas(
+  data,
+  n = NULL,
+  rows = NULL,
+  weights = NULL,
+  questions = NULL,
+  na_strings = NULL
+)
 }
 \arguments{
-\item{data}{A persona data frame, such as \code{LLMR::anes_2024_personas}.
-Those 100 rows are diversity-selected United States respondents and
-carry no survey weights, so they stand for no population.}
+\item{data}{A persona data frame, such as \link{anes_2024_personas}. Those 100
+rows are diversity-selected United States respondents and carry no survey
+weights, so they stand for no population.}
 
 \item{n}{Optional panel size. With \code{NULL}, every selected row is used; with a
 number, rows are sampled (without replacement when \code{n} does not exceed the
@@ -23,20 +30,40 @@ not row positions.}
 
 \item{weights}{Optional survey weights for the draw: a column name in \code{data},
 or a numeric vector aligned to the selected rows. Used only when \code{n} is
-given. \code{NULL} (default) draws uniformly.}
+given. \code{NULL} (default) draws uniformly. A weight column is never
+rendered into the persona text.}
+
+\item{questions}{Optional named character vector of question texts keyed
+by column name, as in
+\code{c(services = "Should the government provide fewer or more services?")}.
+It takes precedence over the question in the frame's dictionary. Names
+that are not columns of \code{data} draw a warning.}
+
+\item{na_strings}{Regular expressions, matched ignoring case against each
+value and value label, that mark it as missing. \code{NULL} (the default) uses
+the patterns of FocusGroup's \code{fg_default_na_strings()}, which match the
+missing-data labels of the ANES and similar releases: "Inapplicable",
+"Refused", "Don't know", "Not asked", "DK/RF", "No post-election
+interview", "Insufficient partial, interview deleted", "RESTRICTED",
+"Error", "Technical error", "Not reported", and the like. \code{character(0)}
+treats no label as missing. The patterns match anywhere in the text, so a
+free-text answer containing "refused" or "missing" is left out too.}
 }
 \value{
-A \code{silicon_panel}: a tibble with \code{persona_id}, the demographic columns,
+A \code{silicon_panel}: a tibble with \code{persona_id}, the demographic
+columns as the persona text gives them (\code{NA} where a value is left out),
 and \code{persona}, with the attributes \code{margins}, \code{source}, and \code{source_rows}.
 }
 \description{
 Turns rows of a persona data frame (one respondent per row, demographics plus
 survey or attitude answers) into a \code{silicon_panel} whose personas can be
 administered survey items. It is built for frames following the LLMR persona
-contract, such as \code{LLMR::anes_2024_personas}: the demographics and the answers
-are read with \code{\link[LLMR:llm_persona_split]{LLMR::llm_persona_split()}} (so answers are keyed by their
-question wording when the frame carries a dictionary), and each persona is
-rendered as a person to answer in character.
+contract, such as the bundled \link{anes_2024_personas}: the demographic fields
+are those that \code{\link[LLMR:llm_persona_demographic_fields]{LLMR::llm_persona_demographic_fields()}} names, every other
+column is a stated answer, answers are shown under their question wording
+when the frame carries a dictionary or \code{questions} gives one, and each
+persona is rendered as a person to answer in character ("You are this
+person: ... On a questionnaire you gave these answers: ...").
 }
 \details{
 Unlike \code{\link[=panel_from_margins]{panel_from_margins()}} and \code{\link[=panel_from_data]{panel_from_data()}}, this constructor keeps
@@ -50,14 +77,73 @@ the panel's rows are subset.
 For a reproducible draw, set a seed before calling (the function never sets
 one itself).
 }
+\section{Rendering of values}{
+
+Each value of a rendered field is written as text by these rules.
+\itemize{
+\item A labeled column, such as \code{haven::read_dta()} and \code{haven::read_sav()}
+return, is decoded from its \code{labels} attribute; haven itself is not
+needed. A labeled code is shown as its label without the code prefix
+("1. Male" becomes "Male"). A code without a label on a scale labeled only
+at its ends is shown with the scale, as in "5 on a scale from 1 (Fewer
+services) to 7 (More services)"; on a scale centered on zero the ends are
+the labeled codes -m and m, even when its midpoint is labeled too. A
+negative code without a label is left out as missing, with a warning. Any other code without a label is shown
+as the code, with a warning, unless the column labels at most one
+nonnegative code or only top and bottom codes ("80. Age 80 or older"), in
+which case the column holds numbers and the value is shown as one.
+Values that an SPSS file declares missing (\code{na_values}, \code{na_range}) are
+left out.
+\item A factor's levels are its labels. Levels as \code{haven::as_factor()} writes
+them ("1. Fewer services", "[1] 1. Fewer services", and bare numbers
+for unlabeled codes) are decoded by the rules above; a level without a
+code prefix ("Refused" from a file whose labels carry none) counts as a
+label whose code is unknown. A character column that mixes coded labels
+with bare numbers, as \code{as.character(haven::as_factor())} writes it, is
+decoded the same way. Code prefixes are removed from factor levels and
+from character values.
+\item \code{NA}, empty values, and values or value labels that match \code{na_strings}
+are left out. The patterns are matched anywhere in a value, as
+FocusGroup matches them, so a free-text answer such as "I refused to
+answer the door" is left out too; pass \code{na_strings = character(0)} or a
+narrower vector for frames with free-text answers. A value with a
+negative code prefix that does not match \code{na_strings} is shown, with a
+warning, since many releases use negative codes for missing data; the
+labels of negative codes on a scale centered on zero ("-3. Far left"
+beside "3. Far right") draw none.
+\item Numbers are written in full: 100000, not 1e+05.
+\item A label exactly 80 characters long draws a warning. Stata files cut value
+labels at 80 characters, and the ANES 2024 release has labels cut there.
+\item Identifier columns (named, ignoring case, \code{id}, \code{caseid}, \code{case_id},
+\code{respondent_id}, \code{respid}, \code{resp_id}, \code{persona_id}, \code{uid}, \code{record_id},
+or \code{row_id}, or with a variable label that calls them a case or
+respondent ID, as the ANES label of V240001 does), the column named by
+\code{weights}, a column named \code{persona}, and \code{ideology_score} are never
+rendered.
+}
+
+The values left out as missing are reported in one message per call,
+naming each field and the number of personas whose text omits it. A stated
+answer shown under its column name, for want of a question wording, draws a
+warning.
+}
+
 \examples{
-\donttest{
-if (requireNamespace("LLMR", quietly = TRUE)) {
-  set.seed(110)
-  panel <- panel_from_personas(LLMR::anes_2024_personas, n = 8)
-}
-}
+set.seed(110)
+panel <- panel_from_personas(anes_2024_personas, n = 8)
+panel
+
+# A labeled column, as haven::read_dta() returns it, is decoded from its
+# labels: the unlabeled 5 is placed on its scale and -9 is left out.
+survey <- data.frame(age = c("18-29", "65 or older", "30-49"))
+survey$services <- structure(c(1, 5, -9), labels = c(
+  "1. Government should provide many fewer services" = 1,
+  "7. Government should provide many more services" = 7,
+  "-9. Refused" = -9))
+labeled_panel <- panel_from_personas(
+  survey, questions = c(services = "Government services and spending"))
+labeled_panel$persona
 }
 \seealso{
-\link[LLMR:anes_2024_personas]{LLMR::anes_2024_personas}, \code{\link[=panel_administer]{panel_administer()}}.
+\link{anes_2024_personas}, \code{\link[=as_persona_frame]{as_persona_frame()}}, \code{\link[=panel_administer]{panel_administer()}}.
 }

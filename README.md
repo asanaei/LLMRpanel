@@ -89,12 +89,17 @@ microdata_panel <- panel_from_data(
   weights = "survey_weight"
 )
 
-anes_panel <- panel_from_personas(LLMR::anes_2024_personas, n = 60)
+anes_panel <- panel_from_personas(anes_2024_personas, n = 60)
 ```
 
 `panel_from_personas()` uses prepared persona rows, including the question
-wording and demographic metadata in `LLMR::anes_2024_personas`. Reports identify
-whether a panel came from margins, microdata rows, or prepared personas.
+wording and demographic metadata of the bundled `anes_2024_personas`, 100
+respondents to the ANES 2024 Time Series Study chosen for diversity, without
+survey weights, so they stand for no population. Labeled survey columns are
+decoded from their value labels, missing-data labels such as "-9. Refused" are
+left out with a message, and identifier and weight columns are never rendered.
+Reports identify whether a panel came from margins, microdata rows, or prepared
+personas.
 
 ### Define an instrument
 
@@ -251,7 +256,7 @@ tibble::as_tibble(batch_resp)
 
 `FocusGroup::create_agents_from_data()` accepts a `silicon_panel`, so panel
 personas can define participants in a moderated group discussion.
-`LLMR::anes_2024_personas` supplies prepared persona data used by both packages.
+LLMRpanel and FocusGroup ship identical copies of `anes_2024_personas`.
 
 ## Related packages
 

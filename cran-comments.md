@@ -1,32 +1,38 @@
 ## The update
 
-This updates LLMRpanel 0.6.1, published on 2026-09-12. When `rows` selected a
-single row k, `panel_from_personas()` sampled from rows 1 to k; it now draws
-the selected row, refuses fractional, character, and factor selectors and a
-fractional `n`, and records the source row of each persona in a `source_rows`
-attribute. The Studio refuses population margins and benchmark shares it
-cannot parse instead of dropping them. The item constructors refuse missing,
-empty, or indistinguishable labels and malformed ids, and `conjoint_design()`
-refuses fractional or zero counts and unusable attribute names or levels.
-`conjoint_amce()` records and prints its reference levels and the number of
-estimation clusters, and warns when a declared level is absent from the
-estimation data. `panel_bias_audit()` gives a reason whenever it reports no
-order-test p-value. The help, the vignette, and the shipped usage guide no
-longer describe the item-order randomization and sample-size planning removed
-in 0.6.1, and the key-gated `panel_batch_submit()` example submits three
-requests instead of 200. Exported names and documented result columns are
-unchanged; NEWS lists each new error.
+This updates LLMRpanel 0.6.1, published on 2026-09-12. Version 0.6.2 was
+prepared but never submitted; its changes are part of this release and are
+listed under 0.6.2 in NEWS.
+
+The main change of 0.6.3 corrects how survey answers become persona text.
+Missing-data labels from survey files, such as "-9. Refused" and "-8. Don't
+know", were written into personas as answers; they are now left out, with a
+message naming the fields, through a new `na_strings` argument. Labeled
+survey columns as `haven::read_dta()` returns them are decoded from their
+value labels without haven, and an unlabeled code on a scale labeled only at
+its ends is shown with that scale. Numbers are written in full rather than as
+"1e+05". Identifier columns and the sampling-weight column are never written
+into persona text. `panel_from_personas()` gains a `questions` argument, and
+answers shown under column names rather than question wording draw a
+warning. In the Studio, the persona preview now shows the text that is sent.
+
+The package now ships the dataset `anes_2024_personas`, 100 respondents to the
+ANES 2024 Time Series Study, which it previously used from LLMR. It was
+rebuilt from the May 19, 2026 release of the study with corrected coding;
+FocusGroup ships the identical file. The data file is small:
+`data/anes_2024_personas.rda` is 24,980 bytes (about 300 KB in memory), and
+the built tarball is about 320 KB.
+
+Exported names are unchanged; the new arguments come after the existing
+ones.
 
 ## Test environments
 
 - local macOS 26.7.1 (aarch64-apple-darwin20), R 4.4.3: R CMD check
-  --as-cran --no-manual on the built tarball, with
-  _R_CHECK_FORCE_SUGGESTS_=false, against LLMR 0.8.11 from CRAN with
-  LLMR.shiny 0.1.2 from CRAN and, separately, with LLMR.shiny 0.1.3, which is
-  being submitted at the same time.
-- the same platform: R CMD check --as-cran --no-manual on the built tarball
-  against LLMR 0.8.14 with LLMR.shiny 0.1.3. LLMR 0.8.14 is submitted ahead
-  of this package and will be on CRAN first. The result is the same 1 note.
+  --as-cran --no-manual on the built tarball, with LLMR 0.9.0, the version
+  on CRAN, and LLMR.shiny 0.1.3. CRAN has LLMR.shiny 0.1.2; this release
+  changes no call to LLMR.shiny. The check ran with user startup files
+  disabled, so no API key was set.
 
 ## R CMD check results
 
@@ -45,4 +51,6 @@ no example contacted a provider.
 
 ## Reverse dependencies
 
-None.
+None: `tools::package_dependencies("LLMRpanel", reverse = TRUE)` against
+CRAN, counting Depends, Imports, LinkingTo, Suggests, and Enhances, finds no
+package.

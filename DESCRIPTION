@@ -1,7 +1,7 @@
 Type: Package
 Package: LLMRpanel
 Title: Benchmarked Silicon Samples for Survey and Experiment Design
-Version: 0.6.2
+Version: 0.6.3
 Authors@R:
     person("Ali", "Sanaei", , "sanaei@uchicago.edu", role = c("aut", "cre", "cph"))
 Description: Administers survey and experimental instruments to panels of
@@ -14,6 +14,7 @@ Description: Administers survey and experimental instruments to panels of
   component effect of Hainmueller et al. (2014) <doi:10.1093/pan/mpt024>.
 License: MIT + file LICENSE
 Encoding: UTF-8
+LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Depends:

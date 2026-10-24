@@ -28,8 +28,9 @@ do not estimate a human population.
 ```r
 panel_from_margins(margins, n, persona_template = NULL)
 panel_from_data(data, n, persona_template = NULL, columns = NULL,
-                weights = NULL)             # joint draws from microdata rows
-panel_from_personas(data, n = NULL, rows = NULL, weights = NULL)
+                weights = NULL, na_strings = NULL)   # joint draws from rows
+panel_from_personas(data, n = NULL, rows = NULL, weights = NULL,
+                    questions = NULL, na_strings = NULL)
 as_persona_frame(data, questions = NULL, demographics = NULL, answers = NULL)
 item_likert(id, text, scale = c("strongly disagree", "disagree", "neutral",
                                 "agree", "strongly agree"))
@@ -93,8 +94,18 @@ conjoint_amce(cj)
 
 ## Rules
 
-- The package contains no population data. Supply the margins or source rows
-  used to construct a panel.
+- The package contains no population data. Its one dataset,
+  `anes_2024_personas`, holds 100 diversity-selected ANES 2024 respondents
+  with no survey weights; it stands for no population. Supply the margins or
+  source rows used to construct a panel.
+- Persona values are decoded when rendered: labeled survey columns (as
+  `haven::read_dta()` returns them) show their labels, unlabeled codes on an
+  endpoint-labeled scale read "5 on a scale from 1 (...) to 7 (...)", and
+  missing-data labels ("-9. Refused", "-8. Don't know") matching
+  `na_strings` are left out, with a message. Identifier columns (`id`,
+  `caseid`, `respondent_id`, and the like) and the `weights` column are never
+  rendered. Pass `questions` so that stated answers are shown under their
+  question wording rather than their column names.
 - Administration requires an explicit `config`; there is no implicit provider
   default.
 - `panel_batch_submit(..., state_path = path)` saves the panel batch job at

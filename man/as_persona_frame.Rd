@@ -7,15 +7,18 @@
 as_persona_frame(data, questions = NULL, demographics = NULL, answers = NULL)
 }
 \arguments{
-\item{data}{A decoded data frame, one respondent per row. Values should
-already be human-readable labels (decode a labelled survey file with, for
-example, \code{haven::as_factor()} first).}
+\item{data}{A data frame, one respondent per row. Columns may hold text,
+numbers, factors, or labeled survey values as \code{haven::read_dta()} and
+\code{haven::read_sav()} return them; values are decoded when the personas
+are rendered, by the rules under "Rendering of values" in
+\code{\link[=panel_from_personas]{panel_from_personas()}}.}
 
 \item{questions}{Optional named character vector mapping column names to the
 human question wording, e.g.
 \code{c(pid = "Party identification", ab = "Abortion position")}. Columns absent
 from this map keep their column name. Without it the column names stand in
-for the questions, which is formatting, not a faithful translation.}
+for the questions, which is formatting, not a faithful translation, and
+rendering the stated answers draws a warning.}
 
 \item{demographics}{Optional character vector of columns to treat as
 demographic background (the rest become stated answers). Defaults to the
@@ -24,7 +27,8 @@ common demographic names found in \code{data}.}
 \item{answers}{Optional character vector restricting which columns may appear
 as stated answers. Defaults to every column that is not a demographic, an
 \code{id}-named, or a \code{weight}-named column, so analysis-only columns do not leak
-into the prompt.}
+into the prompt. Identifier columns are never rendered, even when named
+here.}
 }
 \value{
 \code{data} with the persona contract attached and class \code{persona_frame}.

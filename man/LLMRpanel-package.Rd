@@ -9,7 +9,8 @@
 LLMRpanel administers survey and experimental instruments to panels of
 language model personas. \code{\link[=panel_from_margins]{panel_from_margins()}} draws attributes from
 supplied margins. \code{\link[=panel_from_data]{panel_from_data()}} samples microdata rows, and
-\code{\link[=panel_from_personas]{panel_from_personas()}} uses a prepared persona data frame.
+\code{\link[=panel_from_personas]{panel_from_personas()}} uses a prepared persona data frame, such as the
+bundled \link{anes_2024_personas}.
 }
 \details{
 \code{\link[=panel_instrument]{panel_instrument()}} combines survey items into an instrument.
