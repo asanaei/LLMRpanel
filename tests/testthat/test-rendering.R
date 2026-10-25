@@ -461,3 +461,49 @@ test_that("ideology_score and labeled case IDs are never rendered", {
   expect_false(any(grepl("ideology|V240001|200015", rich)))
   expect_true(all(grepl("strength -- ", rich, fixed = TRUE)))
 })
+
+test_that("plain text is missing only when it says nothing but missing-data wording", {
+  na <- .panel_check_na_strings(NULL)
+  missing <- c("Refused", "Don't know", "I don't know", "Refused to answer",
+               "Not applicable (skipped)", "No answer", "Legitimate skip", "DK/RF",
+               "Inapplicable", "Not asked")
+  answers <- c("I refused to answer the door", "I keep missing the bus",
+               "My landlord refused to fix the heat", "Missing person case",
+               "There is an error", "Don't know enough to say", "Evening hours")
+  expect_true(all(.panel_decode_text(missing, na)$issue %in% "missing"))
+  expect_false(any(.panel_decode_text(answers, na)$issue %in% "missing"))
+  # Value labels still count on any match.
+  expect_true(all(.panel_decode_text(c("-9. Refused to answer the question", "97. Missing"),
+                                     na)$issue %in% "missing"))
+  frame <- data.frame(age = c(30, 40), comment = c("I keep missing the bus", "Refused"))
+  set.seed(110)
+  out <- suppressMessages(panel_from_data(frame, n = 20, columns = c("age", "comment")))
+  expect_true(any(grepl("I keep missing the bus", out$persona, fixed = TRUE)))
+  expect_true(any(!grepl("comment", out$persona, fixed = TRUE)))
+  expect_false(any(grepl("Refused", out$persona, fixed = TRUE)))
+})
+
+test_that("a ResponseId column is an identifier and never rendered", {
+  frame <- data.frame(ResponseId = c("R_1abc", "R_2def"), age = c(30, 40))
+  set.seed(110)
+  out <- suppressMessages(panel_from_data(frame, n = 2, columns = c("ResponseId", "age")))
+  expect_false(any(grepl("R_1abc|R_2def|ResponseId", out$persona)))
+})
+
+test_that("a template placeholder that names no selected column draws a warning", {
+  frame <- data.frame(age = c(30, 40), city = c("Akron", "Boise"))
+  set.seed(110)
+  expect_warning(panel_from_data(frame, n = 2, persona_template = "Age {age}; {agee}.",
+                                 columns = c("age", "city")),
+                 "names \\{agee\\}, not among `columns`")
+  expect_no_warning(panel_from_data(frame, n = 2, persona_template = "Age {age}.",
+                                    columns = c("age", "city")))
+})
+
+test_that("NA in a rows selector is reported, not dropped in silence", {
+  x <- anes_2024_personas
+  flag <- rep(TRUE, nrow(x)); flag[1:3] <- NA
+  expect_warning(suppressMessages(panel_from_personas(x, rows = flag)), "NA for 3 row")
+  expect_warning(suppressMessages(panel_from_personas(x, rows = function(d) flag)),
+                 "returned NA for 3 row")
+})

@@ -26,7 +26,7 @@
 # Series Case ID").
 .panel_identifier_names <- c("id", "caseid", "case_id", "respondent_id",
                              "respid", "resp_id", "persona_id", "uid",
-                             "record_id", "row_id")
+                             "record_id", "row_id", "responseid", "response_id")
 
 .panel_identifier_label <- "\\b(case|respondent) ?id\\b"
 
@@ -88,6 +88,26 @@
   if (!length(na_strings) || !length(x)) return(rep(FALSE, length(x)))
   out <- grepl(paste(na_strings, collapse = "|"), x, ignore.case = TRUE)
   out & !is.na(x)
+}
+
+# Whether plain text (not a value label) says nothing but missing-data
+# wording: once the wording `na_strings` matches and a few filler words ("I",
+# "to", "answer", "skipped") are taken out, no other word remains. So
+# "Refused to answer" and "I don't know" are missing, while answers that use
+# such words ("I refused to answer the door", "I keep missing the bus") are
+# kept.
+.panel_missing_filler <- c("i", "to", "answer", "answers", "the", "a", "an", "of",
+                           "this", "that", "question", "item", "r", "respondent",
+                           "or", "and", "skipped", "skip", "by", "for", "na", "n/a")
+
+.panel_bare_missing <- function(x, na_strings) {
+  if (!length(na_strings) || !length(x)) return(rep(FALSE, length(x)))
+  rest <- gsub(paste(na_strings, collapse = "|"), " ", as.character(x), ignore.case = TRUE)
+  words <- strsplit(tolower(rest), "[^a-z0-9/']+")
+  vapply(words, function(w) {
+    w <- w[nzchar(w)]
+    !length(setdiff(w, .panel_missing_filler))
+  }, logical(1))
 }
 
 # Numbers written out in full, to 15 significant digits: 100000, not 1e+05;
@@ -300,7 +320,11 @@
   out$issue[none] <- "missing"
   out$detail[none] <- "no value"
   body <- .panel_label_body(v)
-  gone <- !none & (.panel_matches(v, na_strings) | .panel_matches(body, na_strings))
+  # A value label (a factor level, or text with a code prefix) is missing when
+  # it matches `na_strings`; plain text only when it says nothing else.
+  matched <- .panel_matches(v, na_strings) | .panel_matches(body, na_strings)
+  labelish <- label | .panel_has_prefix(v)
+  gone <- !none & matched & (labelish | .panel_bare_missing(body, na_strings))
   out$issue[gone] <- "missing"
   out$detail[gone] <- v[gone]
   empty <- !none & !gone & !nzchar(body)

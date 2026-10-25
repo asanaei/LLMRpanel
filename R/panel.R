@@ -206,6 +206,12 @@ panel_from_data <- function(data, n, persona_template = NULL,
     prepared <- .panel_prepare(data, shown, idx, na)
     rendered <- lapply(idx, function(r) .panel_flat_text(r, prepared))
   } else {
+    unknown <- setdiff(.panel_template_keys(persona_template), columns)
+    if (length(unknown)) {
+      warning(sprintf(paste("`persona_template` names %s, not among `columns`; the",
+                            "placeholder is left in the text as written."),
+                      paste0("{", unknown, "}", collapse = ", ")), call. = FALSE)
+    }
     keys <- intersect(.panel_template_keys(persona_template), columns)
     prepared <- .panel_prepare(data, keys, idx, na)
     rendered <- lapply(idx, function(r) {
@@ -280,11 +286,12 @@ panel_from_data <- function(data, n, persona_template = NULL,
 #'   with bare numbers, as `as.character(haven::as_factor())` writes it, is
 #'   decoded the same way. Code prefixes are removed from factor levels and
 #'   from character values.
-#' * `NA`, empty values, and values or value labels that match `na_strings`
-#'   are left out. The patterns are matched anywhere in a value, as
-#'   FocusGroup matches them, so a free-text answer such as "I refused to
-#'   answer the door" is left out too; pass `na_strings = character(0)` or a
-#'   narrower vector for frames with free-text answers. A value with a
+#' * `NA`, empty values, and missing-data labels are left out. A value label
+#'   (a factor level, or text with a code prefix such as "-9. Refused") is
+#'   one when it matches `na_strings`; plain text only when it says nothing
+#'   but wording `na_strings` matches ("Refused to answer", "I don't know"),
+#'   as FocusGroup decides, so a free-text answer such as "I refused to answer
+#'   the door" is kept. A value with a
 #'   negative code prefix that does not match `na_strings` is shown, with a
 #'   warning, since many releases use negative codes for missing data; the
 #'   labels of negative codes on a scale centered on zero ("-3. Far left"
@@ -331,8 +338,9 @@ panel_from_data <- function(data, n, persona_template = NULL,
 #'   "Refused", "Don't know", "Not asked", "DK/RF", "No post-election
 #'   interview", "Insufficient partial, interview deleted", "RESTRICTED",
 #'   "Error", "Technical error", "Not reported", and the like. `character(0)`
-#'   treats no label as missing. The patterns match anywhere in the text, so a
-#'   free-text answer containing "refused" or "missing" is left out too.
+#'   treats no label as missing. Plain text counts as missing only when it
+#'   says nothing but such wording, so free-text answers that mention refusing
+#'   or missing something are kept.
 #' @return A `silicon_panel`: a tibble with `persona_id`, the demographic
 #'   columns as the persona text gives them (`NA` where a value is left out),
 #'   and `persona`, with the attributes `margins`, `source`, and `source_rows`.
@@ -375,10 +383,18 @@ panel_from_personas <- function(data, n = NULL, rows = NULL,
       if (!is.logical(flag) || length(flag) != N) {
         abort("A `rows` predicate must return one logical per row of `data`.")
       }
+      if (anyNA(flag)) {
+        warning(sprintf(paste("The `rows` predicate returned NA for %d row(s); they",
+                              "are left out."), sum(is.na(flag))), call. = FALSE)
+      }
       idx <- which(flag)
     } else if (is.logical(rows)) {
       if (length(rows) != N) {
         abort("A logical `rows` selector must have one entry per row of `data`.")
+      }
+      if (anyNA(rows)) {
+        warning(sprintf(paste("The logical `rows` selector is NA for %d row(s); they",
+                              "are left out."), sum(is.na(rows))), call. = FALSE)
       }
       idx <- which(rows)
     } else {

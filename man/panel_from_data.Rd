@@ -38,8 +38,9 @@ missing-data labels of the ANES and similar releases: "Inapplicable",
 "Refused", "Don't know", "Not asked", "DK/RF", "No post-election
 interview", "Insufficient partial, interview deleted", "RESTRICTED",
 "Error", "Technical error", "Not reported", and the like. \code{character(0)}
-treats no label as missing. The patterns match anywhere in the text, so a
-free-text answer containing "refused" or "missing" is left out too.}
+treats no label as missing. Plain text counts as missing only when it
+says nothing but such wording, so free-text answers that mention refusing
+or missing something are kept.}
 }
 \value{
 A \code{silicon_panel}: a tibble with \code{persona_id}, the selected
