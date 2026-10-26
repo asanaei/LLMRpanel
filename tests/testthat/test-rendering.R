@@ -518,7 +518,8 @@ test_that("one rule decides missing values and value labels", {
                "-7. Insufficient partial, interview deleted",
                "-2. DK/RF in V241288 or V241289", "-5. Sufficient partial, breakoff",
                "Inapplicable, legitimate skip", "Refused to answer", "I don't know",
-               "No answer", "Missing; Not available", "Error", "2. Error", "[-9] Refused")
+               "No answer", "Missing; Not available", "Error", "2. Error", "[-9] Refused",
+               "Other missing")
   kept <- c("5. Missing the old system", "2. Refused to take sides",
             "Missing the old system", "I keep missing the bus",
             "My landlord refused to fix the heat", "Missing person case",

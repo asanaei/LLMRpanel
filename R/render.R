@@ -107,7 +107,7 @@
                            "respondent", "or", "and", "skipped", "skip", "by", "for",
                            "na", "n/a", "in", "on", "survey", "interview", "wave",
                            "data", "here", "it", "me", "vol", "volunteered", "dk",
-                           "rf", "also")
+                           "rf", "also", "other")
 
 .panel_code_prefix <- "^\\s*[[(]?(-?[0-9]+)[])]?\\s*[.:)-]?\\s+"
 
