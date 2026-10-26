@@ -40,10 +40,23 @@
   personas answers such as "-9. Refused", "-3. RESTRICTED", and "-8. Don't
   know". A few patterns are anchored: "Error" must be the whole label and
   "RESTRICTED" its first word, so "Terrorism" and "There is an error" are
-  kept. A value label (a factor level, or text with a code prefix) is left out
-  when it matches; plain text only when it says nothing but such wording
-  ("Refused to answer", "I don't know"), so a free-text answer such as "I
-  refused to answer the door" is kept. Values left out are reported.
+  kept. A value or value label that matches is left out when it carries a
+  missing-data code (negative, or 90 and above: "-9 Refused", "[-8] Don't
+  know", "998. Don't know (where to rate)") or says nothing but such wording
+  once codes, interviewer markers ("{VOL}", "(VOL)"), and asides in
+  parentheses are set aside ("Refused to answer", "Don't know/Refused
+  (VOL.)"). Answers that use such words ("2. Refused to take sides", "I
+  refused to answer the door") are kept. FocusGroup decides by the same rule.
+  Values left out are reported.
+
+* `panel_from_personas()` restores the dictionary and demographic fields of
+  `anes_2024_personas` from the package's copy, with a message, when base
+  subsetting (`x[, j]`, `subset()`) has dropped them; before, the
+  demographics of such a subset were rendered as questionnaire answers under
+  their raw handles.
+
+* Identifier columns also include ResponseId, participant_id, subject_id,
+  user_id, PROLIFIC_PID, workerId, caseno, and QKEY.
 
 * Labeled survey columns, as `haven::read_dta()` and `haven::read_sav()` return
   them, are decoded from their value labels, without haven. A labeled code is

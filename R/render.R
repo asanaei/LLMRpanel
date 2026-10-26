@@ -26,7 +26,10 @@
 # Series Case ID").
 .panel_identifier_names <- c("id", "caseid", "case_id", "respondent_id",
                              "respid", "resp_id", "persona_id", "uid",
-                             "record_id", "row_id", "responseid", "response_id")
+                             "record_id", "row_id", "responseid", "response_id",
+                             "participant_id", "participantid", "subject_id",
+                             "subjectid", "user_id", "userid", "prolific_pid",
+                             "workerid", "worker_id", "caseno", "qkey")
 
 .panel_identifier_label <- "\\b(case|respondent) ?id\\b"
 
@@ -90,24 +93,50 @@
   out & !is.na(x)
 }
 
-# Whether plain text (not a value label) says nothing but missing-data
-# wording: once the wording `na_strings` matches and a few filler words ("I",
-# "to", "answer", "skipped") are taken out, no other word remains. So
-# "Refused to answer" and "I don't know" are missing, while answers that use
-# such words ("I refused to answer the door", "I keep missing the bus") are
-# kept.
+# Whether a value or a value label marks an answer as missing. It must
+# match `na_strings`, and either carry a missing-data code (negative, or 90
+# and above: "-9. Refused", "97. Refused", "998. Don't know (where to rate)")
+# or say nothing but the matched wording once its code, interviewer markers
+# ("{VOL}", "(VOL)"), and asides in parentheses are set aside ("Refused to
+# answer", "I don't know", "Don't know/Refused (VOL.)"). So "2. Refused to take
+# sides", "Missing the old system", and "I keep missing the bus" are answers.
+# `code` gives a value label's code when it is known; otherwise a code is read
+# from a prefix such as "-9. ", "-9 ", "[-9] ", "(-9) ", or "99: ".
 .panel_missing_filler <- c("i", "to", "answer", "answers", "the", "a", "an", "of",
-                           "this", "that", "question", "item", "r", "respondent",
-                           "or", "and", "skipped", "skip", "by", "for", "na", "n/a")
+                           "this", "that", "question", "questions", "item", "r",
+                           "respondent", "or", "and", "skipped", "skip", "by", "for",
+                           "na", "n/a", "in", "on", "survey", "interview", "wave",
+                           "data", "here", "it", "me", "vol", "volunteered", "dk",
+                           "rf", "also")
 
-.panel_bare_missing <- function(x, na_strings) {
-  if (!length(na_strings) || !length(x)) return(rep(FALSE, length(x)))
-  rest <- gsub(paste(na_strings, collapse = "|"), " ", as.character(x), ignore.case = TRUE)
+.panel_code_prefix <- "^\\s*[[(]?(-?[0-9]+)[])]?\\s*[.:)-]?\\s+"
+
+.panel_missing_text <- function(text, na_strings, code = NULL) {
+  text <- as.character(text)
+  n <- length(text)
+  if (!length(na_strings) || !n) return(rep(FALSE, n))
+  matched <- .panel_matches(text, na_strings)
+  if (!any(matched)) return(matched)
+  prefixed <- grepl(.panel_code_prefix, text)
+  parsed <- rep(NA_real_, n)
+  parsed[prefixed] <- suppressWarnings(as.numeric(sub(paste0(.panel_code_prefix, ".*$"),
+                                                      "\\1", text[prefixed])))
+  if (is.null(code)) code <- parsed else {
+    code <- suppressWarnings(as.numeric(code))
+    code[is.na(code)] <- parsed[is.na(code)]
+  }
+  core <- sub(.panel_code_prefix, "", text)
+  core <- gsub("\\{(VOL|SPECIFY)\\}|\\((VOL\\.?|volunteered)\\)|\\[VOL\\]", " ", core,
+               ignore.case = TRUE)
+  core <- gsub("\\([^)]*\\)|\\[[^]]*\\]", " ", core)
+  rest <- gsub(paste(na_strings, collapse = "|"), " ", core, ignore.case = TRUE)
   words <- strsplit(tolower(rest), "[^a-z0-9/']+")
-  vapply(words, function(w) {
-    w <- w[nzchar(w)]
+  bare <- vapply(words, function(w) {
+    w <- setdiff(w[nzchar(w)], "/")
     !length(setdiff(w, .panel_missing_filler))
   }, logical(1))
+  coded <- !is.na(code) & (code < 0 | code >= 90)
+  matched & (coded | bare)
 }
 
 # Numbers written out in full, to 15 significant digits: 100000, not 1e+05;
@@ -241,7 +270,8 @@
   if (!length(x)) return(out)
   code <- if (numeric_codes) .panel_number_text(x) else as.character(x)
   body <- .panel_label_body(labels)
-  missing <- .panel_matches(labels, na_strings) | .panel_matches(body, na_strings)
+  missing <- .panel_missing_text(labels, na_strings,
+                                 code = if (numeric_codes) codes else NULL)
   hit <- match(x, codes)
 
   labeled <- which(!is.na(hit))
@@ -320,11 +350,7 @@
   out$issue[none] <- "missing"
   out$detail[none] <- "no value"
   body <- .panel_label_body(v)
-  # A value label (a factor level, or text with a code prefix) is missing when
-  # it matches `na_strings`; plain text only when it says nothing else.
-  matched <- .panel_matches(v, na_strings) | .panel_matches(body, na_strings)
-  labelish <- label | .panel_has_prefix(v)
-  gone <- !none & matched & (labelish | .panel_bare_missing(body, na_strings))
+  gone <- !none & .panel_missing_text(v, na_strings)
   out$issue[gone] <- "missing"
   out$detail[gone] <- v[gone]
   empty <- !none & !gone & !nzchar(body)

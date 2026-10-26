@@ -507,3 +507,55 @@ test_that("NA in a rows selector is reported, not dropped in silence", {
   expect_warning(suppressMessages(panel_from_personas(x, rows = function(d) flag)),
                  "returned NA for 3 row")
 })
+
+test_that("one rule decides missing values and value labels", {
+  na <- .panel_check_na_strings(NULL)
+  missing <- c("-9. Refused", "-9 Refused", "[-8] Don't know", "(-8) Don't know",
+               "{VOL} Don't know", "Don't know (VOL)", "Don't know/Refused (VOL.)",
+               "Refused (VOL)", "Refused / don't know", "Not asked in survey",
+               "97. Refused", "998. Don't know (where to rate)",
+               "999. Don't recognize (don't know who this is)", "9. Missing",
+               "-7. Insufficient partial, interview deleted",
+               "-2. DK/RF in V241288 or V241289", "-5. Sufficient partial, breakoff",
+               "Inapplicable, legitimate skip", "Refused to answer", "I don't know",
+               "No answer", "Missing; Not available", "Error", "2. Error", "[-9] Refused")
+  kept <- c("5. Missing the old system", "2. Refused to take sides",
+            "Missing the old system", "I keep missing the bus",
+            "My landlord refused to fix the heat", "Missing person case",
+            "There is an error", "Terrorism", "-3. Strongly disagree",
+            "70 on a 0-100 feeling thermometer", "5 on a scale from 1 (A) to 7 (B)",
+            "Not sure", "I refused to answer the door")
+  expect_true(all(.panel_missing_text(missing, na)))
+  expect_false(any(.panel_missing_text(kept, na)))
+  expect_true(all(.panel_decode_text(missing, na)$issue %in% "missing"))
+  expect_false(any(.panel_decode_text(kept, na)$issue %in% "missing"))
+  # As value labels, with their codes known.
+  expect_true(all(.panel_missing_text(c("Refused", "Don't know"), na, code = c(-9, 998))))
+  expect_false(.panel_missing_text("Refused to take sides", na, code = 2))
+})
+
+test_that("other identifier names are never rendered", {
+  ids <- c("participant_id", "subject_id", "user_id", "PROLIFIC_PID", "workerId",
+           "caseno", "QKEY")
+  frame <- as.data.frame(setNames(lapply(ids, function(i) c("X1", "X2")), ids))
+  frame$age <- c(30, 40)
+  set.seed(110)
+  out <- suppressMessages(panel_from_data(frame, n = 10, columns = c(ids, "age")))
+  expect_false(any(grepl("X1|X2", out$persona)))
+  expect_true(all(grepl("age", out$persona)))
+  # "pid" is party identification in survey data, not an identifier.
+  out <- suppressMessages(panel_from_data(data.frame(pid = c("Democrat", "Republican")),
+                                          n = 4, columns = "pid"))
+  expect_true(all(grepl("Democrat|Republican", out$persona)))
+})
+
+test_that("a subset of the bundled personas gets its dictionary back", {
+  x <- anes_2024_personas[1:20, c(1:5, 20:25)]
+  expect_null(attr(x, "dictionary"))
+  expect_message(p <- suppressWarnings(panel_from_personas(x)), "lost the dictionary")
+  expect_true(all(grepl("You are this person", p$persona, fixed = TRUE)))
+  expect_false(any(grepl("demo_", p$persona, fixed = TRUE)))
+  # A frame that is not a subset of the bundled data is left as it is.
+  y <- data.frame(other = c("a", "b"))
+  expect_no_message(suppressWarnings(.panel_restore_dictionary(y)))
+})

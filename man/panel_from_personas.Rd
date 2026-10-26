@@ -46,9 +46,8 @@ missing-data labels of the ANES and similar releases: "Inapplicable",
 "Refused", "Don't know", "Not asked", "DK/RF", "No post-election
 interview", "Insufficient partial, interview deleted", "RESTRICTED",
 "Error", "Technical error", "Not reported", and the like. \code{character(0)}
-treats no label as missing. Plain text counts as missing only when it
-says nothing but such wording, so free-text answers that mention refusing
-or missing something are kept.}
+treats no label as missing. Answers that use such words ("2. Refused to
+take sides", "I keep missing the bus") are kept.}
 }
 \value{
 A \code{silicon_panel}: a tibble with \code{persona_id}, the demographic
@@ -103,10 +102,12 @@ label whose code is unknown. A character column that mixes coded labels
 with bare numbers, as \code{as.character(haven::as_factor())} writes it, is
 decoded the same way. Code prefixes are removed from factor levels and
 from character values.
-\item \code{NA}, empty values, and missing-data labels are left out. A value label
-(a factor level, or text with a code prefix such as "-9. Refused") is
-one when it matches \code{na_strings}; plain text only when it says nothing
-but wording \code{na_strings} matches ("Refused to answer", "I don't know"),
+\item \code{NA}, empty values, and missing-data labels are left out. A value or a
+value label is one when it matches \code{na_strings} and either carries a
+missing-data code (negative, or 90 and above: "-9 Refused", "998. Don't
+know") or says nothing but the matched wording once codes, interviewer
+markers, and asides in parentheses are set aside ("Refused to answer",
+"Don't know (VOL)"),
 as FocusGroup decides, so a free-text answer such as "I refused to answer
 the door" is kept. A value with a
 negative code prefix that does not match \code{na_strings} is shown, with a

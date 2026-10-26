@@ -21,6 +21,26 @@
   out
 }
 
+# Base subsetting (`x[, j]`, `x[i, j]`, `subset()`) drops the attributes that
+# describe anes_2024_personas, after which its demographics would be rendered
+# as questionnaire answers under their raw handles. When `data` has no
+# dictionary and every column is a column of the package's copy, the
+# dictionary and demographic fields are taken back from that copy, with a
+# message.
+.panel_restore_dictionary <- function(data) {
+  if (!is.null(attr(data, "dictionary"))) return(data)
+  ref <- LLMRpanel::anes_2024_personas
+  cols <- names(data)
+  if (!length(cols) || !all(cols %in% names(ref))) return(data)
+  dict <- attr(ref, "dictionary")
+  attr(data, "dictionary") <- dict[dict$handle %in% cols, , drop = FALSE]
+  attr(data, "demographic_fields") <- intersect(attr(ref, "demographic_fields"), cols)
+  message(paste("`data` has lost the dictionary of anes_2024_personas (base subsetting",
+                "drops it); its question wording and demographic fields were taken from",
+                "the package's copy."))
+  data
+}
+
 # The panel constructors create `persona_id` and `persona`; an input column of
 # either name would be silently overwritten downstream. Abort early instead.
 .check_reserved_names <- function(nms, what) {
@@ -286,10 +306,12 @@ panel_from_data <- function(data, n, persona_template = NULL,
 #'   with bare numbers, as `as.character(haven::as_factor())` writes it, is
 #'   decoded the same way. Code prefixes are removed from factor levels and
 #'   from character values.
-#' * `NA`, empty values, and missing-data labels are left out. A value label
-#'   (a factor level, or text with a code prefix such as "-9. Refused") is
-#'   one when it matches `na_strings`; plain text only when it says nothing
-#'   but wording `na_strings` matches ("Refused to answer", "I don't know"),
+#' * `NA`, empty values, and missing-data labels are left out. A value or a
+#'   value label is one when it matches `na_strings` and either carries a
+#'   missing-data code (negative, or 90 and above: "-9 Refused", "998. Don't
+#'   know") or says nothing but the matched wording once codes, interviewer
+#'   markers, and asides in parentheses are set aside ("Refused to answer",
+#'   "Don't know (VOL)"),
 #'   as FocusGroup decides, so a free-text answer such as "I refused to answer
 #'   the door" is kept. A value with a
 #'   negative code prefix that does not match `na_strings` is shown, with a
@@ -338,9 +360,8 @@ panel_from_data <- function(data, n, persona_template = NULL,
 #'   "Refused", "Don't know", "Not asked", "DK/RF", "No post-election
 #'   interview", "Insufficient partial, interview deleted", "RESTRICTED",
 #'   "Error", "Technical error", "Not reported", and the like. `character(0)`
-#'   treats no label as missing. Plain text counts as missing only when it
-#'   says nothing but such wording, so free-text answers that mention refusing
-#'   or missing something are kept.
+#'   treats no label as missing. Answers that use such words ("2. Refused to
+#'   take sides", "I keep missing the bus") are kept.
 #' @return A `silicon_panel`: a tibble with `persona_id`, the demographic
 #'   columns as the persona text gives them (`NA` where a value is left out),
 #'   and `persona`, with the attributes `margins`, `source`, and `source_rows`.
@@ -372,6 +393,7 @@ panel_from_personas <- function(data, n = NULL, rows = NULL,
   }
   stopifnot(is.data.frame(data))
   if (!nrow(data)) abort("`data` must contain at least one row.")
+  data <- .panel_restore_dictionary(data)
   na <- .panel_check_na_strings(na_strings)
   questions <- .panel_check_questions(questions, names(data))
 
